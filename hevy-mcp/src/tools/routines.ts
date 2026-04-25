@@ -1,0 +1,426 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+// Import types from generated client
+import type {
+	GetV1Routines200,
+	GetV1RoutinesRoutineid200,
+	PostRoutinesRequestExercise,
+	PostRoutinesRequestSet,
+	PostRoutinesRequestSetTypeEnumKey,
+	PostV1Routines201,
+	PutRoutinesRequestExercise,
+	PutRoutinesRequestSet,
+	PutRoutinesRequestSetTypeEnumKey,
+	PutV1RoutinesRoutineid200,
+	Routine,
+} from "../generated/client/types/index.js";
+import { withErrorHandling } from "../utils/error-handler.js";
+import { formatRoutine } from "../utils/formatters.js";
+import { parseJsonArray } from "../utils/json-parser.js";
+import {
+	createEmptyResponse,
+	createJsonResponse,
+} from "../utils/response-formatter.js";
+import type { InferToolParams } from "../utils/tool-helpers.js";
+
+// Type definitions for the routine operations
+type HevyClient = ReturnType<
+	typeof import("../utils/hevyClientKubb.js").createClient
+>;
+
+function coerceNullishNumberInput(value: unknown): unknown {
+	if (value === null || value === undefined) {
+		return value;
+	}
+
+	if (typeof value !== "string") {
+		return value;
+	}
+
+	const trimmed = value.trim();
+	if (trimmed === "") {
+		return undefined;
+	}
+
+	const lowered = trimmed.toLowerCase();
+	if (lowered === "null") {
+		return null;
+	}
+	if (lowered === "undefined") {
+		return undefined;
+	}
+
+	const asNumber = Number(trimmed);
+	if (Number.isNaN(asNumber)) {
+		return value;
+	}
+
+	return asNumber;
+}
+
+const zNullableInt = z.preprocess(
+	coerceNullishNumberInput,
+	z.number().int().nullable().optional(),
+);
+
+const zOptionalRepRange = z.preprocess(
+	(value) => (value === null ? undefined : value),
+	z
+		.object({
+			start: zNullableInt,
+			end: zNullableInt,
+		})
+		.optional(),
+);
+
+function buildRepRange(repRange?: {
+	start?: number | null;
+	end?: number | null;
+}): { start?: number; end?: number } | null {
+	if (!repRange) {
+		return null;
+	}
+
+	const start = repRange.start ?? undefined;
+	const end = repRange.end ?? undefined;
+	if (start === undefined && end === undefined) {
+		return null;
+	}
+
+	return { start, end };
+}
+
+/**
+ * Returns a fixed rep count when `repRange` is a fixed range (start and end are
+ * both non-null and equal). Otherwise returns null.
+ */
+function getFixedRepsFromRepRange(
+	repRange:
+		| {
+				start?: number | null;
+				end?: number | null;
+		  }
+		| null
+		| undefined,
+): number | null {
+	if (!repRange) {
+		return null;
+	}
+
+	const start = repRange.start ?? null;
+	const end = repRange.end ?? null;
+	if (start === null || end === null) {
+		return null;
+	}
+	if (start !== end) {
+		return null;
+	}
+
+	return start;
+}
+
+const repRangeDisplayWarningText =
+	"Note: Hevy's public API stores rep ranges (rep_range), but the Hevy apps may " +
+	"not display them because they rely on an internal-only exercise field " +
+	"(input_modifier). See https://github.com/chrisdoc/hevy-mcp/issues/261 for " +
+	"details/workarounds.";
+
+/**
+ * Register all routine-related tools with the MCP server
+ */
+export function registerRoutineTools(
+	server: McpServer,
+	hevyClient: HevyClient | null,
+) {
+	// Get routines
+	const getRoutinesSchema = {
+		page: z.coerce.number().int().gte(1).default(1),
+		pageSize: z.coerce.number().int().gte(1).lte(10).default(5),
+	} as const;
+	type GetRoutinesParams = InferToolParams<typeof getRoutinesSchema>;
+
+	server.tool(
+		"get-routines",
+		"Get a paginated list of your workout routines, including custom and default routines. Useful for browsing or searching your available routines.",
+		getRoutinesSchema,
+		withErrorHandling(async (args: GetRoutinesParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { page, pageSize } = args;
+			const data: GetV1Routines200 = await hevyClient.getRoutines({
+				page,
+				pageSize,
+			});
+
+			// Process routines to extract relevant information
+			const routines =
+				data?.routines?.map((routine: Routine) => formatRoutine(routine)) || [];
+
+			if (routines.length === 0) {
+				return createEmptyResponse(
+					"No routines found for the specified parameters",
+				);
+			}
+
+			return createJsonResponse(routines);
+		}, "get-routines"),
+	);
+
+	// Get single routine by ID (new, direct endpoint)
+	const getRoutineSchema = {
+		routineId: z.string().min(1),
+	} as const;
+	type GetRoutineParams = InferToolParams<typeof getRoutineSchema>;
+
+	server.tool(
+		"get-routine",
+		"Get a routine by its ID using the direct endpoint. Returns all details for the specified routine.",
+		getRoutineSchema,
+		withErrorHandling(async (args: GetRoutineParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { routineId } = args;
+			const data: GetV1RoutinesRoutineid200 = await hevyClient.getRoutineById(
+				String(routineId),
+			);
+			if (!data || !data.routine) {
+				return createEmptyResponse(`Routine with ID ${routineId} not found`);
+			}
+			const routine = formatRoutine(data.routine);
+			return createJsonResponse(routine);
+		}, "get-routine"),
+	);
+
+	// Create new routine
+	const createRoutineSchema = {
+		title: z.string().min(1),
+		folderId: z.coerce.number().nullable().optional(),
+		notes: z.string().optional(),
+		exercises: z.preprocess(
+			parseJsonArray,
+			z.array(
+				z.object({
+					exerciseTemplateId: z.string().min(1),
+					supersetId: z.coerce.number().nullable().optional(),
+					restSeconds: z.coerce.number().int().min(0).optional(),
+					notes: z.string().optional(),
+					sets: z.array(
+						z.object({
+							type: z
+								.enum(["warmup", "normal", "failure", "dropset"])
+								.default("normal"),
+							weight: z.coerce.number().optional(),
+							weightKg: z.coerce.number().optional(),
+							reps: zNullableInt,
+							distance: z.coerce.number().int().optional(),
+							distanceMeters: z.coerce.number().int().optional(),
+							duration: z.coerce.number().int().optional(),
+							durationSeconds: z.coerce.number().int().optional(),
+							customMetric: z.coerce.number().optional(),
+							repRange: zOptionalRepRange,
+						}),
+					),
+				}),
+			),
+		),
+	} as const;
+	type CreateRoutineParams = InferToolParams<typeof createRoutineSchema>;
+
+	server.tool(
+		"create-routine",
+		"Create a new workout routine in your Hevy account. Requires a title and at least one exercise with sets. Optionally assign to a folder. Returns the full routine details including the new routine ID.",
+		createRoutineSchema,
+		withErrorHandling(async (args: CreateRoutineParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { title, folderId, notes, exercises } = args;
+			let usesRepRanges = false;
+			const data: PostV1Routines201 = await hevyClient.createRoutine({
+				routine: {
+					title,
+					folder_id: folderId ?? null,
+					notes: notes ?? "",
+					exercises: exercises.map((exercise): PostRoutinesRequestExercise => {
+						const sets = exercise.sets.map((set): PostRoutinesRequestSet => {
+							const repRange = buildRepRange(set.repRange);
+							const fixedReps = getFixedRepsFromRepRange(repRange);
+							const reps = typeof set.reps === "number" ? set.reps : fixedReps;
+							return {
+								type: set.type as PostRoutinesRequestSetTypeEnumKey,
+								weight_kg: set.weight ?? set.weightKg ?? null,
+								reps: reps ?? null,
+								distance_meters: set.distance ?? set.distanceMeters ?? null,
+								duration_seconds: set.duration ?? set.durationSeconds ?? null,
+								custom_metric: set.customMetric ?? null,
+								rep_range: repRange,
+							};
+						});
+
+						if (
+							sets.some(
+								(set) =>
+									set.rep_range != null &&
+									getFixedRepsFromRepRange(set.rep_range) === null,
+							)
+						) {
+							usesRepRanges = true;
+						}
+
+						return {
+							exercise_template_id: exercise.exerciseTemplateId,
+							superset_id: exercise.supersetId ?? null,
+							rest_seconds: exercise.restSeconds ?? null,
+							notes: exercise.notes ?? null,
+							sets,
+						};
+					}),
+				},
+			});
+
+			if (!data) {
+				return createEmptyResponse(
+					"Failed to create routine: Server returned no data",
+				);
+			}
+
+			const routine = formatRoutine(data);
+			const response = createJsonResponse(routine, {
+				pretty: true,
+				indent: 2,
+			});
+
+			if (usesRepRanges) {
+				response.content.push({
+					type: "text",
+					text: repRangeDisplayWarningText,
+				});
+			}
+
+			return response;
+		}, "create-routine"),
+	);
+
+	// Update existing routine
+	const updateRoutineSchema = {
+		routineId: z.string().min(1),
+		title: z.string().min(1),
+		notes: z.string().optional(),
+		exercises: z.preprocess(
+			parseJsonArray,
+			z.array(
+				z.object({
+					exerciseTemplateId: z.string().min(1),
+					supersetId: z.coerce.number().nullable().optional(),
+					restSeconds: z.coerce.number().int().min(0).optional(),
+					notes: z.string().optional(),
+					sets: z.array(
+						z.object({
+							type: z
+								.enum(["warmup", "normal", "failure", "dropset"])
+								.default("normal"),
+							weight: z.coerce.number().optional(),
+							weightKg: z.coerce.number().optional(),
+							reps: zNullableInt,
+							distance: z.coerce.number().int().optional(),
+							distanceMeters: z.coerce.number().int().optional(),
+							duration: z.coerce.number().int().optional(),
+							durationSeconds: z.coerce.number().int().optional(),
+							customMetric: z.coerce.number().optional(),
+							repRange: zOptionalRepRange,
+						}),
+					),
+				}),
+			),
+		),
+	} as const;
+	type UpdateRoutineParams = InferToolParams<typeof updateRoutineSchema>;
+
+	server.tool(
+		"update-routine",
+		"Update an existing routine by ID. You can modify the title, notes, and exercise configurations. Returns the updated routine with all changes applied.",
+		updateRoutineSchema,
+		withErrorHandling(async (args: UpdateRoutineParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { routineId, title, notes, exercises } = args;
+			let usesRepRanges = false;
+			const data: PutV1RoutinesRoutineid200 = await hevyClient.updateRoutine(
+				routineId,
+				{
+					routine: {
+						title,
+						notes: notes ?? null,
+						exercises: exercises.map((exercise): PutRoutinesRequestExercise => {
+							const sets = exercise.sets.map((set): PutRoutinesRequestSet => {
+								const repRange = buildRepRange(set.repRange);
+								const fixedReps = getFixedRepsFromRepRange(repRange);
+								const reps =
+									typeof set.reps === "number" ? set.reps : fixedReps;
+								return {
+									type: set.type as PutRoutinesRequestSetTypeEnumKey,
+									weight_kg: set.weight ?? set.weightKg ?? null,
+									reps: reps ?? null,
+									distance_meters: set.distance ?? set.distanceMeters ?? null,
+									duration_seconds: set.duration ?? set.durationSeconds ?? null,
+									custom_metric: set.customMetric ?? null,
+									rep_range: repRange,
+								};
+							});
+
+							if (
+								sets.some(
+									(set) =>
+										set.rep_range != null &&
+										getFixedRepsFromRepRange(set.rep_range) === null,
+								)
+							) {
+								usesRepRanges = true;
+							}
+
+							return {
+								exercise_template_id: exercise.exerciseTemplateId,
+								superset_id: exercise.supersetId ?? null,
+								rest_seconds: exercise.restSeconds ?? null,
+								notes: exercise.notes ?? null,
+								sets,
+							};
+						}),
+					},
+				},
+			);
+
+			if (!data) {
+				return createEmptyResponse(
+					`Failed to update routine with ID ${routineId}`,
+				);
+			}
+
+			const routine = formatRoutine(data);
+			const response = createJsonResponse(routine, {
+				pretty: true,
+				indent: 2,
+			});
+
+			if (usesRepRanges) {
+				response.content.push({
+					type: "text",
+					text: repRangeDisplayWarningText,
+				});
+			}
+
+			return response;
+		}, "update-routine"),
+	);
+}

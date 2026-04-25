@@ -1,0 +1,141 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+// Import types from generated client
+import type {
+	GetV1RoutineFolders200,
+	GetV1RoutineFoldersFolderid200,
+	PostV1RoutineFolders201,
+	RoutineFolder,
+} from "../generated/client/types/index.js";
+import { withErrorHandling } from "../utils/error-handler.js";
+import { formatRoutineFolder } from "../utils/formatters.js";
+import {
+	createEmptyResponse,
+	createJsonResponse,
+} from "../utils/response-formatter.js";
+import type { InferToolParams } from "../utils/tool-helpers.js";
+
+// Type definitions for the folder operations
+type HevyClient = ReturnType<
+	typeof import("../utils/hevyClientKubb.js").createClient
+>;
+
+/**
+ * Register all routine folder-related tools with the MCP server
+ */
+export function registerFolderTools(
+	server: McpServer,
+	hevyClient: HevyClient | null,
+) {
+	// Get routine folders
+	const getRoutineFoldersSchema = {
+		page: z.coerce.number().int().gte(1).default(1),
+		pageSize: z.coerce.number().int().gte(1).lte(10).default(5),
+	} as const;
+	type GetRoutineFoldersParams = InferToolParams<
+		typeof getRoutineFoldersSchema
+	>;
+
+	server.tool(
+		"get-routine-folders",
+		"Get a paginated list of your routine folders, including both default and custom folders. Useful for organizing and browsing your workout routines.",
+		getRoutineFoldersSchema,
+		withErrorHandling(async (args: GetRoutineFoldersParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { page, pageSize } = args;
+			const data: GetV1RoutineFolders200 = await hevyClient.getRoutineFolders({
+				page,
+				pageSize,
+			});
+
+			// Process routine folders to extract relevant information
+			const folders =
+				data?.routine_folders?.map((folder: RoutineFolder) =>
+					formatRoutineFolder(folder),
+				) || [];
+
+			if (folders.length === 0) {
+				return createEmptyResponse(
+					"No routine folders found for the specified parameters",
+				);
+			}
+
+			return createJsonResponse(folders);
+		}, "get-routine-folders"),
+	);
+
+	// Get single routine folder by ID
+	const getRoutineFolderSchema = {
+		folderId: z.string().min(1),
+	} as const;
+	type GetRoutineFolderParams = InferToolParams<typeof getRoutineFolderSchema>;
+
+	server.tool(
+		"get-routine-folder",
+		"Get complete details of a specific routine folder by its ID, including name, creation date, and associated routines.",
+		getRoutineFolderSchema,
+		withErrorHandling(async (args: GetRoutineFolderParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { folderId } = args;
+			const data: GetV1RoutineFoldersFolderid200 =
+				await hevyClient.getRoutineFolder(folderId);
+
+			if (!data) {
+				return createEmptyResponse(
+					`Routine folder with ID ${folderId} not found`,
+				);
+			}
+
+			const folder = formatRoutineFolder(data);
+			return createJsonResponse(folder);
+		}, "get-routine-folder"),
+	);
+
+	// Create new routine folder
+	const createRoutineFolderSchema = {
+		name: z.string().min(1),
+	} as const;
+	type CreateRoutineFolderParams = InferToolParams<
+		typeof createRoutineFolderSchema
+	>;
+
+	server.tool(
+		"create-routine-folder",
+		"Create a new routine folder in your Hevy account. Requires a name for the folder. Returns the full folder details including the new folder ID.",
+		createRoutineFolderSchema,
+		withErrorHandling(async (args: CreateRoutineFolderParams) => {
+			if (!hevyClient) {
+				throw new Error(
+					"API client not initialized. Please provide HEVY_API_KEY.",
+				);
+			}
+			const { name } = args;
+			const data: PostV1RoutineFolders201 =
+				await hevyClient.createRoutineFolder({
+					routine_folder: {
+						title: name,
+					},
+				});
+
+			if (!data) {
+				return createEmptyResponse(
+					"Failed to create routine folder: Server returned no data",
+				);
+			}
+
+			const folder = formatRoutineFolder(data);
+			return createJsonResponse(folder, {
+				pretty: true,
+				indent: 2,
+			});
+		}, "create-routine-folder"),
+	);
+}

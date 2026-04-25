@@ -1,0 +1,18 @@
+node_modules
+.next
+.env
+.env.local
+data/
+public/uploads/
+*.db
+*.db-journal
+.DS_Store
+hevy-mcp/node_modules
+hevy-mcp/build
+hevy-mcp/.env
+
+# Build artifacts and test files
+*.tsbuildinfo
+.test-write
+# Nested duplicate from OneDrive .git permission issue (read-only)
+hevy-mcp/hevy-mcp/

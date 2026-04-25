@@ -1,0 +1,52 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: "npm" # See documentation for possible values
+    directory: "/" # Location of package manifests
+    groups:
+      microsoft-dependencies:
+        patterns:
+          - "@microsoft/*"
+      commitlint-dependencies:
+        patterns:
+          - "@commitlint/*"
+      semantic-release-dependencies:
+        patterns:
+          - "@semantic-release/*"
+          - "semantic-release"
+      vitest-dependencies:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      biome-dependencies:
+        patterns:
+          - "@biomejs/*"
+      zod-dependencies:
+        patterns:
+          - "zod"
+      # fallback groups for any remaining prod/dev dependencies
+      production-dependencies:
+        dependency-type: "production"
+      development-dependencies:
+        dependency-type: "development"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions" # See documentation for possible values
+    directory: "/" # Location of package manifests
+    groups:
+      github-core-actions:
+        patterns:
+          - "actions/*"
+      observability-actions:
+        patterns:
+          - "codecov/*"
+          - "corentinmusard/*"
+      workflow-automation-actions:
+        patterns:
+          - "linear-b/*"
+    schedule:
+      interval: "weekly"

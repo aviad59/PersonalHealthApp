@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write # needed to create releases/tags
+
+env:
+  ROLLUP_SKIP_NODEJS_NATIVE_BUILD: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC for npm provenance
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      released: ${{ steps.release.outputs.released }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+        env:
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Run unit tests
+        run: npx vitest run --exclude tests/integration/**
+      - name: Run integration tests
+        run: npx vitest run tests/integration
+        env:
+          HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
+      - name: Store initial version
+        id: initial_version
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Release
+        id: release_step
+        run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if release was created
+        id: release
+        run: |
+          set -euo pipefail
+          NEW_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")
+          if [ "$NEW_VERSION" != "${{ steps.initial_version.outputs.version }}" ]; then
+            {
+              echo "version=$NEW_VERSION"
+              echo "released=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "Release created: $NEW_VERSION"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "No release created"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
