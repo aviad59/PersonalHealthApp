@@ -1,102 +1,127 @@
-import Database from "better-sqlite3";
-import path from "node:path";
-import fs from "node:fs";
+import { createClient, Client } from "@libsql/client";
 
-let _db: Database.Database | null = null;
+// ---------------------------------------------------------------
+// Connection (Turso / libSQL)
+// ---------------------------------------------------------------
 
-function getDbPath() {
-  const dataDir = path.join(process.cwd(), "data");
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  return path.join(dataDir, "health.db");
+let _client: Client | null = null;
+let _initPromise: Promise<void> | null = null;
+
+function buildClient(): Client {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+  if (!url) {
+    throw new Error(
+      "TURSO_DATABASE_URL is not set. Add it to .env.local (and Vercel project env vars).",
+    );
+  }
+  return createClient({ url, authToken });
 }
 
-export function getDb(): Database.Database {
-  if (_db) return _db;
-  const db = new Database(getDbPath());
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  init(db);
-  _db = db;
-  return db;
+function client(): Client {
+  if (!_client) _client = buildClient();
+  return _client;
 }
 
-function init(db: Database.Database) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS profile (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      age INTEGER NOT NULL,
-      sex TEXT NOT NULL CHECK (sex IN ('male', 'female')),
-      height_cm REAL NOT NULL,
-      weight_kg REAL NOT NULL,
-      neck_cm REAL NOT NULL,
-      waist_cm REAL NOT NULL,
-      hips_cm REAL,
-      activity_level TEXT NOT NULL,
-      body_fat_pct REAL,
-      lean_mass_kg REAL,
-      bmr REAL,
-      tdee REAL,
-      goal_calories INTEGER,
-      goal_protein_g INTEGER,
-      goal_fat_g INTEGER,
-      goal_carbs_g INTEGER,
-      weekly_workout_target INTEGER,
-      weekly_volume_note TEXT,
-      goal_mode TEXT DEFAULT 'recomp',
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+// One schema string; libSQL `executeMultiple` runs them all sequentially.
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS profile (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    age INTEGER NOT NULL,
+    sex TEXT NOT NULL CHECK (sex IN ('male', 'female')),
+    height_cm REAL NOT NULL,
+    weight_kg REAL NOT NULL,
+    neck_cm REAL NOT NULL,
+    waist_cm REAL NOT NULL,
+    hips_cm REAL,
+    activity_level TEXT NOT NULL,
+    body_fat_pct REAL,
+    lean_mass_kg REAL,
+    bmr REAL,
+    tdee REAL,
+    goal_calories INTEGER,
+    goal_protein_g INTEGER,
+    goal_fat_g INTEGER,
+    goal_carbs_g INTEGER,
+    weekly_workout_target INTEGER,
+    weekly_volume_note TEXT,
+    goal_mode TEXT DEFAULT 'recomp',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 
-    CREATE TABLE IF NOT EXISTS meals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL,
-      photo_path TEXT,
-      description TEXT,
-      calories REAL,
-      protein_g REAL,
-      fat_g REAL,
-      carbs_g REAL,
-      items_json TEXT,
-      ai_tip TEXT,
-      confidence TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  CREATE TABLE IF NOT EXISTS meals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    photo_path TEXT,
+    description TEXT,
+    calories REAL,
+    protein_g REAL,
+    fat_g REAL,
+    carbs_g REAL,
+    items_json TEXT,
+    ai_tip TEXT,
+    confidence TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 
-    CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
+  CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
 
-    CREATE TABLE IF NOT EXISTS insights (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL CHECK (type IN ('daily', 'weekly')),
-      for_date TEXT NOT NULL,
-      headline TEXT NOT NULL,
-      body TEXT NOT NULL,
-      tags_json TEXT,
-      sources_json TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  CREATE TABLE IF NOT EXISTS insights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL CHECK (type IN ('daily', 'weekly')),
+    for_date TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    body TEXT NOT NULL,
+    tags_json TEXT,
+    sources_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 
-    CREATE INDEX IF NOT EXISTS idx_insights_date ON insights(for_date);
+  CREATE INDEX IF NOT EXISTS idx_insights_date ON insights(for_date);
 
-    CREATE TABLE IF NOT EXISTS workouts_cache (
-      id TEXT PRIMARY KEY,
-      date TEXT NOT NULL,
-      title TEXT,
-      duration_sec INTEGER,
-      raw_json TEXT,
-      synced_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  CREATE TABLE IF NOT EXISTS workouts_cache (
+    id TEXT PRIMARY KEY,
+    date TEXT NOT NULL,
+    title TEXT,
+    duration_sec INTEGER,
+    raw_json TEXT,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 
-    CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts_cache(date);
+  CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts_cache(date);
 
-    CREATE TABLE IF NOT EXISTS zepp_cache (
-      date TEXT PRIMARY KEY,
-      sleep_hours REAL,
-      resting_hr INTEGER,
-      steps INTEGER,
-      raw_json TEXT,
-      synced_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
+  CREATE TABLE IF NOT EXISTS zepp_cache (
+    date TEXT PRIMARY KEY,
+    sleep_hours REAL,
+    resting_hr INTEGER,
+    steps INTEGER,
+    raw_json TEXT,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+async function ensureInit(): Promise<void> {
+  if (!_initPromise) {
+    _initPromise = (async () => {
+      const c = client();
+      await c.executeMultiple(SCHEMA);
+    })().catch((err) => {
+      // allow retry on next call after a failure
+      _initPromise = null;
+      throw err;
+    });
+  }
+  return _initPromise;
 }
+
+export async function getDb(): Promise<Client> {
+  await ensureInit();
+  return client();
+}
+
+// ---------------------------------------------------------------
+// Date helpers (unchanged)
+// ---------------------------------------------------------------
 
 export function todayStr(): string {
   // YYYY-MM-DD in local time
@@ -115,6 +140,10 @@ export function daysAgoStr(n: number): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+// ---------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------
 
 export type Profile = {
   id: number;
@@ -140,13 +169,16 @@ export type Profile = {
   updated_at: string;
 };
 
-export function getProfile(): Profile | null {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM profile WHERE id = 1").get() as
-    | Profile
-    | undefined;
-  return row ?? null;
+export async function getProfile(): Promise<Profile | null> {
+  const db = await getDb();
+  const res = await db.execute("SELECT * FROM profile WHERE id = 1");
+  const row = res.rows[0];
+  return row ? (row as unknown as Profile) : null;
 }
+
+// ---------------------------------------------------------------
+// Meals
+// ---------------------------------------------------------------
 
 export type Meal = {
   id: number;
@@ -163,19 +195,27 @@ export type Meal = {
   created_at: string;
 };
 
-export function getMealsByDate(date: string): Meal[] {
-  const db = getDb();
-  return db
-    .prepare("SELECT * FROM meals WHERE date = ? ORDER BY created_at ASC")
-    .all(date) as Meal[];
+export async function getMealsByDate(date: string): Promise<Meal[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM meals WHERE date = ? ORDER BY created_at ASC",
+    args: [date],
+  });
+  return res.rows as unknown as Meal[];
 }
 
-export function getMealsSince(sinceDate: string): Meal[] {
-  const db = getDb();
-  return db
-    .prepare("SELECT * FROM meals WHERE date >= ? ORDER BY date ASC, created_at ASC")
-    .all(sinceDate) as Meal[];
+export async function getMealsSince(sinceDate: string): Promise<Meal[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM meals WHERE date >= ? ORDER BY date ASC, created_at ASC",
+    args: [sinceDate],
+  });
+  return res.rows as unknown as Meal[];
 }
+
+// ---------------------------------------------------------------
+// Insights
+// ---------------------------------------------------------------
 
 export type Insight = {
   id: number;
@@ -188,22 +228,25 @@ export type Insight = {
   created_at: string;
 };
 
-export function getInsights(limit = 50): Insight[] {
-  const db = getDb();
-  return db
-    .prepare("SELECT * FROM insights ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as Insight[];
+export async function getInsights(limit = 50): Promise<Insight[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM insights ORDER BY created_at DESC LIMIT ?",
+    args: [limit],
+  });
+  return res.rows as unknown as Insight[];
 }
 
-export function getLatestInsight(): Insight | null {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM insights ORDER BY created_at DESC LIMIT 1")
-    .get() as Insight | undefined;
-  return row ?? null;
+export async function getLatestInsight(): Promise<Insight | null> {
+  const db = await getDb();
+  const res = await db.execute("SELECT * FROM insights ORDER BY created_at DESC LIMIT 1");
+  const row = res.rows[0];
+  return row ? (row as unknown as Insight) : null;
 }
 
-// --- Workout cache ---
+// ---------------------------------------------------------------
+// Workout cache
+// ---------------------------------------------------------------
 
 export type CachedWorkout = {
   id: string;
@@ -214,54 +257,54 @@ export type CachedWorkout = {
   synced_at: string;
 };
 
-export function upsertWorkouts(rows: CachedWorkout[]): void {
+export async function upsertWorkouts(rows: CachedWorkout[]): Promise<void> {
   if (rows.length === 0) return;
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO workouts_cache (id, date, title, duration_sec, raw_json, synced_at)
-     VALUES (@id, @date, @title, @duration_sec, @raw_json, datetime('now'))
-     ON CONFLICT(id) DO UPDATE SET
-       date = excluded.date,
-       title = excluded.title,
-       duration_sec = excluded.duration_sec,
-       raw_json = excluded.raw_json,
-       synced_at = datetime('now')`,
-  );
-  const tx = db.transaction((batch: CachedWorkout[]) => {
-    for (const r of batch) stmt.run(r);
+  const db = await getDb();
+  const stmts = rows.map((r) => ({
+    sql: `INSERT INTO workouts_cache (id, date, title, duration_sec, raw_json, synced_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(id) DO UPDATE SET
+            date = excluded.date,
+            title = excluded.title,
+            duration_sec = excluded.duration_sec,
+            raw_json = excluded.raw_json,
+            synced_at = datetime('now')`,
+    args: [r.id, r.date, r.title, r.duration_sec, r.raw_json] as any[],
+  }));
+  // batch runs the statements in a single transaction
+  await db.batch(stmts, "write");
+}
+
+export async function getCachedWorkouts(limit = 50): Promise<CachedWorkout[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT id, date, title, duration_sec, raw_json, synced_at
+            FROM workouts_cache
+           ORDER BY date DESC, id DESC
+           LIMIT ?`,
+    args: [limit],
   });
-  tx(rows);
+  return res.rows as unknown as CachedWorkout[];
 }
 
-export function getCachedWorkouts(limit = 50): CachedWorkout[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT id, date, title, duration_sec, raw_json, synced_at
-         FROM workouts_cache
-        ORDER BY date DESC, id DESC
-        LIMIT ?`,
-    )
-    .all(limit) as CachedWorkout[];
-}
-
-export function getCachedWorkoutsSince(sinceDate: string): CachedWorkout[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT id, date, title, duration_sec, raw_json, synced_at
-         FROM workouts_cache
-        WHERE date >= ?
-        ORDER BY date DESC, id DESC`,
-    )
-    .all(sinceDate) as CachedWorkout[];
+export async function getCachedWorkoutsSince(
+  sinceDate: string,
+): Promise<CachedWorkout[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT id, date, title, duration_sec, raw_json, synced_at
+            FROM workouts_cache
+           WHERE date >= ?
+           ORDER BY date DESC, id DESC`,
+    args: [sinceDate],
+  });
+  return res.rows as unknown as CachedWorkout[];
 }
 
 /** Returns the most-recent synced_at across all cached workouts, or null if cache is empty. */
-export function getCacheLastSyncedAt(): string | null {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT MAX(synced_at) AS s FROM workouts_cache`)
-    .get() as { s: string | null } | undefined;
+export async function getCacheLastSyncedAt(): Promise<string | null> {
+  const db = await getDb();
+  const res = await db.execute("SELECT MAX(synced_at) AS s FROM workouts_cache");
+  const row = res.rows[0] as unknown as { s: string | null } | undefined;
   return row?.s ?? null;
 }

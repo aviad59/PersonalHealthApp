@@ -6,9 +6,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const filter = new URL(req.url).searchParams.get("type"); // daily | weekly | null
-  const insights = getInsights(100).filter((i) =>
-    filter ? i.type === filter : true,
-  );
+  const all = await getInsights(100);
+  const insights = all.filter((i) => (filter ? i.type === filter : true));
   return NextResponse.json({
     insights: insights.map((i) => ({
       ...i,
@@ -23,8 +22,11 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
-  const db = getDb();
-  db.prepare("DELETE FROM insights WHERE id = ?").run(Number(id));
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM insights WHERE id = ?",
+    args: [Number(id)],
+  });
   return NextResponse.json({ ok: true });
 }
 

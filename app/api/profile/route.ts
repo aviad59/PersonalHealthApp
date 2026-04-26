@@ -25,7 +25,7 @@ const ProfileSchema = z.object({
 });
 
 export async function GET() {
-  const profile = getProfile();
+  const profile = await getProfile();
   return NextResponse.json({ profile });
 }
 
@@ -59,18 +59,18 @@ export async function POST(req: NextRequest) {
     goalMode: (p.goal_mode ?? "recomp") as GoalMode,
   });
 
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO profile (
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO profile (
       id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm, activity_level,
       body_fat_pct, lean_mass_kg, bmr, tdee,
       goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
       weekly_workout_target, weekly_volume_note, goal_mode, updated_at
     ) VALUES (
-      1, @age, @sex, @height_cm, @weight_kg, @neck_cm, @waist_cm, @hips_cm, @activity_level,
-      @body_fat_pct, @lean_mass_kg, @bmr, @tdee,
-      @goal_calories, @goal_protein_g, @goal_fat_g, @goal_carbs_g,
-      @weekly_workout_target, @weekly_volume_note, @goal_mode, datetime('now')
+      1, :age, :sex, :height_cm, :weight_kg, :neck_cm, :waist_cm, :hips_cm, :activity_level,
+      :body_fat_pct, :lean_mass_kg, :bmr, :tdee,
+      :goal_calories, :goal_protein_g, :goal_fat_g, :goal_carbs_g,
+      :weekly_workout_target, :weekly_volume_note, :goal_mode, datetime('now')
     )
     ON CONFLICT(id) DO UPDATE SET
       age=excluded.age, sex=excluded.sex, height_cm=excluded.height_cm, weight_kg=excluded.weight_kg,
@@ -82,19 +82,29 @@ export async function POST(req: NextRequest) {
       goal_fat_g=excluded.goal_fat_g, goal_carbs_g=excluded.goal_carbs_g,
       weekly_workout_target=excluded.weekly_workout_target,
       weekly_volume_note=excluded.weekly_volume_note,
-      goal_mode=excluded.goal_mode, updated_at=datetime('now')
-    `,
-  ).run({
-    age: p.age,
-    sex: p.sex,
-    height_cm: p.height_cm,
-    weight_kg: p.weight_kg,
-    neck_cm: p.neck_cm,
-    waist_cm: p.waist_cm,
-    hips_cm: p.hips_cm ?? null,
-    activity_level: p.activity_level,
-    ...goals,
+      goal_mode=excluded.goal_mode, updated_at=datetime('now')`,
+    args: {
+      age: p.age,
+      sex: p.sex,
+      height_cm: p.height_cm,
+      weight_kg: p.weight_kg,
+      neck_cm: p.neck_cm,
+      waist_cm: p.waist_cm,
+      hips_cm: p.hips_cm ?? null,
+      activity_level: p.activity_level,
+      body_fat_pct: goals.body_fat_pct,
+      lean_mass_kg: goals.lean_mass_kg,
+      bmr: goals.bmr,
+      tdee: goals.tdee,
+      goal_calories: goals.goal_calories,
+      goal_protein_g: goals.goal_protein_g,
+      goal_fat_g: goals.goal_fat_g,
+      goal_carbs_g: goals.goal_carbs_g,
+      weekly_workout_target: goals.weekly_workout_target,
+      weekly_volume_note: goals.weekly_volume_note,
+      goal_mode: goals.goal_mode,
+    },
   });
 
-  return NextResponse.json({ ok: true, profile: getProfile() });
+  return NextResponse.json({ ok: true, profile: await getProfile() });
 }

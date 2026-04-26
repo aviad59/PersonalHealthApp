@@ -46,8 +46,8 @@ async function askClaudeToFill(rows: NormalizedRow[]): Promise<AiFill[]> {
     };
   });
 
-  const client = anthropic();
-  const resp = await client.messages.create({
+  const cli = anthropic();
+  const resp = await cli.messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 4000,
     system: BACKFILL_FILL_SYSTEM,
@@ -199,18 +199,30 @@ export async function POST(req: NextRequest) {
   );
 
   // 4. Inspect date-level conflicts against the DB.
-  const db = getDb();
+  const db = await getDb();
   const byDate = groupByDate(importable);
   const dates = Array.from(byDate.keys()).sort();
 
-  const existingStmt = db.prepare(
-    `SELECT COUNT(*) AS cnt,
-            COALESCE(SUM(calories), 0)  AS total_cal,
-            COALESCE(SUM(protein_g), 0) AS total_p,
-            COALESCE(SUM(fat_g), 0)     AS total_f,
-            COALESCE(SUM(carbs_g), 0)   AS total_c
-       FROM meals WHERE date = ?`,
-  );
+  type ExistingRow = {
+    cnt: number;
+    total_cal: number;
+    total_p: number;
+    total_f: number;
+    total_c: number;
+  };
+
+  async function existingFor(date: string): Promise<ExistingRow> {
+    const r = await db.execute({
+      sql: `SELECT COUNT(*) AS cnt,
+                   COALESCE(SUM(calories), 0)  AS total_cal,
+                   COALESCE(SUM(protein_g), 0) AS total_p,
+                   COALESCE(SUM(fat_g), 0)     AS total_f,
+                   COALESCE(SUM(carbs_g), 0)   AS total_c
+              FROM meals WHERE date = ?`,
+      args: [date],
+    });
+    return r.rows[0] as unknown as ExistingRow;
+  }
 
   type Conflict = {
     date: string;
@@ -233,15 +245,13 @@ export async function POST(req: NextRequest) {
   const byDateInfo: { date: string; count: number; hasConflict: boolean }[] =
     [];
 
+  // Also cache the existing-row lookups so we don't re-query in commit phase.
+  const existingByDate = new Map<string, ExistingRow>();
+
   for (const date of dates) {
     const incoming = byDate.get(date)!;
-    const row = existingStmt.get(date) as {
-      cnt: number;
-      total_cal: number;
-      total_p: number;
-      total_f: number;
-      total_c: number;
-    };
+    const row = await existingFor(date);
+    existingByDate.set(date, row);
     const hasConflict = row.cnt > 0;
     byDateInfo.push({ date, count: incoming.length, hasConflict });
     if (hasConflict) {
@@ -303,19 +313,11 @@ export async function POST(req: NextRequest) {
 
   // 5. Commit — apply per-date resolutions.
   const resolveFor = (date: string): Resolution => {
-    // Only conflicted dates need a resolution; non-conflicted dates always insert.
     const r = resolutions[date];
     if (r) return r;
     if (defaultPolicy) return defaultPolicy;
-    // Safe default if the user didn't tell us: preserve existing data.
     return "keep";
   };
-
-  const deleteByDate = db.prepare(`DELETE FROM meals WHERE date = ?`);
-  const insertStmt = db.prepare(
-    `INSERT INTO meals (date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, datetime('now'))`,
-  );
 
   let insertedCount = 0;
   let replacedDates = 0;
@@ -329,55 +331,77 @@ export async function POST(req: NextRequest) {
     deleted: number;
   }[] = [];
 
-  const commit = db.transaction(() => {
-    for (const date of dates) {
-      const incoming = byDate.get(date)!;
-      const row = existingStmt.get(date) as { cnt: number };
-      const hasConflict = row.cnt > 0;
+  // Build the batch — libSQL `db.batch` runs the whole list in one transaction.
+  type Stmt = { sql: string; args: any[] };
+  const stmts: Stmt[] = [];
+  // Track which statement index corresponds to which (date, op) so we can read
+  // back rowsAffected after the batch returns.
+  const opMap: { date: string; kind: "delete" | "insert" }[] = [];
 
-      let resolution: Resolution | "insert" = "insert";
-      if (hasConflict) {
-        resolution = resolveFor(date);
-      }
+  for (const date of dates) {
+    const incoming = byDate.get(date)!;
+    const row = existingByDate.get(date)!;
+    const hasConflict = row.cnt > 0;
+    let resolution: Resolution | "insert" = "insert";
+    if (hasConflict) resolution = resolveFor(date);
 
-      let localInserted = 0;
-      let localDeleted = 0;
-
-      if (resolution === "keep") {
-        keptDates++;
-      } else {
-        if (resolution === "replace") {
-          const del = deleteByDate.run(date);
-          localDeleted = Number(del.changes);
-          deletedRowsCount += localDeleted;
-          replacedDates++;
-        } else if (resolution === "merge") {
-          mergedDates++;
-        }
-        for (const r of incoming) {
-          insertStmt.run(
-            r.date,
-            r.description || null,
-            r.calories,
-            r.protein_g,
-            r.fat_g,
-            r.carbs_g,
-            r.aiFilled ? (r.aiConfidence ?? "medium") : null,
-          );
-          localInserted++;
-          insertedCount++;
-        }
-      }
-
-      perDateResult.push({
-        date,
-        resolution,
-        inserted: localInserted,
-        deleted: localDeleted,
-      });
+    if (resolution === "keep") {
+      keptDates++;
+      perDateResult.push({ date, resolution, inserted: 0, deleted: 0 });
+      continue;
     }
-  });
-  commit();
+
+    if (resolution === "replace") {
+      stmts.push({
+        sql: "DELETE FROM meals WHERE date = ?",
+        args: [date],
+      });
+      opMap.push({ date, kind: "delete" });
+      replacedDates++;
+    } else if (resolution === "merge") {
+      mergedDates++;
+    }
+
+    let localInserted = 0;
+    for (const r of incoming) {
+      stmts.push({
+        sql: `INSERT INTO meals (date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, datetime('now'))`,
+        args: [
+          r.date,
+          r.description || null,
+          r.calories,
+          r.protein_g,
+          r.fat_g,
+          r.carbs_g,
+          r.aiFilled ? (r.aiConfidence ?? "medium") : null,
+        ],
+      });
+      opMap.push({ date, kind: "insert" });
+      localInserted++;
+    }
+    insertedCount += localInserted;
+    perDateResult.push({
+      date,
+      resolution,
+      inserted: localInserted,
+      deleted: 0, // filled in below from batch result
+    });
+  }
+
+  if (stmts.length > 0) {
+    const results = await db.batch(stmts, "write");
+    // Walk results aligned to opMap to populate deletedRowsCount + per-date deleted counts
+    for (let i = 0; i < results.length; i++) {
+      const op = opMap[i];
+      const ra = Number(results[i].rowsAffected ?? 0);
+      if (op.kind === "delete") {
+        deletedRowsCount += ra;
+        const entry = perDateResult.find((p) => p.date === op.date);
+        if (entry) entry.deleted = ra;
+      }
+    }
+  }
 
   return NextResponse.json({
     dryRun: false,

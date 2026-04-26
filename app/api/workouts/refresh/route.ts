@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listWorkouts, workoutDurationMin } from "@/lib/hevy";
+import { listWorkouts, workoutDurationMin, HevyWorkout } from "@/lib/hevy";
 import {
   CachedWorkout,
   upsertWorkouts,
@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const PAGE_SIZE = 50;
+const HEVY_PAGE_SIZE = 10;
+const REFRESH_PAGES = 5;
 
 export async function POST() {
   if (!process.env.HEVY_API_KEY) {
@@ -21,9 +22,15 @@ export async function POST() {
     );
   }
   try {
-    const r = await listWorkouts({ page: 1, pageSize: PAGE_SIZE });
-    const workouts = r.workouts ?? [];
-    const rows: CachedWorkout[] = workouts.map((w) => ({
+    const collected: HevyWorkout[] = [];
+    for (let page = 1; page <= REFRESH_PAGES; page++) {
+      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE });
+      const ws = r.workouts ?? [];
+      collected.push(...ws);
+      if (ws.length < HEVY_PAGE_SIZE) break;
+      if (r.page_count && page >= r.page_count) break;
+    }
+    const rows: CachedWorkout[] = collected.map((w) => ({
       id: w.id,
       date: (w.start_time || "").slice(0, 10),
       title: w.title ?? null,
@@ -31,12 +38,14 @@ export async function POST() {
       raw_json: JSON.stringify(w),
       synced_at: "",
     }));
-    upsertWorkouts(rows);
+    await upsertWorkouts(rows);
+    const cachedTotal = (await getCachedWorkouts(9999)).length;
+    const lastSyncedAt = await getCacheLastSyncedAt();
     return NextResponse.json({
       ok: true,
       pulled: rows.length,
-      cachedTotal: getCachedWorkouts(9999).length,
-      lastSyncedAt: getCacheLastSyncedAt(),
+      cachedTotal,
+      lastSyncedAt,
     });
   } catch (e: any) {
     return NextResponse.json(

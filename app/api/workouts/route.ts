@@ -17,10 +17,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Refresh from Hevy if cache is older than this. A force=1 query bypasses the TTL.
-const STALE_AFTER_MS = 10 * 60 * 1000; // 10 minutes
-// How many recent workouts to pull from Hevy on a refresh.
-const REFRESH_PAGE_SIZE = 50;
+const STALE_AFTER_MS = 10 * 60 * 1000; // 10 min
+// Hevy API caps pageSize at 10. Pull this many pages on a refresh.
+const HEVY_PAGE_SIZE = 10;
+const REFRESH_PAGES = 5; // up to 50 most-recent workouts
 
 function topSet(sets: any[]) {
   let best: any = null;
@@ -32,25 +32,31 @@ function topSet(sets: any[]) {
   return best ? { weight_kg: best.weight_kg, reps: best.reps } : null;
 }
 
-/** Fetch from Hevy and write into the local cache. Returns the workouts it pulled. */
 async function refreshCache(): Promise<{
   pulled: number;
   workouts: HevyWorkout[];
   error?: string;
 }> {
   try {
-    const r = await listWorkouts({ page: 1, pageSize: REFRESH_PAGE_SIZE });
-    const workouts = r.workouts ?? [];
-    const rows: CachedWorkout[] = workouts.map((w) => ({
+    const collected: HevyWorkout[] = [];
+    for (let page = 1; page <= REFRESH_PAGES; page++) {
+      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE });
+      const ws = r.workouts ?? [];
+      collected.push(...ws);
+      // Stop early if we've reached the end of history
+      if (ws.length < HEVY_PAGE_SIZE) break;
+      if (r.page_count && page >= r.page_count) break;
+    }
+    const rows: CachedWorkout[] = collected.map((w) => ({
       id: w.id,
       date: (w.start_time || "").slice(0, 10),
       title: w.title ?? null,
       duration_sec: workoutDurationMin(w) * 60,
       raw_json: JSON.stringify(w),
-      synced_at: "", // overwritten by SQL datetime('now')
+      synced_at: "",
     }));
-    upsertWorkouts(rows);
-    return { pulled: rows.length, workouts };
+    await upsertWorkouts(rows);
+    return { pulled: rows.length, workouts: collected };
   } catch (e: any) {
     return { pulled: 0, workouts: [], error: e?.message ?? "hevy_fetch_failed" };
   }
@@ -62,7 +68,7 @@ function cacheRowsToHevy(rows: CachedWorkout[]): HevyWorkout[] {
     try {
       out.push(JSON.parse(r.raw_json) as HevyWorkout);
     } catch {
-      // skip a corrupt row rather than blow up the page
+      // skip
     }
   }
   return out;
@@ -98,16 +104,17 @@ export async function GET(req: NextRequest) {
   const force = url.searchParams.get("force") === "1";
   const limit = Number(url.searchParams.get("limit") ?? "20");
 
-  // Always try to serve from cache first.
-  const cachedRows = getCachedWorkouts(Math.max(limit, REFRESH_PAGE_SIZE));
-  const lastSynced = getCacheLastSyncedAt();
+  const [cachedRows, lastSynced] = await Promise.all([
+    getCachedWorkouts(50),
+    getCacheLastSyncedAt(),
+  ]);
   const lastSyncedMs = lastSynced ? Date.parse(lastSynced + "Z") : 0;
   const stale =
-    !lastSynced || Number.isNaN(lastSyncedMs) ||
+    !lastSynced ||
+    Number.isNaN(lastSyncedMs) ||
     Date.now() - lastSyncedMs > STALE_AFTER_MS;
 
   if (!haveKey) {
-    // No key but we may still have cached data from a previous session.
     if (cachedRows.length > 0) {
       const built = buildResponse(cacheRowsToHevy(cachedRows).slice(0, limit));
       return NextResponse.json({
@@ -125,7 +132,6 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // If we have any cache and aren't forced to refresh, serve immediately.
   if (cachedRows.length > 0 && !force && !stale) {
     const built = buildResponse(cacheRowsToHevy(cachedRows).slice(0, limit));
     return NextResponse.json({
@@ -137,10 +143,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Cache empty / stale / forced → refresh inline.
   const refresh = await refreshCache();
-  // Re-read cache to include any rows we just inserted.
-  const fresh = getCachedWorkouts(Math.max(limit, REFRESH_PAGE_SIZE));
+  const fresh = await getCachedWorkouts(50);
   const useRows = fresh.length > 0 ? fresh : cachedRows;
   const built = buildResponse(cacheRowsToHevy(useRows).slice(0, limit));
 
@@ -148,7 +152,7 @@ export async function GET(req: NextRequest) {
     haveKey: true,
     fromCache: refresh.error ? true : refresh.pulled === 0,
     stale: false,
-    lastSyncedAt: getCacheLastSyncedAt(),
+    lastSyncedAt: await getCacheLastSyncedAt(),
     pulled: refresh.pulled,
     error: refresh.error,
     ...built,

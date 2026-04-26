@@ -19,34 +19,33 @@ type Row = {
  * grouped by a normalized description, with average macros and a count.
  */
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   const since = daysAgoStr(60);
 
   // Group by lowercased / trimmed description so minor casing differences merge.
   // (Hebrew characters aren't affected by LOWER, but the trim still helps.)
-  const rows = db
-    .prepare(
-      `SELECT
-         TRIM(LOWER(description)) AS key,
-         description AS description,
-         ROUND(AVG(calories)) AS calories,
-         ROUND(AVG(protein_g)) AS protein_g,
-         ROUND(AVG(fat_g))     AS fat_g,
-         ROUND(AVG(carbs_g))   AS carbs_g,
-         COUNT(*) AS count,
-         MAX(date) AS last_date
-       FROM meals
-       WHERE description IS NOT NULL
-         AND TRIM(description) <> ''
-         AND date >= ?
-       GROUP BY key
-       HAVING count >= 2
-       ORDER BY count DESC, last_date DESC
-       LIMIT 8`,
-    )
-    .all(since) as (Row & { key: string })[];
+  const res = await db.execute({
+    sql: `SELECT
+            TRIM(LOWER(description)) AS key,
+            description AS description,
+            ROUND(AVG(calories)) AS calories,
+            ROUND(AVG(protein_g)) AS protein_g,
+            ROUND(AVG(fat_g))     AS fat_g,
+            ROUND(AVG(carbs_g))   AS carbs_g,
+            COUNT(*) AS count,
+            MAX(date) AS last_date
+          FROM meals
+          WHERE description IS NOT NULL
+            AND TRIM(description) <> ''
+            AND date >= ?
+          GROUP BY key
+          HAVING count >= 2
+          ORDER BY count DESC, last_date DESC
+          LIMIT 8`,
+    args: [since],
+  });
 
-  // Drop the grouping key before sending to client.
+  const rows = res.rows as unknown as (Row & { key: string })[];
   const cleaned: Row[] = rows.map((r) => ({
     description: r.description,
     calories: r.calories,

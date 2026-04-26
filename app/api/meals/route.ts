@@ -25,7 +25,7 @@ const SaveSchema = z.object({
 
 export async function GET(req: NextRequest) {
   const date = new URL(req.url).searchParams.get("date") ?? todayStr();
-  const meals = getMealsByDate(date);
+  const meals = await getMealsByDate(date);
   return NextResponse.json({ date, meals });
 }
 
@@ -56,14 +56,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const db = getDb();
-  const res = db
-    .prepare(
-      `INSERT INTO meals (
+  const db = await getDb();
+  const ins = await db.execute({
+    sql: `INSERT INTO meals (
         date, photo_path, description, calories, protein_g, fat_g, carbs_g, items_json, confidence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+    args: [
       date,
       photo_path,
       m.description ?? null,
@@ -73,13 +71,14 @@ export async function POST(req: NextRequest) {
       m.carbs_g,
       m.items ? JSON.stringify(m.items) : null,
       m.confidence ?? null,
-    );
-  const mealId = Number(res.lastInsertRowid);
+    ],
+  });
+  const mealId = Number(ins.lastInsertRowid ?? 0);
 
   let tip: string | null = null;
   try {
-    const profile = getProfile();
-    const todays = getMealsByDate(date);
+    const profile = await getProfile();
+    const todays = await getMealsByDate(date);
     if (profile) {
       const totals = todays.reduce(
         (acc, x) => {
@@ -118,7 +117,10 @@ export async function POST(req: NextRequest) {
         .map((b: any) => b.text)
         .join(" ")
         .trim();
-      db.prepare(`UPDATE meals SET ai_tip = ? WHERE id = ?`).run(tip, mealId);
+      await db.execute({
+        sql: `UPDATE meals SET ai_tip = ? WHERE id = ?`,
+        args: [tip, mealId],
+      });
     }
   } catch {
     // Tip generation is best-effort

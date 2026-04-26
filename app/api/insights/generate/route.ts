@@ -6,6 +6,7 @@ import {
   getMealsSince,
   todayStr,
   daysAgoStr,
+  Meal,
 } from "@/lib/db";
 import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
 import {
@@ -20,7 +21,7 @@ export const maxDuration = 60;
 
 type InsightType = "daily" | "weekly";
 
-function dayTotals(meals: ReturnType<typeof getMealsByDate>) {
+function dayTotals(meals: Meal[]) {
   return meals.reduce(
     (acc, m) => {
       acc.calories += m.calories ?? 0;
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const type: InsightType = body?.type === "weekly" ? "weekly" : "daily";
 
-  const profile = getProfile();
+  const profile = await getProfile();
   if (!profile) {
     return NextResponse.json(
       { error: "Profile not set up. Run onboarding first." },
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
 
   const today = todayStr();
 
-  const todayMeals = getMealsByDate(today);
-  const weekMeals = getMealsSince(daysAgoStr(6));
+  const todayMeals = await getMealsByDate(today);
+  const weekMeals = await getMealsSince(daysAgoStr(6));
   const workouts = await safeLoadWorkouts();
 
   const todayWorkouts = workouts.filter((w) => w.start_time.slice(0, 10) === today);
@@ -179,13 +180,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const db = getDb();
-  const res = db
-    .prepare(
-      `INSERT INTO insights (type, for_date, headline, body, tags_json, sources_json)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  const db = await getDb();
+  const ins = await db.execute({
+    sql: `INSERT INTO insights (type, for_date, headline, body, tags_json, sources_json)
+          VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [
       type,
       today,
       parsed.headline,
@@ -196,11 +195,15 @@ export async function POST(req: NextRequest) {
         workouts_today: todayWorkouts.length,
         zepp: false,
       }),
-    );
+    ],
+  });
 
-  const row = db
-    .prepare("SELECT * FROM insights WHERE id = ?")
-    .get(Number(res.lastInsertRowid)) as any;
+  const id = Number(ins.lastInsertRowid ?? 0);
+  const rowRes = await db.execute({
+    sql: "SELECT * FROM insights WHERE id = ?",
+    args: [id],
+  });
+  const row = rowRes.rows[0] as any;
 
   return NextResponse.json({
     ok: true,

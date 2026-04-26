@@ -5,12 +5,51 @@ import Link from "next/link";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
 
+type MuscleStatus = {
+  muscle: string;
+  daysSince: number | null;
+  readiness: "rest" | "cautious" | "ready";
+};
+
+type Recovery = {
+  score: number;
+  band: "low" | "moderate" | "good" | "high";
+  proteinAdherencePct: number;
+  calorieDeviationPct: number;
+  backToBackSessions: boolean;
+  byMuscle: MuscleStatus[];
+  rationale: string;
+  signalsUsed: {
+    protein: boolean;
+    calories: boolean;
+    workouts: boolean;
+    sleep: boolean;
+  };
+};
+
 type Today = {
   date: string;
   profile: any | null;
   totals: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+  targets: {
+    base_calories: number;
+    training_burn_kcal: number;
+    effective_calories: number;
+    protein_g: number;
+    fat_g: number;
+    carbs_g: number;
+  };
   meals: any[];
-  todaysWorkout: { id: string; title: string; volume_kg: number; start_time: string } | null;
+  todaysWorkout: {
+    id: string;
+    title: string;
+    volume_kg: number;
+    start_time: string;
+    duration_min: number;
+    burn_kcal: number;
+    burn_reason: string;
+  } | null;
+  recovery: Recovery | null;
   latestInsight: {
     id: number;
     type: "daily" | "weekly";
@@ -59,8 +98,9 @@ export default function HomePage() {
     );
   }
 
-  const { totals, profile, meals, todaysWorkout, latestInsight } = data;
+  const { totals, profile, meals, todaysWorkout, latestInsight, targets, recovery } = data;
   const today = new Date(data.date);
+  const burn = targets.training_burn_kcal;
 
   return (
     <div className="px-5 pt-6 pb-6 space-y-5">
@@ -82,33 +122,84 @@ export default function HomePage() {
           <MacroRing
             label="Calories"
             value={totals.calories}
-            target={profile.goal_calories ?? 0}
+            target={targets.effective_calories || profile.goal_calories || 0}
             unit=""
             color="#10b981"
           />
           <MacroRing
             label="Protein"
             value={totals.protein_g}
-            target={profile.goal_protein_g ?? 0}
+            target={targets.protein_g || profile.goal_protein_g || 0}
             unit="g"
             color="#ef4444"
           />
           <MacroRing
             label="Carbs"
             value={totals.carbs_g}
-            target={profile.goal_carbs_g ?? 0}
+            target={targets.carbs_g || profile.goal_carbs_g || 0}
             unit="g"
             color="#f59e0b"
           />
           <MacroRing
             label="Fat"
             value={totals.fat_g}
-            target={profile.goal_fat_g ?? 0}
+            target={targets.fat_g || profile.goal_fat_g || 0}
             unit="g"
             color="#3b82f6"
           />
         </div>
+        {burn > 0 && (
+          <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
+            <span className="text-white/80 font-medium">+{burn} kcal</span> from today&apos;s training{" "}
+            <span className="text-white/40">
+              ({targets.base_calories} base → {targets.effective_calories} effective)
+            </span>
+          </div>
+        )}
       </section>
+
+      {recovery && (
+        <section className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Recovery</h2>
+            <span
+              className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(
+                recovery.band,
+              )}`}
+            >
+              {recovery.band}
+            </span>
+          </div>
+
+          <div className="flex items-end gap-4">
+            <div>
+              <div className="text-3xl font-bold leading-none">{recovery.score}</div>
+              <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">
+                / 100
+              </div>
+            </div>
+            <div className="flex-1">
+              <ScoreBar score={recovery.score} band={recovery.band} />
+              <p className="text-[12px] text-white/60 mt-2 leading-snug">{recovery.rationale}</p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Per muscle</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {recovery.byMuscle.map((m) => (
+                <MusclePill key={m.muscle} status={m} />
+              ))}
+            </div>
+          </div>
+
+          {!recovery.signalsUsed.workouts && (
+            <p className="text-[10px] text-white/30 mt-3">
+              Hit Refresh on the Workouts page to populate per-muscle data.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="card p-5">
         <div className="flex items-center justify-between mb-2">
@@ -123,8 +214,9 @@ export default function HomePage() {
                 hour: "numeric",
                 minute: "2-digit",
               })}{" "}
-              · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
+              · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
             </div>
+            <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
           </div>
         ) : (
           <div className="text-sm text-white/50">No workout logged in Hevy yet.</div>
@@ -186,6 +278,59 @@ export default function HomePage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function bandClasses(band: Recovery["band"]) {
+  switch (band) {
+    case "high":
+      return "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
+    case "good":
+      return "text-emerald-300 border-emerald-500/30 bg-emerald-500/5";
+    case "moderate":
+      return "text-amber-300 border-amber-500/40 bg-amber-500/10";
+    case "low":
+      return "text-red-300 border-red-500/40 bg-red-500/10";
+  }
+}
+
+function ScoreBar({ score, band }: { score: number; band: Recovery["band"] }) {
+  const fill =
+    band === "high" || band === "good"
+      ? "bg-emerald-500"
+      : band === "moderate"
+        ? "bg-amber-500"
+        : "bg-red-500";
+  return (
+    <div className="h-1.5 rounded-full bg-bg-elev overflow-hidden">
+      <div className={`h-full ${fill}`} style={{ width: `${Math.max(2, score)}%` }} />
+    </div>
+  );
+}
+
+function MusclePill({ status }: { status: MuscleStatus }) {
+  const cls =
+    status.readiness === "rest"
+      ? "border-red-500/40 bg-red-500/10 text-red-300"
+      : status.readiness === "cautious"
+        ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+        : "border-emerald-500/30 bg-emerald-500/5 text-emerald-300";
+  const days =
+    status.daysSince === null
+      ? "—"
+      : status.daysSince === 0
+        ? "today"
+        : `${status.daysSince}d`;
+  return (
+    <div
+      className={`rounded-md border ${cls} px-1.5 py-1 text-center`}
+      title={`${status.muscle} — ${status.readiness}${
+        status.daysSince === null ? "" : ` (last hit ${days} ago)`
+      }`}
+    >
+      <div className="text-[10px] capitalize leading-tight">{status.muscle}</div>
+      <div className="text-[9px] opacity-70 leading-tight">{days}</div>
     </div>
   );
 }
