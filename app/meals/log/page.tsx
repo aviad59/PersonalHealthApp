@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 type Analysis = {
@@ -28,9 +28,33 @@ type FrequentMeal = {
   last_date: string;
 };
 
+type ExistingMeal = {
+  id: number;
+  date: string;
+  description: string | null;
+  calories: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+  photo_path: string | null;
+  ai_tip: string | null;
+  created_at: string;
+};
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function LogMealPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [date, setDate] = useState<string>(todayStr());
+  const isToday = date === todayStr();
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -49,12 +73,33 @@ export default function LogMealPage() {
   const [err, setErr] = useState<string | null>(null);
   const [tip, setTip] = useState<string | null>(null);
 
+  // Existing meals state
+  const [existing, setExisting] = useState<ExistingMeal[]>([]);
+  const [existingEditId, setExistingEditId] = useState<number | null>(null);
+
   // Frequent meals state
   const [frequent, setFrequent] = useState<FrequentMeal[]>([]);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [modifier, setModifier] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
 
+  const loadExisting = useCallback(async (forDate: string) => {
+    try {
+      const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store" });
+      const j = await r.json();
+      setExisting(j.meals || []);
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
+  // Reload existing meals whenever the date changes.
+  useEffect(() => {
+    setExistingEditId(null);
+    loadExisting(date);
+  }, [date, loadExisting]);
+
+  // Frequent meals are global to the user; load once.
   useEffect(() => {
     (async () => {
       try {
@@ -91,6 +136,13 @@ export default function LogMealPage() {
     setPhotoPreview(null);
     setPhotoBase64(null);
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function resetNewMealForm() {
+    setAnalysis(null);
+    setEditing(null);
+    setText("");
+    clearPhoto();
   }
 
   async function analyze() {
@@ -135,6 +187,7 @@ export default function LogMealPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          date,
           description: analysis.description,
           calories: editing.calories,
           protein_g: editing.protein_g,
@@ -149,10 +202,15 @@ export default function LogMealPage() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "save failed");
       setTip(j.ai_tip || null);
-      setTimeout(() => {
-        router.push("/");
-        router.refresh();
-      }, 2000);
+      // Reload list, clear form. Redirect home only if logging for today.
+      await loadExisting(date);
+      resetNewMealForm();
+      if (isToday) {
+        setTimeout(() => {
+          router.push("/");
+          router.refresh();
+        }, 2000);
+      }
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -207,15 +265,20 @@ export default function LogMealPage() {
       const res = await fetch("/api/meals", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(toSave),
+        body: JSON.stringify({ ...toSave, date }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "save failed");
       setTip(j.ai_tip || null);
-      setTimeout(() => {
-        router.push("/");
-        router.refresh();
-      }, 2000);
+      await loadExisting(date);
+      setExpandedIdx(null);
+      setModifier("");
+      if (isToday) {
+        setTimeout(() => {
+          router.push("/");
+          router.refresh();
+        }, 2000);
+      }
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -223,17 +286,100 @@ export default function LogMealPage() {
     }
   }
 
+  async function deleteMeal(id: number) {
+    if (!confirm("Delete this meal?")) return;
+    try {
+      const r = await fetch(`/api/meals/${id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "delete failed");
+      }
+      await loadExisting(date);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  }
+
+  async function patchMeal(
+    id: number,
+    fields: Partial<
+      Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g">
+    >,
+  ) {
+    const r = await fetch(`/api/meals/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || "update failed");
+    }
+    await loadExisting(date);
+    setExistingEditId(null);
+  }
+
   return (
     <div className="px-5 pt-6 pb-10 space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Log a meal</h1>
         <p className="text-sm text-white/60 mt-1">
-          Snap a photo, describe it in words, or re-log a frequent meal.
+          {isToday
+            ? "Snap a photo, describe it in words, or re-log a frequent meal."
+            : `Logging for ${prettyDate(date)}.`}
         </p>
       </div>
 
-      {/* --- PHOTO PICKER --- */}
-      {!photoPreview && (
+      {/* --- DATE PICKER --- */}
+      <div className="card p-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-white/50">Date</div>
+          <div className="text-sm font-medium mt-0.5">{prettyDate(date)}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isToday && (
+            <button
+              onClick={() => setDate(todayStr())}
+              className="text-[11px] text-accent-brand"
+            >
+              Today
+            </button>
+          )}
+          <input
+            type="date"
+            value={date}
+            max={todayStr()}
+            onChange={(e) => setDate(e.target.value || todayStr())}
+            className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 text-[13px]"
+          />
+        </div>
+      </div>
+
+      {/* --- EXISTING MEALS FOR THIS DATE --- */}
+      {existing.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+            {isToday ? "Today's meals" : "Logged for this day"}
+          </h2>
+          <div className="space-y-2">
+            {existing.map((m) => (
+              <ExistingMealRow
+                key={m.id}
+                meal={m}
+                isEditing={existingEditId === m.id}
+                onEditToggle={() =>
+                  setExistingEditId(existingEditId === m.id ? null : m.id)
+                }
+                onDelete={() => deleteMeal(m.id)}
+                onSave={(fields) => patchMeal(m.id, fields)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* --- PHOTO PICKER (NEW MEAL) --- */}
+      {!photoPreview && !analysis && (
         <button
           onClick={() => fileRef.current?.click()}
           className="w-full aspect-square rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-3"
@@ -365,13 +511,21 @@ export default function LogMealPage() {
             />
           </div>
 
-          <button
-            onClick={save}
-            disabled={saving}
-            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
-          >
-            {saving ? "Saving…" : "Confirm & save"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={resetNewMealForm}
+              className="flex-1 rounded-xl border border-border bg-bg-elev py-3 text-sm font-medium"
+            >
+              Discard
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+            >
+              {saving ? "Saving…" : isToday ? "Confirm & save" : `Save to ${prettyDate(date)}`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -438,7 +592,7 @@ export default function LogMealPage() {
                           disabled={quickBusy}
                           className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-xs font-medium disabled:opacity-40"
                         >
-                          {quickBusy ? "Saving…" : "Log as-is"}
+                          {quickBusy ? "Saving…" : `Log as-is${isToday ? "" : ` to ${date}`}`}
                         </button>
                         <button
                           onClick={() => quickLog(m, modifier)}
@@ -460,6 +614,140 @@ export default function LogMealPage() {
         </section>
       )}
     </div>
+  );
+}
+
+function ExistingMealRow({
+  meal,
+  isEditing,
+  onEditToggle,
+  onDelete,
+  onSave,
+}: {
+  meal: ExistingMeal;
+  isEditing: boolean;
+  onEditToggle: () => void;
+  onDelete: () => void;
+  onSave: (fields: Partial<ExistingMeal>) => Promise<void>;
+}) {
+  const [desc, setDesc] = useState(meal.description ?? "");
+  const [cal, setCal] = useState<number>(Math.round(meal.calories ?? 0));
+  const [p, setP] = useState<number>(Math.round(meal.protein_g ?? 0));
+  const [f, setF] = useState<number>(Math.round(meal.fat_g ?? 0));
+  const [c, setC] = useState<number>(Math.round(meal.carbs_g ?? 0));
+  const [busy, setBusy] = useState(false);
+
+  // Keep local state in sync if the meal changes underneath (e.g. after a save).
+  useEffect(() => {
+    setDesc(meal.description ?? "");
+    setCal(Math.round(meal.calories ?? 0));
+    setP(Math.round(meal.protein_g ?? 0));
+    setF(Math.round(meal.fat_g ?? 0));
+    setC(Math.round(meal.carbs_g ?? 0));
+  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g]);
+
+  async function handleSave() {
+    setBusy(true);
+    try {
+      await onSave({
+        description: desc.trim() || null,
+        calories: cal,
+        protein_g: p,
+        fat_g: f,
+        carbs_g: c,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card p-3">
+      <div className="flex items-center gap-3">
+        {meal.photo_path ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={meal.photo_path} alt="" className="w-12 h-12 rounded-lg object-cover" />
+        ) : (
+          <div className="w-12 h-12 rounded-lg bg-bg-elev shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">
+            {meal.description || "Meal"}
+          </div>
+          <div className="text-[11px] text-white/50 mt-0.5">
+            {Math.round(meal.calories ?? 0)} kcal · P{Math.round(meal.protein_g ?? 0)}{" "}
+            C{Math.round(meal.carbs_g ?? 0)} F{Math.round(meal.fat_g ?? 0)}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onEditToggle}
+            className="text-[11px] text-accent-brand px-2 py-1"
+          >
+            {isEditing ? "Cancel" : "Edit"}
+          </button>
+          <button
+            onClick={onDelete}
+            className="text-[11px] text-red-400/80 px-2 py-1"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {isEditing && (
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
+          <input
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            placeholder="Description"
+            className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <NumField label="Calories" unit="kcal" value={cal} onChange={setCal} />
+            <NumField label="Protein" unit="g" value={p} onChange={setP} />
+            <NumField label="Fat" unit="g" value={f} onChange={setF} />
+            <NumField label="Carbs" unit="g" value={c} onChange={setC} />
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="w-full rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
+          >
+            {busy ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NumField({
+  label,
+  unit,
+  value,
+  onChange,
+}: {
+  label: string;
+  unit: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 flex items-center justify-between gap-2">
+      <span className="text-[10px] uppercase tracking-wide text-white/50">{label}</span>
+      <span className="flex items-center gap-1">
+        <input
+          inputMode="numeric"
+          value={value}
+          onChange={(e) =>
+            onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)
+          }
+          className="w-14 bg-transparent text-right text-[13px] outline-none"
+        />
+        <span className="text-[10px] text-white/40">{unit}</span>
+      </span>
+    </label>
   );
 }
 
@@ -486,4 +774,15 @@ function MacroEdit({
       <span className="text-xs text-white/40 w-10">{unit}</span>
     </div>
   );
+}
+
+function prettyDate(s: string): string {
+  if (s === todayStr()) return "Today";
+  // Local-friendly: "Wed, Apr 22"
+  const d = new Date(s + "T00:00:00");
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
