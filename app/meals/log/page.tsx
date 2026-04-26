@@ -770,21 +770,27 @@ function NumField({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 flex items-center justify-between gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-white/50">{label}</span>
-      <span className="flex items-center gap-1">
-        <input
-          inputMode="numeric"
-          value={value}
-          onChange={(e) =>
-            onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)
-          }
-          className="w-14 bg-transparent text-right text-[13px] outline-none"
-        />
-        <span className="text-[10px] text-white/40">{unit}</span>
-      </span>
+    <label className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 flex items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wider text-white/50 w-12">{label}</span>
+      <input
+        inputMode="numeric"
+        value={value || ""}
+        onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
+        className="flex-1 bg-transparent border-0 text-right text-[13px] focus:outline-none"
+      />
+      <span className="text-[10px] text-white/40 w-8">{unit}</span>
     </label>
   );
+}
+
+function prettyDate(s: string): string {
+  if (s === todayStr()) return "היום";
+  const d = new Date(s + "T00:00:00");
+  return d.toLocaleDateString("he-IL", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function MacroEdit({
@@ -803,22 +809,11 @@ function MacroEdit({
       <span className="text-sm text-white/70 w-20">{label}</span>
       <input
         inputMode="numeric"
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
         className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-right text-[15px]"
       />
       <span className="text-xs text-white/40 w-10">{unit}</span>
     </div>
   );
-}
-
-function prettyDate(s: string): string {
-  if (s === todayStr()) return "Today";
-  // Local-friendly: "Wed, Apr 22"
-  const d = new Date(s + "T00:00:00");
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
 }

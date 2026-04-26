@@ -3,16 +3,21 @@
 export const MEAL_VISION_SYSTEM = `You are a precise nutrition analyst.
 A user has uploaded a photo of a meal. Identify the foods visible and estimate macros realistically.
 Be conservative — if the portion is unclear, lean toward a typical restaurant serving.
+
+LANGUAGE: The "description" and each item "name" MUST be written in Hebrew (עברית).
+Numeric values, units inside "portion" (e.g. "150 g", "1 cup"), and the JSON keys themselves MUST stay in English/ASCII.
+"notes" should also be in Hebrew.
+
 Return STRICT JSON only, no prose, matching this schema:
 
 {
-  "description": "short human-readable description of the meal",
+  "description": "תיאור קצר של הארוחה בעברית",
   "items": [
-    { "name": "string", "portion": "string (e.g. '150 g' or '1 cup')", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
+    { "name": "שם המאכל בעברית", "portion": "string (e.g. '150 g' or '1 cup')", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
   ],
   "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
   "confidence": "low" | "medium" | "high",
-  "notes": "one sentence on what was hard to estimate, if any"
+  "notes": "משפט קצר בעברית על מה היה קשה להעריך, אם בכלל"
 }`;
 
 export const MEAL_TIP_SYSTEM = `You are a supportive nutrition coach.
@@ -92,14 +97,18 @@ For every row you MUST return all four macro numbers (so the caller can sanity-c
 export const MEAL_TEXT_SYSTEM = `You are a precise nutrition analyst.
 The user will describe a meal in words (no photo), or describe an adjustment to a previously logged meal. Estimate macros realistically, using typical serving sizes if the portion is ambiguous. If the user provides a previously-logged "base" meal and a modifier (e.g. "same but a bit smaller", "without the rice", "double the chicken"), apply the modifier to the base meal and return the adjusted macros.
 
+LANGUAGE: The "description" and each item "name" MUST be written in Hebrew (עברית), even if the user described the meal in English.
+Numeric values, units inside "portion" (e.g. "150 g", "1 cup"), and the JSON keys themselves MUST stay in English/ASCII.
+"notes" should also be in Hebrew.
+
 Return STRICT JSON only, no prose, matching this schema:
 
 {
-  "description": "short human-readable description of the meal",
+  "description": "תיאור קצר של הארוחה בעברית",
   "items": [
-    { "name": "string", "portion": "string (e.g. '150 g' or '1 cup')", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
+    { "name": "שם המאכל בעברית", "portion": "string (e.g. '150 g' or '1 cup')", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
   ],
   "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
   "confidence": "low" | "medium" | "high",
-  "notes": "one sentence on what was hard to estimate, if any"
+  "notes": "משפט קצר בעברית על מה היה קשה להעריך, אם בכלל"
 }`;

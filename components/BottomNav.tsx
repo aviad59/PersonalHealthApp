@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const items = [
   { href: "/", label: "Today", icon: HomeIcon },
   { href: "/meals/log", label: "Log", icon: CameraIcon },
+  { href: "/stats", label: "Stats", icon: ChartIcon },
   { href: "/insights", label: "Insights", icon: SparklesIcon },
   { href: "/workouts", label: "Workouts", icon: DumbbellIcon },
   { href: "/profile", label: "Profile", icon: UserIcon },
@@ -13,7 +14,6 @@ const items = [
 
 export default function BottomNav() {
   const pathname = usePathname() || "/";
-  // Hide nav on onboarding
   if (pathname.startsWith("/onboarding")) return null;
 
   return (
@@ -73,6 +73,16 @@ function DumbbellIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M6 4v16M3 7v10M18 4v16M21 7v10M6 12h12" />
+    </svg>
+  );
+}
+function ChartIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 3v18h18" />
+      <rect x="7" y="12" width="3" height="6" rx="0.5" />
+      <rect x="12" y="8" width="3" height="10" rx="0.5" />
+      <rect x="17" y="5" width="3" height="13" rx="0.5" />
     </svg>
   );
 }

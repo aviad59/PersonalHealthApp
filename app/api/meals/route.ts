@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import fs from "node:fs";
-import path from "node:path";
 import { getDb, getMealsByDate, todayStr, getProfile } from "@/lib/db";
 import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
 import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
@@ -43,17 +41,15 @@ export async function POST(req: NextRequest) {
 
   let photo_path: string | null = null;
   if (m.photo_base64) {
-    try {
-      const uploads = path.join(process.cwd(), "public", "uploads");
-      if (!fs.existsSync(uploads)) fs.mkdirSync(uploads, { recursive: true });
-      const ext = (m.photo_ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5) || "jpg";
-      const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const full = path.join(uploads, name);
-      fs.writeFileSync(full, Buffer.from(m.photo_base64, "base64"));
-      photo_path = `/uploads/${name}`;
-    } catch {
-      photo_path = null;
-    }
+    // Store as data URI directly — Vercel serverless filesystem is ephemeral,
+    // so writes to public/uploads don't persist. Data URIs render directly in <img src>.
+    const ext = (m.photo_ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
+    const mime =
+      ext === "png" ? "image/png" :
+      ext === "webp" ? "image/webp" :
+      ext === "gif" ? "image/gif" :
+      "image/jpeg";
+    photo_path = `data:${mime};base64,${m.photo_base64}`;
   }
 
   const db = await getDb();
