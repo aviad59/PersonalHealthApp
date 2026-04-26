@@ -90,6 +90,16 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts_cache(date);
 
+  CREATE TABLE IF NOT EXISTS suggestions (
+    date TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    meals_count INTEGER NOT NULL,
+    totals_calories INTEGER NOT NULL,
+    totals_protein_g INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS zepp_cache (
     date TEXT PRIMARY KEY,
     sleep_hours REAL,
@@ -120,25 +130,55 @@ export async function getDb(): Promise<Client> {
 }
 
 // ---------------------------------------------------------------
-// Date helpers (unchanged)
+// Date helpers (timezone-aware)
+//
+// On Vercel the server runs in UTC, but our user lives in Jerusalem.
+// "Today" needs to mean the user's local calendar day, not UTC's.
+// All dates stored in the DB are YYYY-MM-DD strings keyed to APP_TIMEZONE.
 // ---------------------------------------------------------------
 
-export function todayStr(): string {
-  // YYYY-MM-DD in local time
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export const APP_TZ = process.env.APP_TIMEZONE || "Asia/Jerusalem";
+
+/** Format any Date as a YYYY-MM-DD string in APP_TZ. */
+export function dateKey(d: Date): string {
+  // en-CA gives us ISO-style YYYY-MM-DD parts.
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = f.formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+/** Today in APP_TZ as YYYY-MM-DD. */
+export function todayStr(): string {
+  return dateKey(new Date());
+}
+
+/** N calendar days before today (in APP_TZ) as YYYY-MM-DD. */
 export function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  const today = todayStr();
+  const [y, m, d] = today.split("-").map(Number);
+  // Anchor at UTC midnight for the local-date components, then subtract n days.
+  // This is safe because we only use it for date-string comparisons (no clocks).
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - n);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Difference in calendar days between two YYYY-MM-DD keys (a - b). */
+export function diffDaysKey(aKey: string, bKey: string): number {
+  const [ay, am, ad] = aKey.split("-").map(Number);
+  const [by, bm, bd] = bKey.split("-").map(Number);
+  const a = Date.UTC(ay, am - 1, ad);
+  const b = Date.UTC(by, bm - 1, bd);
+  return Math.round((a - b) / (24 * 3600 * 1000));
 }
 
 // ---------------------------------------------------------------
@@ -307,4 +347,55 @@ export async function getCacheLastSyncedAt(): Promise<string | null> {
   const res = await db.execute("SELECT MAX(synced_at) AS s FROM workouts_cache");
   const row = res.rows[0] as unknown as { s: string | null } | undefined;
   return row?.s ?? null;
+}
+
+// ---------------------------------------------------------------
+// Next-meal suggestion (one cached row per day)
+// ---------------------------------------------------------------
+
+export type DaySuggestion = {
+  date: string;
+  body: string;
+  meals_count: number;
+  totals_calories: number;
+  totals_protein_g: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getSuggestion(
+  date: string,
+): Promise<DaySuggestion | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at
+            FROM suggestions WHERE date = ?`,
+    args: [date],
+  });
+  const row = res.rows[0];
+  return row ? (row as unknown as DaySuggestion) : null;
+}
+
+export async function upsertSuggestion(
+  s: Omit<DaySuggestion, "created_at" | "updated_at">,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO suggestions
+            (date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(date) DO UPDATE SET
+            body = excluded.body,
+            meals_count = excluded.meals_count,
+            totals_calories = excluded.totals_calories,
+            totals_protein_g = excluded.totals_protein_g,
+            updated_at = datetime('now')`,
+    args: [
+      s.date,
+      s.body,
+      s.meals_count,
+      s.totals_calories,
+      s.totals_protein_g,
+    ],
+  });
 }

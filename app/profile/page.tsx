@@ -253,6 +253,29 @@ export default function ProfilePage() {
             <option value="maintain">Maintain</option>
           </select>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-white/60 mb-1.5">
+            Workouts per week
+          </label>
+          <div className="grid grid-cols-7 gap-1.5">
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <button
+                key={n}
+                onClick={() => update("weekly_workout_target", n)}
+                className={`rounded-lg py-2 text-sm font-medium ${
+                  Number(profile.weekly_workout_target) === n
+                    ? "bg-accent-brand text-white"
+                    : "bg-bg-elev border border-border text-white/70"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-white/40 mt-1.5">
+            Overrides the activity-based default. Recovery & weekly insights use this number.
+          </div>
+        </div>
       </section>
 
       <section className="card p-5 space-y-3">
@@ -279,6 +302,7 @@ export default function ProfilePage() {
           <Row k="Protein" v={`${preview.goal_protein_g} g`} emphasize />
           <Row k="Fat" v={`${preview.goal_fat_g} g`} emphasize />
           <Row k="Carbs" v={`${preview.goal_carbs_g} g`} emphasize />
+          <Row k="Workouts / wk" v={`${preview.weekly_workout_target}`} />
         </section>
       )}
 
@@ -480,6 +504,7 @@ export default function ProfilePage() {
 }
 
 function toPayload(p: any) {
+  const wkt = Number(p.weekly_workout_target);
   return {
     age: Number(p.age),
     sex: p.sex,
@@ -490,6 +515,7 @@ function toPayload(p: any) {
     hips_cm: p.sex === "female" ? Number(p.hips_cm) : null,
     activity_level: p.activity_level,
     goal_mode: p.goal_mode ?? "recomp",
+    weekly_workout_target: Number.isFinite(wkt) && wkt > 0 ? wkt : null,
   };
 }
 

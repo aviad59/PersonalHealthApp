@@ -192,6 +192,8 @@ export function computeGoalsFromMetrics(opts: {
   hipsCm?: number | null;
   activity: ActivityLevel;
   goalMode?: GoalMode;
+  /** Optional override: user's preferred workouts/week (1–7). */
+  weeklyWorkoutTarget?: number | null;
 }) {
   const goalMode: GoalMode = opts.goalMode ?? "recomp";
   const body_fat_pct = navyBodyFat({
@@ -215,6 +217,12 @@ export function computeGoalsFromMetrics(opts: {
     goalMode,
   });
   const wo = weeklyWorkoutTarget(opts.activity);
+  // If the user supplied a personal target, prefer it; the volume note still
+  // comes from the activity-derived bucket so the guidance text stays useful.
+  const sessions =
+    opts.weeklyWorkoutTarget != null && opts.weeklyWorkoutTarget > 0
+      ? clamp(Math.round(opts.weeklyWorkoutTarget), 1, 7)
+      : wo.sessions;
   return {
     body_fat_pct: Math.round(body_fat_pct * 10) / 10,
     lean_mass_kg: Math.round(lean_mass_kg * 10) / 10,
@@ -225,7 +233,7 @@ export function computeGoalsFromMetrics(opts: {
     goal_protein_g: macros.protein_g,
     goal_fat_g: macros.fat_g,
     goal_carbs_g: macros.carbs_g,
-    weekly_workout_target: wo.sessions,
+    weekly_workout_target: sessions,
     weekly_volume_note: wo.note,
   };
 }

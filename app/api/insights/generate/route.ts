@@ -6,6 +6,7 @@ import {
   getMealsSince,
   todayStr,
   daysAgoStr,
+  dateKey,
   Meal,
 } from "@/lib/db";
 import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
@@ -63,9 +64,13 @@ export async function POST(req: NextRequest) {
   const weekMeals = await getMealsSince(daysAgoStr(6));
   const workouts = await safeLoadWorkouts();
 
-  const todayWorkouts = workouts.filter((w) => w.start_time.slice(0, 10) === today);
+  const workoutKey = (w: HevyWorkout): string => {
+    const t = Date.parse(w.start_time || "");
+    return Number.isFinite(t) ? dateKey(new Date(t)) : "";
+  };
+  const todayWorkouts = workouts.filter((w) => workoutKey(w) === today);
   const weekStart = daysAgoStr(6);
-  const weekWorkouts = workouts.filter((w) => w.start_time.slice(0, 10) >= weekStart);
+  const weekWorkouts = workouts.filter((w) => workoutKey(w) >= weekStart);
 
   const context: any = {
     profile: {
@@ -110,7 +115,7 @@ export async function POST(req: NextRequest) {
     for (let i = 6; i >= 0; i--) {
       const d = daysAgoStr(i);
       const ms = weekMeals.filter((m) => m.date === d);
-      const ws = weekWorkouts.filter((w) => w.start_time.slice(0, 10) === d);
+      const ws = weekWorkouts.filter((w) => workoutKey(w) === d);
       dayByDay.push({
         date: d,
         totals: dayTotals(ms),
@@ -147,7 +152,7 @@ export async function POST(req: NextRequest) {
     for (let i = 6; i >= 1; i--) {
       const d = daysAgoStr(i);
       const ms = weekMeals.filter((m) => m.date === d);
-      const ws = weekWorkouts.filter((w) => w.start_time.slice(0, 10) === d);
+      const ws = weekWorkouts.filter((w) => workoutKey(w) === d);
       recent.push({
         date: d,
         calories: dayTotals(ms).calories,

@@ -15,6 +15,7 @@ const S = z.object({
   hips_cm: z.number().nullable().optional(),
   activity_level: z.enum(["sedentary", "light", "moderate", "active", "very_active"]),
   goal_mode: z.enum(["recomp", "cut", "bulk", "maintain"]).optional(),
+  weekly_workout_target: z.number().int().min(1).max(7).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
       hipsCm: p.hips_cm ?? null,
       activity: p.activity_level as ActivityLevel,
       goalMode: (p.goal_mode ?? "recomp") as GoalMode,
+      weeklyWorkoutTarget: p.weekly_workout_target ?? null,
     });
     return NextResponse.json(goals);
   } catch (e: any) {

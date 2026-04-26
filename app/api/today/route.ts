@@ -7,6 +7,7 @@ import {
   getCachedWorkoutsSince,
   todayStr,
   daysAgoStr,
+  dateKey,
 } from "@/lib/db";
 import { HevyWorkout, workoutVolumeKg, workoutDurationMin } from "@/lib/hevy";
 import { estimateWorkoutBurn } from "@/lib/burn";
@@ -66,7 +67,10 @@ export async function GET() {
   // ---- Today's workout (from cache; falls back gracefully) ----
   const recentHevy = rowsToHevy(cachedRecent);
   const todaysWorkoutHevy =
-    recentHevy.find((w) => (w.start_time || "").slice(0, 10) === today) ?? null;
+    recentHevy.find((w) => {
+      const t = Date.parse(w.start_time || "");
+      return Number.isFinite(t) && dateKey(new Date(t)) === today;
+    }) ?? null;
 
   let todaysWorkout: null | {
     id: string;

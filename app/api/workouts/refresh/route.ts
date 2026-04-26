@@ -5,6 +5,7 @@ import {
   upsertWorkouts,
   getCacheLastSyncedAt,
   getCachedWorkouts,
+  dateKey,
 } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -30,14 +31,17 @@ export async function POST() {
       if (ws.length < HEVY_PAGE_SIZE) break;
       if (r.page_count && page >= r.page_count) break;
     }
-    const rows: CachedWorkout[] = collected.map((w) => ({
-      id: w.id,
-      date: (w.start_time || "").slice(0, 10),
-      title: w.title ?? null,
-      duration_sec: workoutDurationMin(w) * 60,
-      raw_json: JSON.stringify(w),
-      synced_at: "",
-    }));
+    const rows: CachedWorkout[] = collected.map((w) => {
+      const t = Date.parse(w.start_time || "");
+      return {
+        id: w.id,
+        date: Number.isFinite(t) ? dateKey(new Date(t)) : "",
+        title: w.title ?? null,
+        duration_sec: workoutDurationMin(w) * 60,
+        raw_json: JSON.stringify(w),
+        synced_at: "",
+      };
+    });
     await upsertWorkouts(rows);
     const cachedTotal = (await getCachedWorkouts(9999)).length;
     const lastSyncedAt = await getCacheLastSyncedAt();

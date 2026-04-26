@@ -60,10 +60,21 @@ type Today = {
   } | null;
 };
 
+type Suggestion = {
+  body: string;
+  meals_count: number;
+  totals_calories: number;
+  totals_protein_g: number;
+  updated_at: string;
+  cached: boolean;
+};
+
 export default function HomePage() {
   const [data, setData] = useState<Today | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -75,6 +86,18 @@ export default function HomePage() {
         setErr(e.message);
       } finally {
         setLoading(false);
+      }
+    })();
+    (async () => {
+      try {
+        setSuggestionLoading(true);
+        const r = await fetch("/api/suggestion", { cache: "no-store" });
+        const j = await r.json();
+        if (j?.suggestion) setSuggestion(j.suggestion);
+      } catch {
+        // non-fatal
+      } finally {
+        setSuggestionLoading(false);
       }
     })();
   }, []);
@@ -155,6 +178,29 @@ export default function HomePage() {
               ({targets.base_calories} base → {targets.effective_calories} effective)
             </span>
           </div>
+        )}
+      </section>
+
+      <section className="card p-5">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Next meal</h2>
+          {suggestion?.updated_at && (
+            <span className="text-[10px] text-white/40">
+              {new Date(suggestion.updated_at).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          )}
+        </div>
+        {suggestion ? (
+          <p className="text-[13px] leading-relaxed text-white/80">{suggestion.body}</p>
+        ) : suggestionLoading ? (
+          <p className="text-[13px] text-white/40">Thinking…</p>
+        ) : (
+          <p className="text-[13px] text-white/40">
+            Log a meal or set up your profile to get a personalized suggestion.
+          </p>
         )}
       </section>
 

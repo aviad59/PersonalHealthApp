@@ -51,7 +51,8 @@ function todayStr() {
 
 export default function LogMealPage() {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   const [date, setDate] = useState<string>(todayStr());
   const isToday = date === todayStr();
@@ -132,10 +133,17 @@ export default function LogMealPage() {
     reader.readAsDataURL(f);
   }
 
+  function pickedFile(): File | null {
+    return (
+      cameraRef.current?.files?.[0] || galleryRef.current?.files?.[0] || null
+    );
+  }
+
   function clearPhoto() {
     setPhotoPreview(null);
     setPhotoBase64(null);
-    if (fileRef.current) fileRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
+    if (galleryRef.current) galleryRef.current.value = "";
   }
 
   function resetNewMealForm() {
@@ -146,7 +154,8 @@ export default function LogMealPage() {
   }
 
   async function analyze() {
-    const hasPhoto = !!fileRef.current?.files?.[0];
+    const f = pickedFile();
+    const hasPhoto = !!f;
     const hasText = !!text.trim();
     if (!hasPhoto && !hasText) {
       setErr("Add a photo or a description");
@@ -156,7 +165,7 @@ export default function LogMealPage() {
     setErr(null);
     try {
       const fd = new FormData();
-      if (hasPhoto) fd.append("photo", fileRef.current!.files![0]);
+      if (f) fd.append("photo", f);
       if (hasText) {
         // When a photo is present, text is context; otherwise text is the description.
         fd.append(hasPhoto ? "hint" : "text", text.trim());
@@ -380,19 +389,36 @@ export default function LogMealPage() {
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
       {!photoPreview && !analysis && (
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="w-full aspect-square rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-3"
-        >
-          <div className="w-16 h-16 rounded-full bg-bg-card flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="h-8 w-8 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => cameraRef.current?.click()}
+              className="rounded-2xl border-2 border-dashed border-border bg-bg-elev py-6 flex flex-col items-center justify-center gap-2"
+            >
+              <div className="w-12 h-12 rounded-full bg-bg-card flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+              </div>
+              <div className="text-xs text-white/70">Take photo</div>
+            </button>
+            <button
+              onClick={() => galleryRef.current?.click()}
+              className="rounded-2xl border-2 border-dashed border-border bg-bg-elev py-6 flex flex-col items-center justify-center gap-2"
+            >
+              <div className="w-12 h-12 rounded-full bg-bg-card flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-5-5L5 21" />
+                </svg>
+              </div>
+              <div className="text-xs text-white/70">From gallery</div>
+            </button>
           </div>
-          <div className="text-sm text-white/70">Tap to take/choose a photo</div>
-          <div className="text-[11px] text-white/40">…or describe your meal below</div>
-        </button>
+          <div className="text-[11px] text-white/40 text-center">…or describe your meal below</div>
+        </div>
       )}
 
       {photoPreview && (
@@ -402,21 +428,31 @@ export default function LogMealPage() {
             <img src={photoPreview} alt="meal" className="w-full object-cover max-h-80" />
           </div>
           <div className="flex gap-4 text-sm">
-            <button onClick={() => fileRef.current?.click()} className="text-accent-brand">
-              Change photo
+            <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
+              Retake
             </button>
-            <button onClick={clearPhoto} className="text-white/50">
-              Remove photo
+            <button onClick={() => galleryRef.current?.click()} className="text-accent-brand">
+              Pick from gallery
+            </button>
+            <button onClick={clearPhoto} className="text-white/50 ml-auto">
+              Remove
             </button>
           </div>
         </div>
       )}
 
       <input
-        ref={fileRef}
+        ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
+        onChange={onPick}
+        className="hidden"
+      />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
         onChange={onPick}
         className="hidden"
       />

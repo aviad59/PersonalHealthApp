@@ -5,6 +5,8 @@
 // Hevy API docs: https://api.hevyapp.com/docs/
 // Auth: `api-key: <HEVY_API_KEY>` header (requires Hevy PRO).
 
+import { dateKey } from "@/lib/db";
+
 const BASE = "https://api.hevyapp.com/v1";
 
 function key(): string {
@@ -144,7 +146,7 @@ export function summarizeWeek(workouts: HevyWorkout[]): WeeklySummary {
     totalVolumeKg += vol;
     totalMinutes += workoutDurationMin(w);
     sessionsByDate.push({
-      date: w.start_time.slice(0, 10),
+      date: dateKey(new Date(w.start_time)),
       title: w.title,
       volumeKg: vol,
     });

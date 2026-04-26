@@ -11,6 +11,7 @@ import {
   getCachedWorkouts,
   getCacheLastSyncedAt,
   upsertWorkouts,
+  dateKey,
 } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -47,14 +48,17 @@ async function refreshCache(): Promise<{
       if (ws.length < HEVY_PAGE_SIZE) break;
       if (r.page_count && page >= r.page_count) break;
     }
-    const rows: CachedWorkout[] = collected.map((w) => ({
-      id: w.id,
-      date: (w.start_time || "").slice(0, 10),
-      title: w.title ?? null,
-      duration_sec: workoutDurationMin(w) * 60,
-      raw_json: JSON.stringify(w),
-      synced_at: "",
-    }));
+    const rows: CachedWorkout[] = collected.map((w) => {
+      const t = Date.parse(w.start_time || "");
+      return {
+        id: w.id,
+        date: Number.isFinite(t) ? dateKey(new Date(t)) : "",
+        title: w.title ?? null,
+        duration_sec: workoutDurationMin(w) * 60,
+        raw_json: JSON.stringify(w),
+        synced_at: "",
+      };
+    });
     await upsertWorkouts(rows);
     return { pulled: rows.length, workouts: collected };
   } catch (e: any) {

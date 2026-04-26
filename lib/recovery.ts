@@ -14,6 +14,7 @@
 // Tuning is deliberately conservative so the score moves with real data, not noise.
 
 import { HevyWorkout, inferMuscleGroups } from "@/lib/hevy";
+import { dateKey, diffDaysKey, todayStr } from "@/lib/db";
 
 export type DailyTotals = {
   date: string;
@@ -73,9 +74,6 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function daysBetween(a: Date, b: Date): number {
-  return Math.floor((a.getTime() - b.getTime()) / (24 * 3600 * 1000));
-}
 
 export function computeRecovery(input: RecoveryInput): RecoveryResult {
   const signals = {
@@ -116,16 +114,23 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
   // ---- Recent training load: back-to-back days ----
   let backToBack = false;
   if (signals.workouts) {
+    // Bucket each workout into the user's local calendar day (APP_TZ),
+    // not UTC, so a 23:30 workout in Jerusalem doesn't get credited to
+    // the next UTC day.
     const datesSet = new Set(
       input.recentWorkouts
-        .map((w) => (w.start_time || "").slice(0, 10))
+        .map((w) => {
+          const t = Date.parse(w.start_time || "");
+          return Number.isFinite(t) ? dateKey(new Date(t)) : "";
+        })
         .filter(Boolean),
     );
-    const today = new Date();
-    const yest = new Date(today.getTime() - 24 * 3600 * 1000);
-    const toKey = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    if (datesSet.has(toKey(today)) && datesSet.has(toKey(yest))) {
+    const todayKey = todayStr();
+    const [ty, tm, td] = todayKey.split("-").map(Number);
+    const yestUtc = new Date(Date.UTC(ty, tm - 1, td));
+    yestUtc.setUTCDate(yestUtc.getUTCDate() - 1);
+    const yestKey = `${yestUtc.getUTCFullYear()}-${String(yestUtc.getUTCMonth() + 1).padStart(2, "0")}-${String(yestUtc.getUTCDate()).padStart(2, "0")}`;
+    if (datesSet.has(todayKey) && datesSet.has(yestKey)) {
       backToBack = true;
       score -= 10;
     }
@@ -140,12 +145,14 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
 
   score = clamp(score, 0, 100);
 
-  // ---- Per-muscle days-since-last ----
-  const todayMs = Date.now();
+  // ---- Per-muscle days-since-last (calendar days in APP_TZ) ----
+  const todayKey = todayStr();
   const lastByMuscle: Record<string, number> = {};
   for (const w of input.recentWorkouts) {
     const t = Date.parse(w.start_time);
     if (!Number.isFinite(t)) continue;
+    const wKey = dateKey(new Date(t));
+    const days = diffDaysKey(todayKey, wKey);
     const seen = new Set<string>();
     for (const ex of w.exercises) {
       for (const g of inferMuscleGroups(ex.title)) {
@@ -154,7 +161,6 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
       }
     }
     for (const g of seen) {
-      const days = Math.floor((todayMs - t) / (24 * 3600 * 1000));
       if (lastByMuscle[g] === undefined || days < lastByMuscle[g]) {
         lastByMuscle[g] = days;
       }

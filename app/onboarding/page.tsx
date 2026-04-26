@@ -14,6 +14,7 @@ type Form = {
   hips_cm: string;
   activity_level: keyof typeof ACTIVITY_LABELS;
   goal_mode: "recomp" | "cut" | "bulk" | "maintain";
+  weekly_workout_target: number;
 };
 
 const steps = ["Basics", "Body", "Activity", "Goal", "Review"] as const;
@@ -34,6 +35,7 @@ export default function OnboardingPage() {
     hips_cm: "",
     activity_level: "moderate",
     goal_mode: "recomp",
+    weekly_workout_target: 3,
   });
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
@@ -49,6 +51,7 @@ export default function OnboardingPage() {
     hips_cm: form.sex === "female" ? parseFloat(form.hips_cm) : null,
     activity_level: form.activity_level,
     goal_mode: form.goal_mode,
+    weekly_workout_target: form.weekly_workout_target,
   });
 
   const basicsOk =
@@ -209,6 +212,29 @@ export default function OnboardingPage() {
                 <div className="text-[11px] text-white/50">{sub}</div>
               </button>
             ))}
+          </div>
+          <div className="pt-3">
+            <label className="block text-xs font-medium text-white/60 mb-1.5">
+              Workouts per week
+            </label>
+            <div className="grid grid-cols-7 gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => set("weekly_workout_target", n)}
+                  className={`rounded-lg py-2 text-sm font-medium ${
+                    form.weekly_workout_target === n
+                      ? "bg-accent-brand text-white"
+                      : "bg-bg-elev border border-border text-white/70"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="text-[11px] text-white/40 mt-1.5">
+              Be honest — recovery and weekly insights are tuned to this number.
+            </div>
           </div>
         </Card>
       )}
