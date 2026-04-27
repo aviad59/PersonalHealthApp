@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
       const resp = await anthropic().messages.create({
         model: CLAUDE_MODEL,
-        max_tokens: 800,
+        max_tokens: 1800,
         system: MEAL_VISION_SYSTEM,
         messages: [
           {

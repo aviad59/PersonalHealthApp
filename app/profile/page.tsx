@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ACTIVITY_LABELS } from "@/lib/calc";
+import WeightLogSection from "@/components/WeightLogSection";
 
 type ActivityKey = keyof typeof ACTIVITY_LABELS;
 type Resolution = "keep" | "replace" | "merge";
@@ -291,6 +292,14 @@ export default function ProfilePage() {
         <Row k="Carbs" v={`${profile.goal_carbs_g} g`} emphasize />
         <Row k="Workouts / wk" v={`${profile.weekly_workout_target}`} />
       </section>
+
+      <WeightLogSection
+        onProfileMaybeChanged={async () => {
+          const r = await fetch("/api/profile", { cache: "no-store" });
+          const j = await r.json();
+          setProfile(j.profile);
+        }}
+      />
 
       {preview && (
         <section className="card p-5 space-y-3 border-accent-brand/40">

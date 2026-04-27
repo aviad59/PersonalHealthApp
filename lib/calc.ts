@@ -1,8 +1,11 @@
 // Health & nutrition calculations.
-// Formulas: Navy body-fat, Mifflin-St Jeor BMR, TDEE, macro split.
+// Formulas: Navy body-fat, Mifflin-St Jeor BMR, TDEE (NEAT-only), macro split.
 
 export type Sex = "male" | "female";
 
+// NEAT (non-exercise activity thermogenesis) only.
+// Logged workouts add their own kcal on top via the Today endpoint, so this
+// multiplier should NOT include planned training.
 export type ActivityLevel =
   | "sedentary"
   | "light"
@@ -11,20 +14,24 @@ export type ActivityLevel =
   | "very_active";
 
 export const ACTIVITY_MULTIPLIER: Record<ActivityLevel, number> = {
-  sedentary: 1.2,      // desk job, no exercise
-  light: 1.375,        // 1-3 days/wk light exercise
-  moderate: 1.55,      // 3-5 days/wk moderate
-  active: 1.725,       // 6-7 days/wk hard
-  very_active: 1.9,    // physical job + training
+  sedentary: 1.2,    // desk job, mostly seated, little incidental walking
+  light: 1.35,       // some walking, light errands, on feet a few hours/day
+  moderate: 1.5,     // on feet most of the day, regular walking, light NEAT
+  active: 1.65,      // physically demanding job (warehouse, hands-on trades)
+  very_active: 1.8,  // very physical labor (construction, agriculture)
 };
 
 export const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
-  sedentary: "Sedentary — desk job, little exercise",
-  light: "Light — 1-3 workouts/week",
-  moderate: "Moderate — 3-5 workouts/week",
-  active: "Active — 6-7 workouts/week",
-  very_active: "Very active — physical job + training",
+  sedentary: "Sedentary — desk job, mostly seated",
+  light: "Light — some walking through the day",
+  moderate: "Moderate — on your feet most of the day",
+  active: "Active — physically demanding job",
+  very_active: "Very active — heavy physical labor",
 };
+
+// Subtitle clarifying that workouts are counted separately.
+export const ACTIVITY_HINT =
+  "Pick how active you are OUTSIDE of workouts. Logged workouts add their own calories on top.";
 
 export type GoalMode = "recomp" | "cut" | "bulk" | "maintain";
 
@@ -42,7 +49,6 @@ export function navyBodyFat(opts: {
 }): number {
   const { sex, heightCm, neckCm, waistCm, hipsCm } = opts;
   if (sex === "male") {
-    // 495 / (1.0324 - 0.19077*log10(waist-neck) + 0.15456*log10(height)) - 450
     const bf =
       495 /
         (1.0324 -
@@ -79,15 +85,18 @@ export function tdee(bmr: number, activity: ActivityLevel): number {
 }
 
 /**
- * Given TDEE, lean mass (kg), and goal mode, return personalized macro targets.
- * Recomp: slight deficit (-200), high protein (1.0 g/lb LBM ≈ 2.2 g/kg), moderate fat.
- * Cut:    -500, protein ~2.4 g/kg LBM.
- * Bulk:   +300, protein ~2.0 g/kg LBM.
- * Maintain: +0, protein ~2.0 g/kg LBM.
+ * Given TDEE, lean mass (kg), body weight (kg), and goal mode, return personalized macro targets.
+ * Recomp: slight deficit (-200), high protein (≈2.2 g/kg LBM), moderate fat.
+ * Cut:    -500, protein ≈2.4 g/kg LBM.
+ * Bulk:   +300, protein ≈2.0 g/kg LBM.
+ * Maintain: +0, protein ≈2.0 g/kg LBM.
+ *
+ * Fat target uses real body weight (no longer approximated from LBM).
  */
 export function macroTargets(opts: {
   tdee: number;
   leanMassKg: number;
+  bodyWeightKg: number;
   goalMode: GoalMode;
 }): {
   calories: number;
@@ -95,11 +104,11 @@ export function macroTargets(opts: {
   fat_g: number;
   carbs_g: number;
 } {
-  const { tdee, leanMassKg, goalMode } = opts;
+  const { tdee, leanMassKg, bodyWeightKg, goalMode } = opts;
 
   let kcal: number;
   let proteinPerKgLbm: number;
-  let fatPerKgBw: number; // per kg body weight approximated via LBM/0.85
+  let fatPerKgBw: number;
 
   switch (goalMode) {
     case "recomp":
@@ -126,9 +135,8 @@ export function macroTargets(opts: {
   }
 
   const protein_g = Math.round(leanMassKg * proteinPerKgLbm);
-  // Approximate total body weight from LBM (assume ~15% body fat fallback):
-  const approxBw = leanMassKg / 0.85;
-  const fat_g = Math.round(approxBw * fatPerKgBw);
+  // Real body weight, not approximated from LBM.
+  const fat_g = Math.round(bodyWeightKg * fatPerKgBw);
 
   const proteinKcal = protein_g * 4;
   const fatKcal = fat_g * 9;
@@ -148,6 +156,8 @@ export function weeklyWorkoutTarget(activity: ActivityLevel): {
   sessions: number;
   note: string;
 } {
+  // Note: this is now NEAT-derived; the user can override via their explicit
+  // weekly_workout_target in the profile.
   switch (activity) {
     case "sedentary":
       return {
@@ -166,13 +176,13 @@ export function weeklyWorkoutTarget(activity: ActivityLevel): {
       };
     case "active":
       return {
-        sessions: 5,
-        note: "5 PPL or upper/lower split, 16-20 hard sets per muscle group",
+        sessions: 4,
+        note: "4 sessions, 14-18 hard sets — recovery is partly used by your job",
       };
     case "very_active":
       return {
-        sessions: 6,
-        note: "6 sessions, 18-22 hard sets per muscle group, watch recovery",
+        sessions: 3,
+        note: "3 sessions, 12-14 hard sets — heavy job already taxes recovery",
       };
   }
 }
@@ -214,11 +224,10 @@ export function computeGoalsFromMetrics(opts: {
   const macros = macroTargets({
     tdee: tdeeVal,
     leanMassKg: lean_mass_kg,
+    bodyWeightKg: opts.weightKg,
     goalMode,
   });
   const wo = weeklyWorkoutTarget(opts.activity);
-  // If the user supplied a personal target, prefer it; the volume note still
-  // comes from the activity-derived bucket so the guidance text stays useful.
   const sessions =
     opts.weeklyWorkoutTarget != null && opts.weeklyWorkoutTarget > 0
       ? clamp(Math.round(opts.weeklyWorkoutTarget), 1, 7)
@@ -236,4 +245,146 @@ export function computeGoalsFromMetrics(opts: {
     weekly_workout_target: sessions,
     weekly_volume_note: wo.note,
   };
+}
+
+// ---------------------------------------------------------------
+// Weight-trend analysis & calorie adjustment suggestion
+// ---------------------------------------------------------------
+
+export type WeightEntry = { date: string; weight_kg: number };
+
+export type WeightTrend = {
+  count: number;
+  earliest: string | null;
+  latest: string | null;
+  ma7_kg: number | null;
+  ma28_kg: number | null;
+  slope_kg_per_week: number | null;
+  expected_slope_kg_per_week: number; // for the user's goal_mode
+  suggestion: {
+    delta_kcal: number;
+    reason: string;
+  } | null;
+};
+
+const EXPECTED_SLOPE: Record<GoalMode, number> = {
+  cut: -0.5,
+  bulk: 0.3,
+  recomp: 0,
+  maintain: 0,
+};
+
+/** Compute trend stats and a calorie-adjustment suggestion. */
+export function analyzeWeightTrend(
+  entries: WeightEntry[],
+  goalMode: GoalMode,
+): WeightTrend {
+  const sorted = [...entries].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  const expected = EXPECTED_SLOPE[goalMode];
+  if (sorted.length === 0) {
+    return {
+      count: 0,
+      earliest: null,
+      latest: null,
+      ma7_kg: null,
+      ma28_kg: null,
+      slope_kg_per_week: null,
+      expected_slope_kg_per_week: expected,
+      suggestion: null,
+    };
+  }
+
+  const last = sorted[sorted.length - 1];
+  const first = sorted[0];
+
+  const ma = (n: number): number | null => {
+    const slice = sorted.slice(-n);
+    if (slice.length < Math.min(3, n)) return null;
+    const sum = slice.reduce((s, e) => s + e.weight_kg, 0);
+    return Math.round((sum / slice.length) * 10) / 10;
+  };
+
+  const ma7 = ma(7);
+  const ma28 = ma(28);
+
+  // Linear regression on the last 28 entries (or all if fewer).
+  const recent = sorted.slice(-28);
+  let slope_kg_per_week: number | null = null;
+  if (recent.length >= 7) {
+    // x = days since first entry in window, y = weight
+    const x0 = dateToMs(recent[0].date);
+    const xs = recent.map((e) => (dateToMs(e.date) - x0) / (1000 * 60 * 60 * 24));
+    const ys = recent.map((e) => e.weight_kg);
+    const meanX = xs.reduce((s, v) => s + v, 0) / xs.length;
+    const meanY = ys.reduce((s, v) => s + v, 0) / ys.length;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < xs.length; i++) {
+      num += (xs[i] - meanX) * (ys[i] - meanY);
+      den += (xs[i] - meanX) ** 2;
+    }
+    if (den > 0) {
+      const slopePerDay = num / den;
+      slope_kg_per_week = Math.round(slopePerDay * 7 * 100) / 100;
+    }
+  }
+
+  // Suggestion logic: needs ≥ 3 weeks of data and a meaningful gap.
+  let suggestion: WeightTrend["suggestion"] = null;
+  if (
+    slope_kg_per_week !== null &&
+    daysBetween(first.date, last.date) >= 21
+  ) {
+    const gap = slope_kg_per_week - expected;
+    // Threshold: 0.25 kg/week off target = real signal.
+    if (Math.abs(gap) >= 0.25) {
+      // Roughly 7700 kcal per kg of body weight change.
+      // Per-day kcal shift = gap * 7700 / 7 = gap * 1100.
+      // Round to nearest 100 and clamp to ±300/day per check-in.
+      let delta = -Math.round((gap * 1100) / 100) * 100;
+      delta = clamp(delta, -300, 300);
+      if (delta !== 0) {
+        const direction = delta > 0 ? "raise" : "lower";
+        const why =
+          goalMode === "cut"
+            ? slope_kg_per_week > expected
+              ? `cutting but losing only ${slope_kg_per_week.toFixed(2)} kg/wk (target ≈ ${expected})`
+              : `dropping fast at ${slope_kg_per_week.toFixed(2)} kg/wk (target ≈ ${expected})`
+            : goalMode === "bulk"
+            ? slope_kg_per_week < expected
+              ? `bulking but only +${slope_kg_per_week.toFixed(2)} kg/wk (target ≈ +${expected})`
+              : `gaining fast at +${slope_kg_per_week.toFixed(2)} kg/wk (target ≈ +${expected})`
+            : `weight trending ${slope_kg_per_week > 0 ? "up" : "down"} at ${slope_kg_per_week.toFixed(2)} kg/wk on ${goalMode}`;
+        suggestion = {
+          delta_kcal: delta,
+          reason: `${why}. Suggest ${direction} daily calories by ${Math.abs(delta)}.`,
+        };
+      }
+    }
+  }
+
+  return {
+    count: sorted.length,
+    earliest: first.date,
+    latest: last.date,
+    ma7_kg: ma7,
+    ma28_kg: ma28,
+    slope_kg_per_week,
+    expected_slope_kg_per_week: expected,
+    suggestion,
+  };
+}
+
+function dateToMs(s: string): number {
+  // s is YYYY-MM-DD; treat as UTC midnight to avoid TZ drift in slope calc
+  return Date.UTC(
+    parseInt(s.slice(0, 4), 10),
+    parseInt(s.slice(5, 7), 10) - 1,
+    parseInt(s.slice(8, 10), 10),
+  );
+}
+function daysBetween(a: string, b: string): number {
+  return Math.round((dateToMs(b) - dateToMs(a)) / (1000 * 60 * 60 * 24));
 }

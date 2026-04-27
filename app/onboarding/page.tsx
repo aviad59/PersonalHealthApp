@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ACTIVITY_LABELS } from "@/lib/calc";
+import { ACTIVITY_LABELS, ACTIVITY_HINT } from "@/lib/calc";
 
 type Form = {
   age: string;
@@ -171,6 +171,7 @@ export default function OnboardingPage() {
       {step === 2 && (
         <Card>
           <H>Activity level</H>
+          <p className="text-xs text-white/50 -mt-2">{ACTIVITY_HINT}</p>
           <div className="space-y-2">
             {(Object.keys(ACTIVITY_LABELS) as (keyof typeof ACTIVITY_LABELS)[]).map((key) => (
               <button

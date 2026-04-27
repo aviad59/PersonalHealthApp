@@ -108,6 +108,14 @@ const SCHEMA = `
     raw_json TEXT,
     synced_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS weight_log (
+    date TEXT PRIMARY KEY,
+    weight_kg REAL NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;
 
 async function ensureInit(): Promise<void> {
@@ -397,5 +405,85 @@ export async function upsertSuggestion(
       s.totals_calories,
       s.totals_protein_g,
     ],
+  });
+}
+
+// ---------------------------------------------------------------
+// Weight log
+// ---------------------------------------------------------------
+
+export type WeightLogEntry = {
+  date: string;
+  weight_kg: number;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function upsertWeight(
+  date: string,
+  weight_kg: number,
+  note: string | null = null,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO weight_log (date, weight_kg, note, created_at, updated_at)
+          VALUES (?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(date) DO UPDATE SET
+            weight_kg = excluded.weight_kg,
+            note = excluded.note,
+            updated_at = datetime('now')`,
+    args: [date, weight_kg, note],
+  });
+}
+
+export async function deleteWeight(date: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `DELETE FROM weight_log WHERE date = ?`,
+    args: [date],
+  });
+}
+
+export async function getWeightLog(): Promise<WeightLogEntry[]> {
+  const db = await getDb();
+  const res = await db.execute(
+    `SELECT date, weight_kg, note, created_at, updated_at
+       FROM weight_log
+      ORDER BY date ASC`,
+  );
+  return res.rows as unknown as WeightLogEntry[];
+}
+
+export async function getWeightLogSince(sinceDate: string): Promise<WeightLogEntry[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, weight_kg, note, created_at, updated_at
+            FROM weight_log
+           WHERE date >= ?
+           ORDER BY date ASC`,
+    args: [sinceDate],
+  });
+  return res.rows as unknown as WeightLogEntry[];
+}
+
+export async function setProfileWeight(weightKg: number): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE profile SET weight_kg = ?, updated_at = datetime('now') WHERE id = 1`,
+    args: [weightKg],
+  });
+}
+
+export async function setProfileGoalCalories(
+  goalCalories: number,
+  goalCarbsG: number,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE profile
+             SET goal_calories = ?, goal_carbs_g = ?, updated_at = datetime('now')
+           WHERE id = 1`,
+    args: [goalCalories, goalCarbsG],
   });
 }
