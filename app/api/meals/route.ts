@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb, getMealsByDate, todayStr, getProfile } from "@/lib/db";
+import { getDb, getMealsByDate, getMealsByDateLite, todayStr, getProfile } from "@/lib/db";
 import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
 import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
 
@@ -23,7 +23,23 @@ const SaveSchema = z.object({
 
 export async function GET(req: NextRequest) {
   const date = new URL(req.url).searchParams.get("date") ?? todayStr();
-  const meals = await getMealsByDate(date);
+  const rows = await getMealsByDateLite(date);
+  // Replace photo_path with a small URL — the actual bytes are served by
+  // /api/meals/:id/photo and cached hard by the browser.
+  const meals = rows.map((m) => ({
+    id: m.id,
+    date: m.date,
+    description: m.description,
+    calories: m.calories,
+    protein_g: m.protein_g,
+    fat_g: m.fat_g,
+    carbs_g: m.carbs_g,
+    items_json: m.items_json,
+    ai_tip: m.ai_tip,
+    confidence: m.confidence,
+    created_at: m.created_at,
+    photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,
+  }));
   return NextResponse.json({ date, meals });
 }
 
@@ -124,3 +140,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, id: mealId, ai_tip: tip });
 }
+

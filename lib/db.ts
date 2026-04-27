@@ -262,6 +262,77 @@ export async function getMealsSince(sinceDate: string): Promise<Meal[]> {
 }
 
 // ---------------------------------------------------------------
+// Lite meal queries — exclude photo_path (a base64 data URI that can
+// be hundreds of KB per row). Use these whenever the photo isn't
+// going to be displayed (recovery calc, suggestion totals, etc).
+// ---------------------------------------------------------------
+
+export type MealLite = Omit<Meal, "photo_path"> & { has_photo: 0 | 1 };
+
+const MEAL_LITE_COLUMNS =
+  "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at, " +
+  "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo";
+
+export async function getMealsByDateLite(date: string): Promise<MealLite[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE date = ? ORDER BY created_at ASC`,
+    args: [date],
+  });
+  return res.rows as unknown as MealLite[];
+}
+
+export async function getMealsSinceLite(sinceDate: string): Promise<MealLite[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE date >= ? ORDER BY date ASC, created_at ASC`,
+    args: [sinceDate],
+  });
+  return res.rows as unknown as MealLite[];
+}
+
+export async function getMealPhoto(id: number): Promise<string | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT photo_path FROM meals WHERE id = ?",
+    args: [id],
+  });
+  const row = res.rows[0] as unknown as { photo_path: string | null } | undefined;
+  return row?.photo_path ?? null;
+}
+
+// Aggregated per-day totals for stats. Done in SQL so we transfer 1 row
+// per logged day instead of 1 row per meal (which still ships items_json
+// and other fields the stats page never reads).
+export type MealDailyTotal = {
+  date: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  meals: number;
+};
+
+export async function getMealDailyTotalsSince(sinceDate: string): Promise<MealDailyTotal[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT
+            date,
+            COALESCE(SUM(calories), 0)  AS calories,
+            COALESCE(SUM(protein_g), 0) AS protein_g,
+            COALESCE(SUM(fat_g), 0)     AS fat_g,
+            COALESCE(SUM(carbs_g), 0)   AS carbs_g,
+            COUNT(*)                    AS meals
+          FROM meals
+          WHERE date >= ?
+          GROUP BY date
+          ORDER BY date ASC`,
+    args: [sinceDate],
+  });
+  return res.rows as unknown as MealDailyTotal[];
+}
+
+// ---------------------------------------------------------------
 // Insights
 // ---------------------------------------------------------------
 

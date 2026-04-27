@@ -42,6 +42,8 @@ export default function StatsPage() {
     let dead = false;
     setLoading(true);
     setErr(null);
+    // Note: we intentionally keep the previous `data` so switching range
+    // doesn't blank the page. The new payload replaces it once it arrives.
     (async () => {
       try {
         const r = await fetch(`/api/stats?days=${days}`, { cache: "no-store" });
@@ -106,12 +108,10 @@ export default function StatsPage() {
         <div className="card p-4 text-sm text-red-400">{err}</div>
       )}
 
-      {loading && !data && (
-        <div className="card p-6 text-sm text-white/60">Loading...</div>
-      )}
+      {loading && !data && <StatsSkeleton />}
 
       {data && (
-        <>
+        <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
           {/* Averages summary */}
           <section className="card p-4">
             <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
@@ -212,8 +212,48 @@ export default function StatsPage() {
               ))}
             </div>
           </section>
-        </>
+        </div>
       )}
+    </div>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="space-y-5 animate-pulse">
+      <section className="card p-4">
+        <div className="h-3 w-40 rounded bg-white/10 mb-4" />
+        <div className="grid grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="text-center space-y-1.5">
+              <div className="h-2 w-10 mx-auto rounded bg-white/10" />
+              <div className="h-5 w-12 mx-auto rounded bg-white/15" />
+              <div className="h-2 w-14 mx-auto rounded bg-white/10" />
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="card p-4">
+        <div className="h-3 w-32 rounded bg-white/10 mb-4" />
+        <div className="flex items-end gap-[2px] h-[120px]">
+          {Array.from({ length: 14 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 rounded-t-sm bg-white/10"
+              style={{ height: `${30 + ((i * 7) % 70)}%` }}
+            />
+          ))}
+        </div>
+      </section>
+      <section className="card p-4 space-y-3">
+        <div className="h-3 w-24 rounded bg-white/10" />
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center justify-between">
+            <div className="h-3 w-2/5 rounded bg-white/10" />
+            <div className="h-3 w-16 rounded bg-white/10" />
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

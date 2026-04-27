@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getMealsSince,
+  getMealDailyTotalsSince,
   getProfile,
   daysAgoStr,
   todayStr,
@@ -26,7 +26,13 @@ export async function GET(req: NextRequest) {
   const since = daysAgoStr(days - 1);
   const today = todayStr();
 
-  const [meals, profile] = await Promise.all([getMealsSince(since), getProfile()]);
+  // Pre-aggregated per-day totals from SQL (1 row per logged day instead of
+  // 1 row per meal). Empty days won't be in the result, so we still seed
+  // every date in the window so the chart has a continuous x-axis.
+  const [dailyTotals, profile] = await Promise.all([
+    getMealDailyTotalsSince(since),
+    getProfile(),
+  ]);
 
   const byDate = new Map<string, DayBucket>();
   for (let i = 0; i < days; i++) {
@@ -41,14 +47,14 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  for (const m of meals) {
-    const bucket = byDate.get(m.date);
+  for (const t of dailyTotals) {
+    const bucket = byDate.get(t.date);
     if (!bucket) continue;
-    bucket.calories += m.calories ?? 0;
-    bucket.protein_g += m.protein_g ?? 0;
-    bucket.fat_g += m.fat_g ?? 0;
-    bucket.carbs_g += m.carbs_g ?? 0;
-    bucket.meals += 1;
+    bucket.calories = t.calories ?? 0;
+    bucket.protein_g = t.protein_g ?? 0;
+    bucket.fat_g = t.fat_g ?? 0;
+    bucket.carbs_g = t.carbs_g ?? 0;
+    bucket.meals = t.meals ?? 0;
   }
 
   const series = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));

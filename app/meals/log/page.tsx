@@ -702,7 +702,15 @@ function ExistingMealRow({
       <div className="flex items-center gap-3">
         {meal.photo_path ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={meal.photo_path} alt="" className="w-12 h-12 rounded-lg object-cover" />
+          <img
+            src={meal.photo_path}
+            alt=""
+            width={48}
+            height={48}
+            loading="lazy"
+            decoding="async"
+            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
+          />
         ) : (
           <div className="w-12 h-12 rounded-lg bg-bg-elev shrink-0" />
         )}

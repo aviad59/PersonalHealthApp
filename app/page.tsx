@@ -40,6 +40,17 @@ type Today = {
     carbs_g: number;
   };
   meals: any[];
+  latestInsight: {
+    id: number;
+    type: "daily" | "weekly";
+    headline: string;
+    body: string;
+    created_at: string;
+    tags: string[];
+  } | null;
+};
+
+type Training = {
   todaysWorkout: {
     id: string;
     title: string;
@@ -49,15 +60,8 @@ type Today = {
     burn_kcal: number;
     burn_reason: string;
   } | null;
+  training_burn_kcal: number;
   recovery: Recovery | null;
-  latestInsight: {
-    id: number;
-    type: "daily" | "weekly";
-    headline: string;
-    body: string;
-    created_at: string;
-    tags: string[];
-  } | null;
 };
 
 type Suggestion = {
@@ -71,12 +75,14 @@ type Suggestion = {
 
 export default function HomePage() {
   const [data, setData] = useState<Today | null>(null);
+  const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   useEffect(() => {
+    // Critical path — macro rings, meal list, latest insight.
     (async () => {
       try {
         const r = await fetch("/api/today", { cache: "no-store" });
@@ -86,6 +92,16 @@ export default function HomePage() {
         setErr(e.message);
       } finally {
         setLoading(false);
+      }
+    })();
+    // Slower follow-up — workout card + recovery score. Fills in after.
+    (async () => {
+      try {
+        const r = await fetch("/api/today/training", { cache: "no-store" });
+        const j = await r.json();
+        setTraining(j);
+      } catch {
+        // non-fatal — page still works without these sections
       }
     })();
     (async () => {
@@ -102,7 +118,7 @@ export default function HomePage() {
     })();
   }, []);
 
-  if (loading) return <div className="p-6 text-white/60">Loading…</div>;
+  if (loading) return <HomeSkeleton />;
   if (err) return <div className="p-6 text-red-400">{err}</div>;
   if (!data) return null;
 
@@ -121,9 +137,14 @@ export default function HomePage() {
     );
   }
 
-  const { totals, profile, meals, todaysWorkout, latestInsight, targets, recovery } = data;
+  const { totals, profile, meals, latestInsight, targets } = data;
+  const todaysWorkout = training?.todaysWorkout ?? null;
+  const recovery = training?.recovery ?? null;
   const today = new Date(data.date);
-  const burn = targets.training_burn_kcal;
+  // Once /api/today/training resolves, fold its burn into the calorie target.
+  const burn = training?.training_burn_kcal ?? 0;
+  const baseCal = targets.base_calories;
+  const effectiveCal = baseCal + burn;
 
   return (
     <div className="px-5 pt-6 pb-6 space-y-5">
@@ -145,7 +166,7 @@ export default function HomePage() {
           <MacroRing
             label="Calories"
             value={totals.calories}
-            target={targets.effective_calories || profile.goal_calories || 0}
+            target={effectiveCal || profile.goal_calories || 0}
             unit=""
             color="#10b981"
           />
@@ -175,7 +196,7 @@ export default function HomePage() {
           <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
             <span className="text-white/80 font-medium">+{burn} kcal</span> from today&apos;s training{" "}
             <span className="text-white/40">
-              ({targets.base_calories} base → {targets.effective_calories} effective)
+              ({baseCal} base → {effectiveCal} effective)
             </span>
           </div>
         )}
@@ -204,7 +225,18 @@ export default function HomePage() {
         )}
       </section>
 
-      {recovery && (
+      {!training ? (
+        <section className="card p-5 animate-pulse">
+          <div className="h-3 w-24 rounded bg-white/10 mb-4" />
+          <div className="flex items-end gap-4">
+            <div className="h-10 w-12 rounded bg-white/10" />
+            <div className="flex-1 space-y-2">
+              <div className="h-1.5 w-full rounded-full bg-white/10" />
+              <div className="h-3 w-5/6 rounded bg-white/10" />
+            </div>
+          </div>
+        </section>
+      ) : recovery ? (
         <section className="card p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Recovery</h2>
@@ -245,14 +277,19 @@ export default function HomePage() {
             </p>
           )}
         </section>
-      )}
+      ) : null}
 
       <section className="card p-5">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Today&apos;s workout</h2>
           <Link href="/workouts" className="text-xs text-accent-brand">All →</Link>
         </div>
-        {todaysWorkout ? (
+        {!training ? (
+          <div className="animate-pulse space-y-2">
+            <div className="h-4 w-2/3 rounded bg-white/10" />
+            <div className="h-3 w-1/2 rounded bg-white/10" />
+          </div>
+        ) : todaysWorkout ? (
           <div>
             <div className="font-semibold">{todaysWorkout.title}</div>
             <div className="text-xs text-white/50 mt-0.5">
@@ -303,7 +340,15 @@ export default function HomePage() {
               <div key={m.id} className="card p-3 flex gap-3 items-center">
                 {m.photo_path ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.photo_path} alt="" className="w-14 h-14 rounded-lg object-cover" />
+                  <img
+                    src={m.photo_path}
+                    alt=""
+                    width={56}
+                    height={56}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-14 h-14 rounded-lg object-cover bg-bg-elev"
+                  />
                 ) : (
                   <div className="w-14 h-14 rounded-lg bg-bg-elev" />
                 )}
@@ -324,6 +369,60 @@ export default function HomePage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="px-5 pt-6 pb-6 space-y-5 animate-pulse">
+      <div>
+        <div className="h-3 w-28 rounded bg-white/10" />
+        <div className="h-7 w-20 rounded bg-white/15 mt-2" />
+      </div>
+
+      <section className="card p-5">
+        <div className="flex justify-between items-center mb-4">
+          <div className="h-3 w-16 rounded bg-white/10" />
+          <div className="h-3 w-20 rounded bg-white/10" />
+        </div>
+        <div className="grid grid-cols-2 gap-y-4 place-items-center">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-2">
+              <div className="w-24 h-24 rounded-full bg-white/5 border-4 border-white/10" />
+              <div className="h-3 w-12 rounded bg-white/10" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <div className="h-3 w-20 rounded bg-white/10 mb-3" />
+        <div className="h-3 w-full rounded bg-white/10 mb-2" />
+        <div className="h-3 w-4/5 rounded bg-white/10" />
+      </section>
+
+      <section className="card p-5">
+        <div className="h-3 w-24 rounded bg-white/10 mb-4" />
+        <div className="flex items-end gap-4">
+          <div className="h-10 w-12 rounded bg-white/10" />
+          <div className="flex-1 space-y-2">
+            <div className="h-1.5 w-full rounded-full bg-white/10" />
+            <div className="h-3 w-5/6 rounded bg-white/10" />
+          </div>
+        </div>
+        <div className="grid grid-cols-5 gap-1.5 mt-4">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-10 rounded-md bg-white/5" />
+          ))}
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <div className="h-3 w-32 rounded bg-white/10 mb-3" />
+        <div className="h-4 w-2/3 rounded bg-white/15 mb-2" />
+        <div className="h-3 w-1/2 rounded bg-white/10" />
+      </section>
     </div>
   );
 }

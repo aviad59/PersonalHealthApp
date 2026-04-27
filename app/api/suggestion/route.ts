@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import {
   getProfile,
-  getMealsByDate,
+  getMealsByDateLite,
   getCachedWorkoutsSince,
   getSuggestion,
   upsertSuggestion,
@@ -107,7 +107,7 @@ export async function GET() {
 
   const [profile, meals, cachedRecent] = await Promise.all([
     getProfile(),
-    getMealsByDate(date),
+    getMealsByDateLite(date),
     getCachedWorkoutsSince(daysAgoStr(2)),
   ]);
 
