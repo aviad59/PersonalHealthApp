@@ -57,6 +57,16 @@ export default function LogMealPage() {
   const [date, setDate] = useState<string>(todayStr());
   const isToday = date === todayStr();
 
+  // SSR runs `todayStr()` in UTC, so the initial value can be off-by-one
+  // from the user's local "today". On mount, force the picker to the
+  // device's actual current day. (Safe to clobber here because mount runs
+  // before the user can have picked anything else.)
+  useEffect(() => {
+    setDate(todayStr());
+    // Intentionally only on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoExt, setPhotoExt] = useState<string>("jpg");
@@ -357,7 +367,9 @@ export default function LogMealPage() {
           <input
             type="date"
             value={date}
-            max={todayStr()}
+            // Note: no `max` cap. On Android Chrome, capping `max` mid-month
+            // disables the "next month" arrow, which trapped users in the
+            // wrong month. The "Today" button above is the safety net.
             onChange={(e) => setDate(e.target.value || todayStr())}
             className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 text-[13px]"
           />
