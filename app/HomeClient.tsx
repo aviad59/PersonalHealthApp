@@ -481,11 +481,3 @@ function MusclePill({ status }: { status: MuscleStatus }) {
     </div>
   );
 }
-ast hit ${days} ago)`
-      }`}
-    >
-      <div className="text-[10px] capitalize leading-tight">{status.muscle}</div>
-      <div className="text-[9px] opacity-70 leading-tight">{days}</div>
-    </div>
-  );
-}
