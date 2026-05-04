@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb, getMealsByDate, getMealsByDateLite, todayStr, getProfile } from "@/lib/db";
-import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
-import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+import { getDb, getMealsByDateLite, todayStr } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// DB insert only — no LLM call. Stays well under the platform default
+// timeout, so this endpoint always returns a real JSON response.
+export const maxDuration = 15;
 
 const SaveSchema = z.object({
   description: z.string().optional(),
@@ -87,57 +87,11 @@ export async function POST(req: NextRequest) {
   });
   const mealId = Number(ins.lastInsertRowid ?? 0);
 
-  let tip: string | null = null;
-  try {
-    const profile = await getProfile();
-    const todays = await getMealsByDate(date);
-    if (profile) {
-      const totals = todays.reduce(
-        (acc, x) => {
-          acc.calories += x.calories ?? 0;
-          acc.protein_g += x.protein_g ?? 0;
-          acc.fat_g += x.fat_g ?? 0;
-          acc.carbs_g += x.carbs_g ?? 0;
-          return acc;
-        },
-        { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-      );
-      const context = {
-        targets: {
-          calories: profile.goal_calories,
-          protein_g: profile.goal_protein_g,
-          fat_g: profile.goal_fat_g,
-          carbs_g: profile.goal_carbs_g,
-        },
-        todaySoFar: totals,
-        justLogged: {
-          description: m.description,
-          calories: m.calories,
-          protein_g: m.protein_g,
-          fat_g: m.fat_g,
-          carbs_g: m.carbs_g,
-        },
-      };
-      const r = await anthropic().messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 150,
-        system: MEAL_TIP_SYSTEM,
-        messages: [{ role: "user", content: JSON.stringify(context) }],
-      });
-      tip = r.content
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
-        .join(" ")
-        .trim();
-      await db.execute({
-        sql: `UPDATE meals SET ai_tip = ? WHERE id = ?`,
-        args: [tip, mealId],
-      });
-    }
-  } catch {
-    // Tip generation is best-effort
-  }
-
-  return NextResponse.json({ ok: true, id: mealId, ai_tip: tip });
+  // The "next meal" tip used to be generated inline here, but that meant
+  // every save had to wait on a Claude round-trip (sometimes >10 s, and
+  // occasionally tripping Vercel's plain-text timeout page). The client
+  // now POSTs to /api/meals/:id/tip after this returns, so the save feels
+  // instant and the tip trickles in.
+  return NextResponse.json({ ok: true, id: mealId, ai_tip: null });
 }
 

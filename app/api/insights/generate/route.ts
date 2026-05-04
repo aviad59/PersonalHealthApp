@@ -60,9 +60,12 @@ export async function POST(req: NextRequest) {
 
   const today = todayStr();
 
-  const todayMeals = await getMealsByDate(today);
-  const weekMeals = await getMealsSince(daysAgoStr(6));
-  const workouts = await safeLoadWorkouts();
+  // Fan these out — DB and Hevy are independent, no reason to serialize.
+  const [todayMeals, weekMeals, workouts] = await Promise.all([
+    getMealsByDate(today),
+    getMealsSince(daysAgoStr(6)),
+    safeLoadWorkouts(),
+  ]);
 
   const workoutKey = (w: HevyWorkout): string => {
     const t = Date.parse(w.start_time || "");

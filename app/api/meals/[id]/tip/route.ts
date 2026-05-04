@@ -1,0 +1,103 @@
+// Generate the "next meal" AI tip for a freshly-saved meal.
+//
+// This is split out from POST /api/meals so the save itself can return
+// instantly (DB insert only). The client fires this endpoint after the
+// save lands; the tip then trickles in. If the LLM call times out or
+// errors, it fails quietly — the meal is already saved.
+
+import { NextRequest, NextResponse } from "next/server";
+import { getDb, getMealsByDate, getProfile } from "@/lib/db";
+import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
+import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const id = Number(params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return NextResponse.json({ error: "bad id" }, { status: 400 });
+  }
+
+  const db = await getDb();
+
+  // Pull the just-saved meal so we know its date and macros.
+  const r = await db.execute({
+    sql: `SELECT id, date, description, calories, protein_g, fat_g, carbs_g, ai_tip
+          FROM meals WHERE id = ?`,
+    args: [id],
+  });
+  const row = r.rows[0] as any;
+  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  // Idempotent: if a tip already exists, just return it.
+  if (row.ai_tip) {
+    return NextResponse.json({ ok: true, ai_tip: row.ai_tip, cached: true });
+  }
+
+  const profile = await getProfile();
+  if (!profile) {
+    return NextResponse.json({ ok: true, ai_tip: null });
+  }
+
+  const todays = await getMealsByDate(row.date);
+  const totals = todays.reduce(
+    (acc, x) => {
+      acc.calories += x.calories ?? 0;
+      acc.protein_g += x.protein_g ?? 0;
+      acc.fat_g += x.fat_g ?? 0;
+      acc.carbs_g += x.carbs_g ?? 0;
+      return acc;
+    },
+    { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  );
+
+  const context = {
+    targets: {
+      calories: profile.goal_calories,
+      protein_g: profile.goal_protein_g,
+      fat_g: profile.goal_fat_g,
+      carbs_g: profile.goal_carbs_g,
+    },
+    todaySoFar: totals,
+    justLogged: {
+      description: row.description,
+      calories: row.calories,
+      protein_g: row.protein_g,
+      fat_g: row.fat_g,
+      carbs_g: row.carbs_g,
+    },
+  };
+
+  let tip: string | null = null;
+  try {
+    const resp = await anthropic().messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 150,
+      system: MEAL_TIP_SYSTEM,
+      messages: [{ role: "user", content: JSON.stringify(context) }],
+    });
+    tip = resp.content
+      .filter((b: any) => b.type === "text")
+      .map((b: any) => b.text)
+      .join(" ")
+      .trim();
+    if (tip) {
+      await db.execute({
+        sql: `UPDATE meals SET ai_tip = ? WHERE id = ?`,
+        args: [tip, id],
+      });
+    }
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? "tip_failed" },
+      { status: 200 }, // best-effort, don't break the client
+    );
+  }
+
+  return NextResponse.json({ ok: true, ai_tip: tip });
+}

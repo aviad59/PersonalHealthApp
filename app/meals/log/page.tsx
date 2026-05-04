@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { safeFetchJson } from "@/lib/fetch-json";
 
 type Analysis = {
   description: string;
@@ -180,9 +181,10 @@ export default function LogMealPage() {
         // When a photo is present, text is context; otherwise text is the description.
         fd.append(hasPhoto ? "hint" : "text", text.trim());
       }
-      const res = await fetch("/api/meals/analyze", { method: "POST", body: fd });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "analyze failed");
+      const j = await safeFetchJson<{ analysis: Analysis }>(
+        "/api/meals/analyze",
+        { method: "POST", body: fd },
+      );
       setAnalysis(j.analysis as Analysis);
       setEditing({
         calories: j.analysis.total.calories,
@@ -202,28 +204,47 @@ export default function LogMealPage() {
     setSaving(true);
     setErr(null);
     try {
-      const res = await fetch("/api/meals", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          date,
-          description: analysis.description,
-          calories: editing.calories,
-          protein_g: editing.protein_g,
-          fat_g: editing.fat_g,
-          carbs_g: editing.carbs_g,
-          items: analysis.items,
-          confidence: analysis.confidence,
-          photo_base64: photoBase64 ?? undefined,
-          photo_ext: photoExt,
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "save failed");
+      // 1) Fast DB insert. /api/meals no longer waits on Claude.
+      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+        "/api/meals",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            date,
+            description: analysis.description,
+            calories: editing.calories,
+            protein_g: editing.protein_g,
+            fat_g: editing.fat_g,
+            carbs_g: editing.carbs_g,
+            items: analysis.items,
+            confidence: analysis.confidence,
+            photo_base64: photoBase64 ?? undefined,
+            photo_ext: photoExt,
+          }),
+        },
+      );
       setTip(j.ai_tip || null);
       // Reload list, clear form. Redirect home only if logging for today.
       await loadExisting(date);
       resetNewMealForm();
+
+      // 2) Background: kick off the tip endpoint and surface it when ready.
+      // Doesn't block the redirect — fire-and-forget.
+      if (j.id) {
+        (async () => {
+          try {
+            const t = await safeFetchJson<{ ai_tip: string | null }>(
+              `/api/meals/${j.id}/tip`,
+              { method: "POST" },
+            );
+            if (t.ai_tip) setTip(t.ai_tip);
+          } catch {
+            // Tip is best-effort; meal is already saved.
+          }
+        })();
+      }
+
       if (isToday) {
         setTimeout(() => {
           router.push("/");
@@ -267,9 +288,10 @@ export default function LogMealPage() {
           }),
         );
         fd.append("text", mod);
-        const a = await fetch("/api/meals/analyze", { method: "POST", body: fd });
-        const aj = await a.json();
-        if (!a.ok) throw new Error(aj.error || "analyze failed");
+        const aj = await safeFetchJson<{ analysis: Analysis }>(
+          "/api/meals/analyze",
+          { method: "POST", body: fd },
+        );
         toSave = {
           description: aj.analysis.description,
           calories: aj.analysis.total.calories,
@@ -281,17 +303,34 @@ export default function LogMealPage() {
         };
       }
 
-      const res = await fetch("/api/meals", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...toSave, date }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "save failed");
+      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+        "/api/meals",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...toSave, date }),
+        },
+      );
       setTip(j.ai_tip || null);
       await loadExisting(date);
       setExpandedIdx(null);
       setModifier("");
+
+      // Background tip — same pattern as the photo/text save flow.
+      if (j.id) {
+        (async () => {
+          try {
+            const t = await safeFetchJson<{ ai_tip: string | null }>(
+              `/api/meals/${j.id}/tip`,
+              { method: "POST" },
+            );
+            if (t.ai_tip) setTip(t.ai_tip);
+          } catch {
+            // Best-effort.
+          }
+        })();
+      }
+
       if (isToday) {
         setTimeout(() => {
           router.push("/");

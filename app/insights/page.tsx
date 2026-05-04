@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import InsightCard from "@/components/InsightCard";
+import { safeFetchJson } from "@/lib/fetch-json";
 
 type Insight = {
   id: number;
@@ -22,11 +23,17 @@ export default function InsightsPage() {
 
   async function load() {
     setLoading(true);
-    const q = filter === "all" ? "" : `?type=${filter}`;
-    const r = await fetch(`/api/insights${q}`, { cache: "no-store" });
-    const j = await r.json();
-    setItems(j.insights || []);
-    setLoading(false);
+    try {
+      const q = filter === "all" ? "" : `?type=${filter}`;
+      const j = await safeFetchJson<{ insights: Insight[] }>(`/api/insights${q}`, {
+        cache: "no-store",
+      });
+      setItems(j.insights || []);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -37,13 +44,14 @@ export default function InsightsPage() {
     setGenerating(type);
     setErr(null);
     try {
-      const r = await fetch("/api/insights/generate", {
+      // Insight generation legitimately takes 10–30 s (Claude is summarizing
+      // a week of data). safeFetchJson surfaces real timeouts as a clear
+      // "Server timed out" message instead of a JSON parse crash.
+      await safeFetchJson("/api/insights/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ type }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "generate failed");
       await load();
     } catch (e: any) {
       setErr(e.message);
