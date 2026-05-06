@@ -7,8 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, getMealsByDate, getProfile } from "@/lib/db";
-import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
+import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
 import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,28 +24,27 @@ export async function POST(
     return NextResponse.json({ error: "bad id" }, { status: 400 });
   }
 
+  const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
 
-  // Pull the just-saved meal so we know its date and macros.
   const r = await db.execute({
     sql: `SELECT id, date, description, calories, protein_g, fat_g, carbs_g, ai_tip
-          FROM meals WHERE id = ?`,
-    args: [id],
+          FROM meals WHERE id = ? AND user_id = ?`,
+    args: [id, userId],
   });
   const row = r.rows[0] as any;
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  // Idempotent: if a tip already exists, just return it.
   if (row.ai_tip) {
     return NextResponse.json({ ok: true, ai_tip: row.ai_tip, cached: true });
   }
 
-  const profile = await getProfile();
+  const profile = await getProfile(userId);
   if (!profile) {
     return NextResponse.json({ ok: true, ai_tip: null });
   }
 
-  const todays = await getMealsByDate(row.date);
+  const todays = await getMealsByDate(userId, row.date);
   const totals = todays.reduce(
     (acc, x) => {
       acc.calories += x.calories ?? 0;
@@ -76,7 +76,7 @@ export async function POST(
   let tip: string | null = null;
   try {
     const resp = await anthropic().messages.create({
-      model: CLAUDE_MODEL,
+      model: CLAUDE_FAST_MODEL,
       max_tokens: 150,
       system: MEAL_TIP_SYSTEM,
       messages: [{ role: "user", content: JSON.stringify(context) }],
@@ -88,14 +88,14 @@ export async function POST(
       .trim();
     if (tip) {
       await db.execute({
-        sql: `UPDATE meals SET ai_tip = ? WHERE id = ?`,
-        args: [tip, id],
+        sql: `UPDATE meals SET ai_tip = ? WHERE id = ? AND user_id = ?`,
+        args: [tip, id, userId],
       });
     }
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "tip_failed" },
-      { status: 200 }, // best-effort, don't break the client
+      { status: 200 },
     );
   }
 

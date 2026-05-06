@@ -1,6 +1,6 @@
 // Persistent "what to eat next" suggestion for the home page.
 //
-// We cache one row per day in the `suggestions` table and only regenerate
+// We cache one row per user per day in user_suggestions and only regenerate
 // when the underlying meal totals have meaningfully changed (different meal
 // count, or > 50 kcal / > 10 g protein change). This keeps the card stable
 // across page refreshes but keeps it relevant as the day evolves.
@@ -16,7 +16,9 @@ import {
   daysAgoStr,
   dateKey,
 } from "@/lib/db";
-import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
+import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { getUserConfig } from "@/lib/user";
 import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
 import { HevyWorkout, workoutVolumeKg } from "@/lib/hevy";
 
@@ -90,7 +92,7 @@ async function generate(args: {
       : null,
   };
   const r = await anthropic().messages.create({
-    model: CLAUDE_MODEL,
+    model: CLAUDE_FAST_MODEL,
     max_tokens: 200,
     system: MEAL_TIP_SYSTEM,
     messages: [{ role: "user", content: JSON.stringify(context) }],
@@ -103,12 +105,16 @@ async function generate(args: {
 }
 
 export async function GET() {
+  const userId = getCurrentUserIdOrDefault();
+  const cfg = getUserConfig(userId);
   const date = todayStr();
 
   const [profile, meals, cachedRecent] = await Promise.all([
-    getProfile(),
-    getMealsByDateLite(date),
-    getCachedWorkoutsSince(daysAgoStr(2)),
+    getProfile(userId),
+    getMealsByDateLite(userId, date),
+    cfg.hasWorkouts
+      ? getCachedWorkoutsSince(daysAgoStr(2))
+      : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
   ]);
 
   if (!profile) {
@@ -122,7 +128,7 @@ export async function GET() {
     totals_protein_g: Math.round(totals.protein_g),
   };
 
-  const cached = await getSuggestion(date);
+  const cached = await getSuggestion(userId, date);
   if (cached && !isStale(cached, current)) {
     return NextResponse.json({
       suggestion: {
@@ -136,7 +142,6 @@ export async function GET() {
     });
   }
 
-  // Find today's workout (if any) so the tip can account for training.
   const todaysWorkout =
     rowsToHevy(cachedRecent).find((w) => {
       const t = Date.parse(w.start_time || "");
@@ -156,7 +161,6 @@ export async function GET() {
       todaysWorkout,
     });
   } catch (e: any) {
-    // If generation fails, fall back to the existing cached row if any.
     if (cached) {
       return NextResponse.json({
         suggestion: {
@@ -177,7 +181,7 @@ export async function GET() {
     );
   }
 
-  await upsertSuggestion({
+  await upsertSuggestion(userId, {
     date,
     body,
     meals_count: current.meals_count,

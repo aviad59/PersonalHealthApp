@@ -7,6 +7,8 @@ import {
 } from "@/lib/db";
 import { HevyWorkout } from "@/lib/hevy";
 import { computeRecovery, DailyTotals } from "@/lib/recovery";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { getUserConfig } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,9 +44,14 @@ function dailyTotalsFromMeals(
 }
 
 export async function GET() {
+  const userId = getCurrentUserIdOrDefault();
+  const cfg = getUserConfig(userId);
+  if (!cfg.hasWorkouts) {
+    return NextResponse.json({ recovery: null });
+  }
   const [profile, last3, cachedRecent] = await Promise.all([
-    getProfile(),
-    getMealsSince(daysAgoStr(2)),
+    getProfile(userId),
+    getMealsSince(userId, daysAgoStr(2)),
     getCachedWorkoutsSince(daysAgoStr(14)),
   ]);
 

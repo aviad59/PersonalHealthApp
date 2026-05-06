@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+// "Heavy" model — used for the daily/weekly insight pass where we want
+// stronger reasoning over a week of meals + workouts.
 export const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+
+// "Fast" model — used for time-sensitive calls the user is sitting and
+// waiting on: meal photo/text analysis, the next-meal tip, and the
+// home-page suggestion. Haiku 4.5 is dramatically faster (typical
+// 1–3 s response) while remaining fully capable of structured macro
+// estimation and short context-aware suggestions.
+export const CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001";
 
 let _client: Anthropic | null = null;
 

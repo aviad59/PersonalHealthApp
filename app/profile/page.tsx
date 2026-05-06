@@ -212,6 +212,8 @@ export default function ProfilePage() {
     <div className="px-5 pt-6 pb-6 space-y-6">
       <h1 className="text-2xl font-bold">Profile</h1>
 
+      <CurrentUserCard />
+
       <section className="card p-5 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Body metrics</h2>
         <NumField label="Age" value={profile.age} onChange={(v) => update("age", v)} />
@@ -599,5 +601,87 @@ function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean })
       <span className="text-sm text-white/60">{k}</span>
       <span className={emphasize ? "text-base font-semibold" : "text-sm"}>{v}</span>
     </div>
+  );
+}
+
+/**
+ * Shows which user is currently signed in and offers a one-tap "Switch user"
+ * button. Reads the cookie client-side so we don't need to thread the user
+ * through props (this page is "use client" and consumes /api/profile, which
+ * is already user-scoped server-side).
+ */
+function CurrentUserCard() {
+  const [name, setName] = useState<string>("");
+  useEffect(() => {
+    const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
+    const id = m ? decodeURIComponent(m[1]) : "";
+    // Friendly capitalized label.
+    setName(id ? id.charAt(0).toUpperCase() + id.slice(1) : "");
+  }, []);
+
+  return (
+    <section className="card p-4 flex items-center gap-3">
+      <div className="w-10 h-10 rounded-full bg-bg-elev border border-border flex items-center justify-center text-sm font-semibold">
+        {name ? name[0] : "?"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider text-white/40">
+          Signed in as
+        </div>
+        <div className="text-sm font-semibold truncate">{name || "—"}</div>
+      </div>
+      <Link
+        href="/select-user?next=/profile"
+        className="text-xs font-medium text-accent-brand"
+      >
+        Switch user
+      </Link>
+    </section>
+  );
+}
+}</span>
+    </div>
+  );
+}
+
+/**
+ * Shows which user is currently signed in and offers a one-tap "Switch user"
+ * button. Reads the cookie client-side so we don't need to thread the user
+ * through props.
+ */
+function CurrentUserCard() {
+  const [name, setName] = useState<string>("");
+  useEffect(() => {
+    const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
+    const id = m ? decodeURIComponent(m[1]) : "";
+    setName(id ? id.charAt(0).toUpperCase() + id.slice(1) : "");
+  }, []);
+
+  return (
+    <section className="card p-4 flex items-center gap-3">
+      <div className="w-10 h-10 rounded-full bg-bg-elev border border-border flex items-center justify-center text-sm font-semibold">
+        {name ? name[0] : "?"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider text-white/40">
+          Signed in as
+        </div>
+        <div className="text-sm font-semibold truncate">{name || "—"}</div>
+      </div>
+      <Link
+        href="/select-user?next=/profile"
+        className="text-xs font-medium text-accent-brand"
+      >
+        Switch user
+      </Link>
+    </section>
+  );
+}
+t=/profile"
+        className="text-xs font-medium text-accent-brand"
+      >
+        Switch user
+      </Link>
+    </section>
   );
 }

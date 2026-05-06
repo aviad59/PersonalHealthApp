@@ -118,11 +118,137 @@ const SCHEMA = `
   );
 `;
 
+// Idempotent column adds for tables that already exist on long-running
+// deployments. SQLite has no `ADD COLUMN IF NOT EXISTS`, so we attempt the
+// add and swallow "duplicate column" errors.
+const COLUMN_ADDS: { sql: string }[] = [
+  // photo_thumb: tiny (~5–10 KB) JPEG data URI saved at upload time so the
+  // home/meals-list views can inline it directly in HTML and skip both the
+  // image optimizer and a serverless DB read per row.
+  { sql: "ALTER TABLE meals ADD COLUMN photo_thumb TEXT" },
+  // user_id: per-user data isolation. Existing rows default to 'idan' (the
+  // legacy user) so all of his historical data continues to work unchanged.
+  { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
+  { sql: "ALTER TABLE insights ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
+];
+
+// Per-user variants of the tables that previously had a `date` primary key
+// (so different users couldn't have a row for the same day) or a forced
+// single-row constraint (profile). We KEEP the original tables intact for
+// safety, copy idan's data into the new tables once on init, and route all
+// future reads/writes to the new tables.
+const PER_USER_TABLES = `
+  CREATE TABLE IF NOT EXISTS user_profile (
+    user_id TEXT PRIMARY KEY,
+    age INTEGER NOT NULL,
+    sex TEXT NOT NULL CHECK (sex IN ('male', 'female')),
+    height_cm REAL NOT NULL,
+    weight_kg REAL NOT NULL,
+    neck_cm REAL NOT NULL,
+    waist_cm REAL NOT NULL,
+    hips_cm REAL,
+    activity_level TEXT NOT NULL,
+    body_fat_pct REAL,
+    lean_mass_kg REAL,
+    bmr REAL,
+    tdee REAL,
+    goal_calories INTEGER,
+    goal_protein_g INTEGER,
+    goal_fat_g INTEGER,
+    goal_carbs_g INTEGER,
+    weekly_workout_target INTEGER,
+    weekly_volume_note TEXT,
+    goal_mode TEXT DEFAULT 'recomp',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS user_suggestions (
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    body TEXT NOT NULL,
+    meals_count INTEGER NOT NULL,
+    totals_calories INTEGER NOT NULL,
+    totals_protein_g INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_weight_log (
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date)
+  );
+`;
+
+// One-time copy of the legacy single-row / date-keyed tables into the new
+// per-user variants. INSERT OR IGNORE means we never overwrite anything
+// once data is in the new tables, and we never delete or modify the old
+// tables — they remain as a safety net.
+const ONE_TIME_USER_MIGRATIONS: { sql: string }[] = [
+  {
+    sql: `INSERT OR IGNORE INTO user_profile (
+            user_id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm,
+            activity_level, body_fat_pct, lean_mass_kg, bmr, tdee,
+            goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
+            weekly_workout_target, weekly_volume_note, goal_mode, updated_at
+          )
+          SELECT 'idan', age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm,
+                 activity_level, body_fat_pct, lean_mass_kg, bmr, tdee,
+                 goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
+                 weekly_workout_target, weekly_volume_note, goal_mode, updated_at
+            FROM profile WHERE id = 1`,
+  },
+  {
+    sql: `INSERT OR IGNORE INTO user_suggestions (
+            user_id, date, body, meals_count, totals_calories,
+            totals_protein_g, created_at, updated_at
+          )
+          SELECT 'idan', date, body, meals_count, totals_calories,
+                 totals_protein_g, created_at, updated_at
+            FROM suggestions`,
+  },
+  {
+    sql: `INSERT OR IGNORE INTO user_weight_log (
+            user_id, date, weight_kg, note, created_at, updated_at
+          )
+          SELECT 'idan', date, weight_kg, note, created_at, updated_at
+            FROM weight_log`,
+  },
+];
+
 async function ensureInit(): Promise<void> {
   if (!_initPromise) {
     _initPromise = (async () => {
       const c = client();
       await c.executeMultiple(SCHEMA);
+      // Per-user tables created BEFORE we copy data into them.
+      await c.executeMultiple(PER_USER_TABLES);
+      for (const m of COLUMN_ADDS) {
+        try {
+          await c.execute(m.sql);
+        } catch (err: any) {
+          // libSQL surfaces "duplicate column name" when the migration has
+          // already been applied — that's the expected steady state.
+          const msg = String(err?.message || err);
+          if (!/duplicate column/i.test(msg)) throw err;
+        }
+      }
+      // Backfill idan's data from legacy tables. Each statement is
+      // INSERT OR IGNORE so it never overwrites or modifies existing rows.
+      for (const m of ONE_TIME_USER_MIGRATIONS) {
+        try {
+          await c.execute(m.sql);
+        } catch (err: any) {
+          // Legacy tables might not exist on a fresh DB — that's fine.
+          const msg = String(err?.message || err);
+          if (!/no such table/i.test(msg)) throw err;
+        }
+      }
     })().catch((err) => {
       // allow retry on next call after a failure
       _initPromise = null;
@@ -217,9 +343,12 @@ export type Profile = {
   updated_at: string;
 };
 
-export async function getProfile(): Promise<Profile | null> {
+export async function getProfile(userId: string): Promise<Profile | null> {
   const db = await getDb();
-  const res = await db.execute("SELECT * FROM profile WHERE id = 1");
+  const res = await db.execute({
+    sql: "SELECT * FROM user_profile WHERE user_id = ?",
+    args: [userId],
+  });
   const row = res.rows[0];
   return row ? (row as unknown as Profile) : null;
 }
@@ -243,20 +372,20 @@ export type Meal = {
   created_at: string;
 };
 
-export async function getMealsByDate(date: string): Promise<Meal[]> {
+export async function getMealsByDate(userId: string, date: string): Promise<Meal[]> {
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT * FROM meals WHERE date = ? ORDER BY created_at ASC",
-    args: [date],
+    sql: "SELECT * FROM meals WHERE user_id = ? AND date = ? ORDER BY created_at ASC",
+    args: [userId, date],
   });
   return res.rows as unknown as Meal[];
 }
 
-export async function getMealsSince(sinceDate: string): Promise<Meal[]> {
+export async function getMealsSince(userId: string, sinceDate: string): Promise<Meal[]> {
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT * FROM meals WHERE date >= ? ORDER BY date ASC, created_at ASC",
-    args: [sinceDate],
+    sql: "SELECT * FROM meals WHERE user_id = ? AND date >= ? ORDER BY date ASC, created_at ASC",
+    args: [userId, sinceDate],
   });
   return res.rows as unknown as Meal[];
 }
@@ -267,35 +396,44 @@ export async function getMealsSince(sinceDate: string): Promise<Meal[]> {
 // going to be displayed (recovery calc, suggestion totals, etc).
 // ---------------------------------------------------------------
 
-export type MealLite = Omit<Meal, "photo_path"> & { has_photo: 0 | 1 };
+export type MealLite = Omit<Meal, "photo_path"> & {
+  has_photo: 0 | 1;
+  // Inline thumbnail data URI (~5–10 KB) when present; null for meals
+  // saved before the thumbnail column existed. Lists ship this in the
+  // payload so the browser renders without any extra requests.
+  photo_thumb: string | null;
+};
 
 const MEAL_LITE_COLUMNS =
   "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at, " +
+  "photo_thumb, " +
   "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo";
 
-export async function getMealsByDateLite(date: string): Promise<MealLite[]> {
+export async function getMealsByDateLite(userId: string, date: string): Promise<MealLite[]> {
   const db = await getDb();
   const res = await db.execute({
-    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE date = ? ORDER BY created_at ASC`,
-    args: [date],
+    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE user_id = ? AND date = ? ORDER BY created_at ASC`,
+    args: [userId, date],
   });
   return res.rows as unknown as MealLite[];
 }
 
-export async function getMealsSinceLite(sinceDate: string): Promise<MealLite[]> {
+export async function getMealsSinceLite(userId: string, sinceDate: string): Promise<MealLite[]> {
   const db = await getDb();
   const res = await db.execute({
-    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE date >= ? ORDER BY date ASC, created_at ASC`,
-    args: [sinceDate],
+    sql: `SELECT ${MEAL_LITE_COLUMNS} FROM meals WHERE user_id = ? AND date >= ? ORDER BY date ASC, created_at ASC`,
+    args: [userId, sinceDate],
   });
   return res.rows as unknown as MealLite[];
 }
 
-export async function getMealPhoto(id: number): Promise<string | null> {
+export async function getMealPhoto(userId: string, id: number): Promise<string | null> {
+  // Photos are scoped to the meal owner — even if someone hits the URL with
+  // another user's cookie, we won't leak the bytes.
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT photo_path FROM meals WHERE id = ?",
-    args: [id],
+    sql: "SELECT photo_path FROM meals WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
   const row = res.rows[0] as unknown as { photo_path: string | null } | undefined;
   return row?.photo_path ?? null;
@@ -313,7 +451,10 @@ export type MealDailyTotal = {
   meals: number;
 };
 
-export async function getMealDailyTotalsSince(sinceDate: string): Promise<MealDailyTotal[]> {
+export async function getMealDailyTotalsSince(
+  userId: string,
+  sinceDate: string,
+): Promise<MealDailyTotal[]> {
   const db = await getDb();
   const res = await db.execute({
     sql: `SELECT
@@ -324,10 +465,10 @@ export async function getMealDailyTotalsSince(sinceDate: string): Promise<MealDa
             COALESCE(SUM(carbs_g), 0)   AS carbs_g,
             COUNT(*)                    AS meals
           FROM meals
-          WHERE date >= ?
+          WHERE user_id = ? AND date >= ?
           GROUP BY date
           ORDER BY date ASC`,
-    args: [sinceDate],
+    args: [userId, sinceDate],
   });
   return res.rows as unknown as MealDailyTotal[];
 }
@@ -347,18 +488,21 @@ export type Insight = {
   created_at: string;
 };
 
-export async function getInsights(limit = 50): Promise<Insight[]> {
+export async function getInsights(userId: string, limit = 50): Promise<Insight[]> {
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT * FROM insights ORDER BY created_at DESC LIMIT ?",
-    args: [limit],
+    sql: "SELECT * FROM insights WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+    args: [userId, limit],
   });
   return res.rows as unknown as Insight[];
 }
 
-export async function getLatestInsight(): Promise<Insight | null> {
+export async function getLatestInsight(userId: string): Promise<Insight | null> {
   const db = await getDb();
-  const res = await db.execute("SELECT * FROM insights ORDER BY created_at DESC LIMIT 1");
+  const res = await db.execute({
+    sql: "SELECT * FROM insights WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+    args: [userId],
+  });
   const row = res.rows[0];
   return row ? (row as unknown as Insight) : null;
 }
@@ -443,33 +587,36 @@ export type DaySuggestion = {
 };
 
 export async function getSuggestion(
+  userId: string,
   date: string,
 ): Promise<DaySuggestion | null> {
   const db = await getDb();
   const res = await db.execute({
     sql: `SELECT date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at
-            FROM suggestions WHERE date = ?`,
-    args: [date],
+            FROM user_suggestions WHERE user_id = ? AND date = ?`,
+    args: [userId, date],
   });
   const row = res.rows[0];
   return row ? (row as unknown as DaySuggestion) : null;
 }
 
 export async function upsertSuggestion(
+  userId: string,
   s: Omit<DaySuggestion, "created_at" | "updated_at">,
 ): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: `INSERT INTO suggestions
-            (date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-          ON CONFLICT(date) DO UPDATE SET
+    sql: `INSERT INTO user_suggestions
+            (user_id, date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(user_id, date) DO UPDATE SET
             body = excluded.body,
             meals_count = excluded.meals_count,
             totals_calories = excluded.totals_calories,
             totals_protein_g = excluded.totals_protein_g,
             updated_at = datetime('now')`,
     args: [
+      userId,
       s.date,
       s.body,
       s.meals_count,
@@ -492,69 +639,76 @@ export type WeightLogEntry = {
 };
 
 export async function upsertWeight(
+  userId: string,
   date: string,
   weight_kg: number,
   note: string | null = null,
 ): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: `INSERT INTO weight_log (date, weight_kg, note, created_at, updated_at)
-          VALUES (?, ?, ?, datetime('now'), datetime('now'))
-          ON CONFLICT(date) DO UPDATE SET
+    sql: `INSERT INTO user_weight_log (user_id, date, weight_kg, note, created_at, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(user_id, date) DO UPDATE SET
             weight_kg = excluded.weight_kg,
             note = excluded.note,
             updated_at = datetime('now')`,
-    args: [date, weight_kg, note],
+    args: [userId, date, weight_kg, note],
   });
 }
 
-export async function deleteWeight(date: string): Promise<void> {
+export async function deleteWeight(userId: string, date: string): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: `DELETE FROM weight_log WHERE date = ?`,
-    args: [date],
+    sql: `DELETE FROM user_weight_log WHERE user_id = ? AND date = ?`,
+    args: [userId, date],
   });
 }
 
-export async function getWeightLog(): Promise<WeightLogEntry[]> {
-  const db = await getDb();
-  const res = await db.execute(
-    `SELECT date, weight_kg, note, created_at, updated_at
-       FROM weight_log
-      ORDER BY date ASC`,
-  );
-  return res.rows as unknown as WeightLogEntry[];
-}
-
-export async function getWeightLogSince(sinceDate: string): Promise<WeightLogEntry[]> {
+export async function getWeightLog(userId: string): Promise<WeightLogEntry[]> {
   const db = await getDb();
   const res = await db.execute({
     sql: `SELECT date, weight_kg, note, created_at, updated_at
-            FROM weight_log
-           WHERE date >= ?
+            FROM user_weight_log
+           WHERE user_id = ?
+           ORDER BY date ASC`,
+    args: [userId],
+  });
+  return res.rows as unknown as WeightLogEntry[];
+}
+
+export async function getWeightLogSince(
+  userId: string,
+  sinceDate: string,
+): Promise<WeightLogEntry[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, weight_kg, note, created_at, updated_at
+            FROM user_weight_log
+           WHERE user_id = ? AND date >= ?
            ORDER BY date ASC`,
     args: [sinceDate],
   });
   return res.rows as unknown as WeightLogEntry[];
 }
 
-export async function setProfileWeight(weightKg: number): Promise<void> {
+export async function setProfileWeight(userId: string, weightKg: number): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: `UPDATE profile SET weight_kg = ?, updated_at = datetime('now') WHERE id = 1`,
-    args: [weightKg],
+    sql: `UPDATE user_profile SET weight_kg = ?, updated_at = datetime('now') WHERE user_id = ?`,
+    args: [weightKg, userId],
   });
 }
 
 export async function setProfileGoalCalories(
+  userId: string,
   goalCalories: number,
   goalCarbsG: number,
 ): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: `UPDATE profile
+    sql: `UPDATE user_profile
              SET goal_calories = ?, goal_carbs_g = ?, updated_at = datetime('now')
-           WHERE id = 1`,
-    args: [goalCalories, goalCarbsG],
+           WHERE user_id = ?`,
+    args: [goalCalories, goalCarbsG, userId],
   });
 }

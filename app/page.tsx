@@ -10,6 +10,7 @@
 // The slower /api/today/training and /api/suggestion calls still happen
 // from the client so they don't block the first paint.
 
+import { redirect } from "next/navigation";
 import {
   getProfile,
   getMealsByDateLite,
@@ -17,6 +18,8 @@ import {
   getSuggestion,
   todayStr,
 } from "@/lib/db";
+import { getCurrentUserId } from "@/lib/user-server";
+import { getUserConfig } from "@/lib/user";
 import HomeClient, { Today, Suggestion } from "./HomeClient";
 
 export const runtime = "nodejs";
@@ -32,18 +35,16 @@ function safeParseTags(s: string | null): string[] {
   }
 }
 
-async function loadInitial(): Promise<{
+async function loadInitial(userId: string): Promise<{
   today: Today;
   suggestion: Suggestion | null;
 }> {
   const today = todayStr();
-  // Four small DB reads in parallel — none of them call Claude or any
-  // external API, so they all return inside ~50–150 ms even on a cold start.
   const [profile, meals, latestInsight, cachedSuggestion] = await Promise.all([
-    getProfile(),
-    getMealsByDateLite(today),
-    getLatestInsight(),
-    getSuggestion(today),
+    getProfile(userId),
+    getMealsByDateLite(userId, today),
+    getLatestInsight(userId),
+    getSuggestion(userId, today),
   ]);
 
   const totals = meals.reduce(
@@ -65,7 +66,6 @@ async function loadInitial(): Promise<{
     totals,
     targets: {
       base_calories: baseCalTarget,
-      // Training burn is filled in client-side by /api/today/training.
       training_burn_kcal: 0,
       effective_calories: baseCalTarget,
       protein_g: profile?.goal_protein_g ?? 0,
@@ -79,8 +79,7 @@ async function loadInitial(): Promise<{
       protein_g: m.protein_g,
       fat_g: m.fat_g,
       carbs_g: m.carbs_g,
-      // Photo bytes served lazily via /api/meals/:id/photo with year-long
-      // browser cache, so this payload stays small.
+      photo_thumb: m.photo_thumb,
       photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,
       ai_tip: m.ai_tip,
       created_at: m.created_at,
@@ -112,6 +111,17 @@ async function loadInitial(): Promise<{
 }
 
 export default async function HomePage() {
-  const { today, suggestion } = await loadInitial();
-  return <HomeClient initial={today} initialSuggestion={suggestion} />;
+  const userId = getCurrentUserId();
+  if (!userId) redirect("/select-user");
+  const cfg = getUserConfig(userId);
+
+  const { today, suggestion } = await loadInitial(userId);
+  return (
+    <HomeClient
+      initial={today}
+      initialSuggestion={suggestion}
+      hasWorkouts={cfg.hasWorkouts}
+      userDisplayName={cfg.displayName}
+    />
+  );
 }

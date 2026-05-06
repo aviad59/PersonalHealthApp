@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb, getProfile } from "@/lib/db";
 import { computeGoalsFromMetrics, ActivityLevel, GoalMode } from "@/lib/calc";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,8 @@ const ProfileSchema = z.object({
 });
 
 export async function GET() {
-  const profile = await getProfile();
+  const userId = getCurrentUserIdOrDefault();
+  const profile = await getProfile(userId);
   return NextResponse.json({ profile });
 }
 
@@ -61,20 +63,21 @@ export async function POST(req: NextRequest) {
     weeklyWorkoutTarget: p.weekly_workout_target ?? null,
   });
 
+  const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
   await db.execute({
-    sql: `INSERT INTO profile (
-      id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm, activity_level,
+    sql: `INSERT INTO user_profile (
+      user_id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm, activity_level,
       body_fat_pct, lean_mass_kg, bmr, tdee,
       goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
       weekly_workout_target, weekly_volume_note, goal_mode, updated_at
     ) VALUES (
-      1, :age, :sex, :height_cm, :weight_kg, :neck_cm, :waist_cm, :hips_cm, :activity_level,
+      :user_id, :age, :sex, :height_cm, :weight_kg, :neck_cm, :waist_cm, :hips_cm, :activity_level,
       :body_fat_pct, :lean_mass_kg, :bmr, :tdee,
       :goal_calories, :goal_protein_g, :goal_fat_g, :goal_carbs_g,
       :weekly_workout_target, :weekly_volume_note, :goal_mode, datetime('now')
     )
-    ON CONFLICT(id) DO UPDATE SET
+    ON CONFLICT(user_id) DO UPDATE SET
       age=excluded.age, sex=excluded.sex, height_cm=excluded.height_cm, weight_kg=excluded.weight_kg,
       neck_cm=excluded.neck_cm, waist_cm=excluded.waist_cm, hips_cm=excluded.hips_cm,
       activity_level=excluded.activity_level,
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest) {
       weekly_volume_note=excluded.weekly_volume_note,
       goal_mode=excluded.goal_mode, updated_at=datetime('now')`,
     args: {
+      user_id: userId,
       age: p.age,
       sex: p.sex,
       height_cm: p.height_cm,
@@ -108,5 +112,5 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ ok: true, profile: await getProfile() });
+  return NextResponse.json({ ok: true, profile: await getProfile(userId) });
 }

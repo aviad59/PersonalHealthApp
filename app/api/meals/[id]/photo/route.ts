@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getMealPhoto } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,10 @@ export async function GET(
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "bad_id" }, { status: 400 });
   }
-  const dataUri = await getMealPhoto(id);
+  // Photo bytes are scoped to the meal owner — even if someone guesses a
+  // meal id, only the user it belongs to receives the photo.
+  const userId = getCurrentUserIdOrDefault();
+  const dataUri = await getMealPhoto(userId, id);
   if (!dataUri) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

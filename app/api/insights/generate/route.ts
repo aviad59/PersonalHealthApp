@@ -15,6 +15,8 @@ import {
   WEEKLY_INSIGHT_SYSTEM,
 } from "@/lib/prompts";
 import { listWorkouts, summarizeWeek, workoutVolumeKg, HevyWorkout } from "@/lib/hevy";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { getUserConfig } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,10 +49,12 @@ async function safeLoadWorkouts(): Promise<HevyWorkout[]> {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserIdOrDefault();
+  const cfg = getUserConfig(userId);
   const body = await req.json().catch(() => ({}));
   const type: InsightType = body?.type === "weekly" ? "weekly" : "daily";
 
-  const profile = await getProfile();
+  const profile = await getProfile(userId);
   if (!profile) {
     return NextResponse.json(
       { error: "Profile not set up. Run onboarding first." },
@@ -60,11 +64,10 @@ export async function POST(req: NextRequest) {
 
   const today = todayStr();
 
-  // Fan these out — DB and Hevy are independent, no reason to serialize.
   const [todayMeals, weekMeals, workouts] = await Promise.all([
-    getMealsByDate(today),
-    getMealsSince(daysAgoStr(6)),
-    safeLoadWorkouts(),
+    getMealsByDate(userId, today),
+    getMealsSince(userId, daysAgoStr(6)),
+    cfg.hasWorkouts ? safeLoadWorkouts() : Promise.resolve([] as HevyWorkout[]),
   ]);
 
   const workoutKey = (w: HevyWorkout): string => {
@@ -190,9 +193,10 @@ export async function POST(req: NextRequest) {
 
   const db = await getDb();
   const ins = await db.execute({
-    sql: `INSERT INTO insights (type, for_date, headline, body, tags_json, sources_json)
-          VALUES (?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO insights (user_id, type, for_date, headline, body, tags_json, sources_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
     args: [
+      userId,
       type,
       today,
       parsed.headline,
@@ -208,8 +212,8 @@ export async function POST(req: NextRequest) {
 
   const id = Number(ins.lastInsertRowid ?? 0);
   const rowRes = await db.execute({
-    sql: "SELECT * FROM insights WHERE id = ?",
-    args: [id],
+    sql: "SELECT * FROM insights WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
   const row = rowRes.rows[0] as any;
 

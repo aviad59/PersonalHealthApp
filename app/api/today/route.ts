@@ -5,6 +5,7 @@ import {
   getLatestInsight,
   todayStr,
 } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,10 +14,11 @@ export const dynamic = "force-dynamic";
 // latest-insight card need. Excludes workout/recovery so it returns fast.
 // /api/today/training fills in those follow-up sections.
 export async function GET() {
+  const userId = getCurrentUserIdOrDefault();
   const [profile, meals, latestInsight] = await Promise.all([
-    getProfile(),
-    getMealsByDateLite(todayStr()),
-    getLatestInsight(),
+    getProfile(userId),
+    getMealsByDateLite(userId, todayStr()),
+    getLatestInsight(userId),
   ]);
   const today = todayStr();
 
@@ -39,8 +41,6 @@ export async function GET() {
     totals,
     targets: {
       base_calories: baseCalTarget,
-      // Training burn is filled in by /api/today/training. Until that
-      // arrives, the effective target equals the base goal.
       training_burn_kcal: 0,
       effective_calories: baseCalTarget,
       protein_g: profile?.goal_protein_g ?? 0,
@@ -54,8 +54,7 @@ export async function GET() {
       protein_g: m.protein_g,
       fat_g: m.fat_g,
       carbs_g: m.carbs_g,
-      // Photo bytes served lazily via /api/meals/:id/photo so this payload
-      // stays small (data URIs can be 100s of KB each).
+      photo_thumb: m.photo_thumb,
       photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,
       ai_tip: m.ai_tip,
       created_at: m.created_at,

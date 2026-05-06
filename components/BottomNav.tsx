@@ -2,25 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
-const items = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: (p: React.SVGProps<SVGSVGElement>) => JSX.Element;
+  // Hide this item for users with hasWorkouts === false (orly).
+  workoutsOnly?: boolean;
+};
+
+const items: NavItem[] = [
   { href: "/", label: "Today", icon: HomeIcon },
   { href: "/meals/log", label: "Log", icon: CameraIcon },
   { href: "/stats", label: "Stats", icon: ChartIcon },
   { href: "/insights", label: "Insights", icon: SparklesIcon },
-  { href: "/workouts", label: "Workouts", icon: DumbbellIcon },
+  { href: "/workouts", label: "Workouts", icon: DumbbellIcon, workoutsOnly: true },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
 
+/** Read the cowork_user cookie on the client to decide which tabs to show. */
+function readUserCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 export default function BottomNav() {
   const pathname = usePathname() || "/";
+  // Determine which tabs to show based on the cookie. Default behavior
+  // (before the cookie is read on first paint) shows everything — so the
+  // nav doesn't visibly "pop" tabs in/out for idan, who is the common case.
+  const [hideWorkouts, setHideWorkouts] = useState(false);
+  useEffect(() => {
+    const u = readUserCookie();
+    setHideWorkouts(u === "orly");
+  }, [pathname]);
+
   if (pathname.startsWith("/onboarding")) return null;
+  if (pathname.startsWith("/select-user")) return null;
+  const visible = items.filter((it) => !(it.workoutsOnly && hideWorkouts));
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom">
       <div className="mx-auto max-w-md">
         <div className="mx-3 mb-3 rounded-2xl border border-border bg-bg-card/90 backdrop-blur px-2 py-2 flex justify-between">
-          {items.map((it) => {
+          {visible.map((it) => {
             const active =
               it.href === "/"
                 ? pathname === "/"

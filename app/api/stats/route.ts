@@ -5,6 +5,7 @@ import {
   daysAgoStr,
   todayStr,
 } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,10 @@ export async function GET(req: NextRequest) {
   const since = daysAgoStr(days - 1);
   const today = todayStr();
 
-  // Pre-aggregated per-day totals from SQL (1 row per logged day instead of
-  // 1 row per meal). Empty days won't be in the result, so we still seed
-  // every date in the window so the chart has a continuous x-axis.
+  const userId = getCurrentUserIdOrDefault();
   const [dailyTotals, profile] = await Promise.all([
-    getMealDailyTotalsSince(since),
-    getProfile(),
+    getMealDailyTotalsSince(userId, since),
+    getProfile(userId),
   ]);
 
   const byDate = new Map<string, DayBucket>();

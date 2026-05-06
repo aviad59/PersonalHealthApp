@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,10 +66,14 @@ export async function PATCH(
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });
   }
 
+  // Scope all PATCH/DELETE writes to the current user — even if a row id
+  // is guessed correctly, you can't modify another user's meal.
+  const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
   args.push(id);
+  args.push(userId);
   const upd = await db.execute({
-    sql: `UPDATE meals SET ${sets.join(", ")} WHERE id = ?`,
+    sql: `UPDATE meals SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`,
     args,
   });
   if (Number(upd.rowsAffected ?? 0) === 0) {
@@ -76,8 +81,8 @@ export async function PATCH(
   }
 
   const r = await db.execute({
-    sql: "SELECT * FROM meals WHERE id = ?",
-    args: [id],
+    sql: "SELECT * FROM meals WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
   return NextResponse.json({ ok: true, meal: r.rows[0] });
 }
@@ -89,10 +94,11 @@ export async function DELETE(
   const id = Number(ctx.params.id);
   if (!Number.isFinite(id) || id <= 0) return badId();
 
+  const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
   const res = await db.execute({
-    sql: "DELETE FROM meals WHERE id = ?",
-    args: [id],
+    sql: "DELETE FROM meals WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
   if (Number(res.rowsAffected ?? 0) === 0) {
     return NextResponse.json({ error: "not found" }, { status: 404 });

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { safeFetchJson } from "@/lib/fetch-json";
+import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 
 type Analysis = {
   description: string;
@@ -38,6 +40,8 @@ type ExistingMeal = {
   fat_g: number | null;
   carbs_g: number | null;
   photo_path: string | null;
+  // Inline thumbnail data URI for fast list rendering, when available.
+  photo_thumb: string | null;
   ai_tip: string | null;
   created_at: string;
 };
@@ -71,10 +75,19 @@ export default function LogMealPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoExt, setPhotoExt] = useState<string>("jpg");
+  // The compressed photo as a JPEG File ready to upload to /api/meals/analyze.
+  // We compress on pick so the multi-MB original never leaves the device.
+  const [compressedFile, setCompressedFile] = useState<File | null>(null);
+  // Tiny ~5–10 KB thumbnail data URI saved alongside the meal so list views
+  // can render it inline without going through the image optimizer.
+  const [photoThumbBase64, setPhotoThumbBase64] = useState<string | null>(null);
   const [text, setText] = useState(""); // description/hint/context
 
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Granular step label, surfaced in the action button so the user knows
+  // which stage is taking time. Cleared back to null when idle.
+  const [progress, setProgress] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [editing, setEditing] = useState<{
     calories: number;
@@ -124,27 +137,38 @@ export default function LogMealPage() {
     })();
   }, []);
 
-  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setErr(null);
     setAnalysis(null);
     setEditing(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = reader.result as string;
-      setPhotoPreview(url);
-      const match = url.match(/^data:(.+);base64,(.*)$/);
-      if (match) {
-        setPhotoBase64(match[2]);
-        const mt = match[1];
-        setPhotoExt(mt.includes("png") ? "png" : mt.includes("webp") ? "webp" : "jpg");
-      }
-    };
-    reader.readAsDataURL(f);
+    setProgress("Compressing photo…");
+    try {
+      // Generate the full-size compressed JPEG and the inline thumbnail
+      // in parallel — both pull pixels from the same decoded source.
+      const [compressed, thumb] = await Promise.all([
+        compressImageFile(f),
+        compressImageThumb(f),
+      ]);
+      const blob = await (await fetch(compressed.dataUri)).blob();
+      const compFile = new File([blob], "meal.jpg", { type: "image/jpeg" });
+      setCompressedFile(compFile);
+      setPhotoPreview(compressed.dataUri);
+      setPhotoBase64(compressed.base64);
+      setPhotoThumbBase64(thumb.base64);
+      setPhotoExt("jpg");
+    } catch (err: any) {
+      setErr(err?.message || "Could not read that photo");
+    } finally {
+      setProgress(null);
+    }
   }
 
   function pickedFile(): File | null {
+    // Prefer the compressed JPEG; fall back to the raw input if compression
+    // somehow didn't happen (shouldn't, but better safe than uploading 5 MB).
+    if (compressedFile) return compressedFile;
     return (
       cameraRef.current?.files?.[0] || galleryRef.current?.files?.[0] || null
     );
@@ -153,6 +177,8 @@ export default function LogMealPage() {
   function clearPhoto() {
     setPhotoPreview(null);
     setPhotoBase64(null);
+    setPhotoThumbBase64(null);
+    setCompressedFile(null);
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
   }
@@ -181,10 +207,15 @@ export default function LogMealPage() {
         // When a photo is present, text is context; otherwise text is the description.
         fd.append(hasPhoto ? "hint" : "text", text.trim());
       }
+      // Step labels surface in the button so the user knows which slow part
+      // we're in. Claude's vision call is the bulk of the wait when a photo
+      // is attached; text-only calls are noticeably faster.
+      setProgress(hasPhoto ? "Asking Claude to read the photo…" : "Asking Claude to read the meal…");
       const j = await safeFetchJson<{ analysis: Analysis }>(
         "/api/meals/analyze",
         { method: "POST", body: fd },
       );
+      setProgress("Reading the response…");
       setAnalysis(j.analysis as Analysis);
       setEditing({
         calories: j.analysis.total.calories,
@@ -196,6 +227,7 @@ export default function LogMealPage() {
       setErr(e.message);
     } finally {
       setAnalyzing(false);
+      setProgress(null);
     }
   }
 
@@ -203,6 +235,7 @@ export default function LogMealPage() {
     if (!analysis || !editing) return;
     setSaving(true);
     setErr(null);
+    setProgress("Saving meal…");
     try {
       // 1) Fast DB insert. /api/meals no longer waits on Claude.
       const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
@@ -220,6 +253,7 @@ export default function LogMealPage() {
             items: analysis.items,
             confidence: analysis.confidence,
             photo_base64: photoBase64 ?? undefined,
+            photo_thumb_base64: photoThumbBase64 ?? undefined,
             photo_ext: photoExt,
           }),
         },
@@ -230,17 +264,21 @@ export default function LogMealPage() {
       resetNewMealForm();
 
       // 2) Background: kick off the tip endpoint and surface it when ready.
-      // Doesn't block the redirect — fire-and-forget.
+      // Doesn't block the redirect — fire-and-forget. We surface a spinner
+      // string ("Generating next-meal tip…") on the tip card itself so the
+      // user knows something is still happening.
       if (j.id) {
+        setTip("__pending__");
         (async () => {
           try {
             const t = await safeFetchJson<{ ai_tip: string | null }>(
               `/api/meals/${j.id}/tip`,
               { method: "POST" },
             );
-            if (t.ai_tip) setTip(t.ai_tip);
+            setTip(t.ai_tip || null);
           } catch {
             // Tip is best-effort; meal is already saved.
+            setTip(null);
           }
         })();
       }
@@ -255,6 +293,7 @@ export default function LogMealPage() {
       setErr(e.message);
     } finally {
       setSaving(false);
+      setProgress(null);
     }
   }
 
@@ -276,6 +315,7 @@ export default function LogMealPage() {
 
       const mod = modifierText.trim();
       if (mod) {
+        setProgress("Adjusting macros for the change…");
         const fd = new FormData();
         fd.append(
           "base",
@@ -303,6 +343,7 @@ export default function LogMealPage() {
         };
       }
 
+      setProgress("Saving meal…");
       const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
         "/api/meals",
         {
@@ -318,15 +359,17 @@ export default function LogMealPage() {
 
       // Background tip — same pattern as the photo/text save flow.
       if (j.id) {
+        setTip("__pending__");
         (async () => {
           try {
             const t = await safeFetchJson<{ ai_tip: string | null }>(
               `/api/meals/${j.id}/tip`,
               { method: "POST" },
             );
-            if (t.ai_tip) setTip(t.ai_tip);
+            setTip(t.ai_tip || null);
           } catch {
             // Best-effort.
+            setTip(null);
           }
         })();
       }
@@ -341,6 +384,7 @@ export default function LogMealPage() {
       setErr(e.message);
     } finally {
       setQuickBusy(false);
+      setProgress(null);
     }
   }
 
@@ -529,16 +573,18 @@ export default function LogMealPage() {
           </div>
           <button
             onClick={analyze}
-            disabled={analyzing}
+            disabled={analyzing || !!progress}
             className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {analyzing
-              ? "Analyzing…"
-              : photoPreview
-                ? "Analyze with Claude"
-                : text.trim()
-                  ? "Analyze from description"
-                  : "Analyze (add photo or text)"}
+              ? progress || "Analyzing…"
+              : progress
+                ? progress
+                : photoPreview
+                  ? "Analyze with Claude"
+                  : text.trim()
+                    ? "Analyze from description"
+                    : "Analyze (add photo or text)"}
           </button>
         </div>
       )}
@@ -610,7 +656,11 @@ export default function LogMealPage() {
               disabled={saving}
               className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
-              {saving ? "Saving…" : isToday ? "Confirm & save" : `Save to ${prettyDate(date)}`}
+              {saving
+                ? progress || "Saving…"
+                : isToday
+                  ? "Confirm & save"
+                  : `Save to ${prettyDate(date)}`}
             </button>
           </div>
         </div>
@@ -621,7 +671,13 @@ export default function LogMealPage() {
           <div className="text-xs uppercase tracking-wider text-accent-cal font-semibold mb-1">
             Next meal tip
           </div>
-          <p className="text-sm text-white/80">{tip}</p>
+          {tip === "__pending__" ? (
+            <p className="text-sm text-white/50 animate-pulse">
+              Generating next-meal tip…
+            </p>
+          ) : (
+            <p className="text-sm text-white/80">{tip}</p>
+          )}
         </div>
       )}
 
@@ -679,14 +735,16 @@ export default function LogMealPage() {
                           disabled={quickBusy}
                           className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-xs font-medium disabled:opacity-40"
                         >
-                          {quickBusy ? "Saving…" : `Log as-is${isToday ? "" : ` to ${date}`}`}
+                          {quickBusy
+                            ? progress || "Saving…"
+                            : `Log as-is${isToday ? "" : ` to ${date}`}`}
                         </button>
                         <button
                           onClick={() => quickLog(m, modifier)}
                           disabled={quickBusy || !modifier.trim()}
                           className="flex-1 rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
                         >
-                          {quickBusy ? "Saving…" : "Log with change"}
+                          {quickBusy ? progress || "Saving…" : "Log with change"}
                         </button>
                       </div>
                       <p className="text-[10px] text-white/40">
@@ -751,15 +809,27 @@ function ExistingMealRow({
   return (
     <div className="card p-3">
       <div className="flex items-center gap-3">
-        {meal.photo_path ? (
+        {meal.photo_thumb ? (
+          // Inline thumbnail data URI — already tiny, no optimizer hop.
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            src={meal.photo_thumb}
+            alt=""
+            width={48}
+            height={48}
+            decoding="async"
+            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
+          />
+        ) : meal.photo_path ? (
+          // Older meal: fall back to the optimizer-resized full image.
+          <Image
             src={meal.photo_path}
             alt=""
             width={48}
             height={48}
+            quality={55}
+            sizes="48px"
             loading="lazy"
-            decoding="async"
             className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
           />
         ) : (

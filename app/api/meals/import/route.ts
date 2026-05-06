@@ -7,6 +7,7 @@ import {
 } from "@/lib/csv";
 import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
 import { BACKFILL_FILL_SYSTEM } from "@/lib/prompts";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +95,7 @@ function parseResolutions(raw: string | null): Record<string, Resolution> {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserIdOrDefault();
   const form = await req.formData();
   const file = form.get("file");
   const dryRun =
@@ -120,17 +122,11 @@ export async function POST(req: NextRequest) {
   const text = await file.text();
   const { rows, errors, summaryRows } = normalizeNutritionCsv(text);
 
-  // 1. Derive carbs from kcal balance where possible (no AI).
   const derivedRows: ImportRow[] = rows.map((r) => {
     const { filled, derived } = deriveCarbsFromKcal(r);
-    return {
-      ...filled,
-      derivedCarbs: derived,
-      aiFilled: false,
-    };
+    return { ...filled, derivedCarbs: derived, aiFilled: false };
   });
 
-  // 2. Rows still missing macros get sent to Claude (if asked).
   let aiFillCount = 0;
   const needsAi = derivedRows.filter((r) => r.missingFields.length > 0);
 
@@ -152,20 +148,12 @@ export async function POST(req: NextRequest) {
         if (r.missingFields.length === 0) continue;
         const f = byIdx.get(r.lineNumber);
         if (!f) continue;
-        if (r.calories === null && Number.isFinite(f.calories))
-          r.calories = f.calories;
-        if (r.protein_g === null && Number.isFinite(f.protein_g))
-          r.protein_g = f.protein_g;
+        if (r.calories === null && Number.isFinite(f.calories)) r.calories = f.calories;
+        if (r.protein_g === null && Number.isFinite(f.protein_g)) r.protein_g = f.protein_g;
         if (r.fat_g === null && Number.isFinite(f.fat_g)) r.fat_g = f.fat_g;
-        if (r.carbs_g === null && Number.isFinite(f.carbs_g))
-          r.carbs_g = f.carbs_g;
+        if (r.carbs_g === null && Number.isFinite(f.carbs_g)) r.carbs_g = f.carbs_g;
         r.missingFields = [];
-        if (
-          r.calories !== null &&
-          r.protein_g !== null &&
-          r.fat_g !== null &&
-          r.carbs_g !== null
-        ) {
+        if (r.calories !== null && r.protein_g !== null && r.fat_g !== null && r.carbs_g !== null) {
           r.aiFilled = true;
           r.aiConfidence = f.confidence;
           r.aiNote = f.note;
@@ -175,30 +163,18 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       errors.push({
         line: 0,
-        message: `Claude backfill failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        message: `Claude backfill failed: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
   }
 
-  // 3. Classify.
   const importable = derivedRows.filter(
-    (r) =>
-      r.calories !== null &&
-      r.protein_g !== null &&
-      r.fat_g !== null &&
-      r.carbs_g !== null,
+    (r) => r.calories !== null && r.protein_g !== null && r.fat_g !== null && r.carbs_g !== null,
   );
   const incomplete = derivedRows.filter(
-    (r) =>
-      r.calories === null ||
-      r.protein_g === null ||
-      r.fat_g === null ||
-      r.carbs_g === null,
+    (r) => r.calories === null || r.protein_g === null || r.fat_g === null || r.carbs_g === null,
   );
 
-  // 4. Inspect date-level conflicts against the DB.
   const db = await getDb();
   const byDate = groupByDate(importable);
   const dates = Array.from(byDate.keys()).sort();
@@ -218,8 +194,8 @@ export async function POST(req: NextRequest) {
                    COALESCE(SUM(protein_g), 0) AS total_p,
                    COALESCE(SUM(fat_g), 0)     AS total_f,
                    COALESCE(SUM(carbs_g), 0)   AS total_c
-              FROM meals WHERE date = ?`,
-      args: [date],
+              FROM meals WHERE user_id = ? AND date = ?`,
+      args: [userId, date],
     });
     return r.rows[0] as unknown as ExistingRow;
   }
@@ -227,25 +203,13 @@ export async function POST(req: NextRequest) {
   type Conflict = {
     date: string;
     existingCount: number;
-    existingTotal: {
-      calories: number;
-      protein_g: number;
-      fat_g: number;
-      carbs_g: number;
-    };
+    existingTotal: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
     incomingCount: number;
-    incomingTotal: {
-      calories: number;
-      protein_g: number;
-      fat_g: number;
-      carbs_g: number;
-    };
+    incomingTotal: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
   };
   const conflicts: Conflict[] = [];
-  const byDateInfo: { date: string; count: number; hasConflict: boolean }[] =
-    [];
+  const byDateInfo: { date: string; count: number; hasConflict: boolean }[] = [];
 
-  // Also cache the existing-row lookups so we don't re-query in commit phase.
   const existingByDate = new Map<string, ExistingRow>();
 
   for (const date of dates) {
@@ -311,7 +275,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 5. Commit — apply per-date resolutions.
   const resolveFor = (date: string): Resolution => {
     const r = resolutions[date];
     if (r) return r;
@@ -324,18 +287,10 @@ export async function POST(req: NextRequest) {
   let keptDates = 0;
   let mergedDates = 0;
   let deletedRowsCount = 0;
-  const perDateResult: {
-    date: string;
-    resolution: Resolution | "insert";
-    inserted: number;
-    deleted: number;
-  }[] = [];
+  const perDateResult: { date: string; resolution: Resolution | "insert"; inserted: number; deleted: number }[] = [];
 
-  // Build the batch — libSQL `db.batch` runs the whole list in one transaction.
   type Stmt = { sql: string; args: any[] };
   const stmts: Stmt[] = [];
-  // Track which statement index corresponds to which (date, op) so we can read
-  // back rowsAffected after the batch returns.
   const opMap: { date: string; kind: "delete" | "insert" }[] = [];
 
   for (const date of dates) {
@@ -353,8 +308,8 @@ export async function POST(req: NextRequest) {
 
     if (resolution === "replace") {
       stmts.push({
-        sql: "DELETE FROM meals WHERE date = ?",
-        args: [date],
+        sql: "DELETE FROM meals WHERE user_id = ? AND date = ?",
+        args: [userId, date],
       });
       opMap.push({ date, kind: "delete" });
       replacedDates++;
@@ -365,9 +320,10 @@ export async function POST(req: NextRequest) {
     let localInserted = 0;
     for (const r of incoming) {
       stmts.push({
-        sql: `INSERT INTO meals (date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, datetime('now'))`,
+        sql: `INSERT INTO meals (user_id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, datetime('now'))`,
         args: [
+          userId,
           r.date,
           r.description || null,
           r.calories,
@@ -381,17 +337,11 @@ export async function POST(req: NextRequest) {
       localInserted++;
     }
     insertedCount += localInserted;
-    perDateResult.push({
-      date,
-      resolution,
-      inserted: localInserted,
-      deleted: 0, // filled in below from batch result
-    });
+    perDateResult.push({ date, resolution, inserted: localInserted, deleted: 0 });
   }
 
   if (stmts.length > 0) {
     const results = await db.batch(stmts, "write");
-    // Walk results aligned to opMap to populate deletedRowsCount + per-date deleted counts
     for (let i = 0; i < results.length; i++) {
       const op = opMap[i];
       const ra = Number(results[i].rowsAffected ?? 0);

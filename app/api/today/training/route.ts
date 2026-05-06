@@ -14,6 +14,8 @@ import {
 import { HevyWorkout, workoutVolumeKg, workoutDurationMin } from "@/lib/hevy";
 import { estimateWorkoutBurn } from "@/lib/burn";
 import { computeRecovery, DailyTotals } from "@/lib/recovery";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { getUserConfig } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,10 +47,23 @@ function dailyTotalsFromMeals(
 }
 
 export async function GET() {
+  const userId = getCurrentUserIdOrDefault();
+  const cfg = getUserConfig(userId);
+
+  // Users without a workouts setup (orly) don't have Hevy/recovery data.
+  if (!cfg.hasWorkouts) {
+    return NextResponse.json({
+      date: todayStr(),
+      todaysWorkout: null,
+      training_burn_kcal: 0,
+      recovery: null,
+    });
+  }
+
   const [profile, cachedRecent, last3] = await Promise.all([
-    getProfile(),
+    getProfile(userId),
     getCachedWorkoutsSince(daysAgoStr(14)),
-    getMealsSinceLite(daysAgoStr(2)),
+    getMealsSinceLite(userId, daysAgoStr(2)),
   ]);
   const today = todayStr();
 

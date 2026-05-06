@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb, daysAgoStr } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,11 +20,10 @@ type Row = {
  * grouped by a normalized description, with average macros and a count.
  */
 export async function GET() {
+  const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
   const since = daysAgoStr(60);
 
-  // Group by lowercased / trimmed description so minor casing differences merge.
-  // (Hebrew characters aren't affected by LOWER, but the trim still helps.)
   const res = await db.execute({
     sql: `SELECT
             TRIM(LOWER(description)) AS key,
@@ -35,14 +35,15 @@ export async function GET() {
             COUNT(*) AS count,
             MAX(date) AS last_date
           FROM meals
-          WHERE description IS NOT NULL
+          WHERE user_id = ?
+            AND description IS NOT NULL
             AND TRIM(description) <> ''
             AND date >= ?
           GROUP BY key
           HAVING count >= 2
           ORDER BY count DESC, last_date DESC
           LIMIT 8`,
-    args: [since],
+    args: [userId, since],
   });
 
   const rows = res.rows as unknown as (Row & { key: string })[];

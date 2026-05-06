@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
 
@@ -73,41 +74,35 @@ export type Suggestion = {
   cached: boolean;
 };
 
-// `initial` is computed by the Server Component wrapper (app/page.tsx) and
-// shipped inline with the HTML, so we skip the /api/today round-trip on
-// first paint. Training still loads client-side because it's slower
-// (Hevy + recovery calc). The suggestion card is seeded with whatever's
-// cached in the DB and refreshed in the background if stale.
 export default function HomeClient({
   initial,
   initialSuggestion,
+  hasWorkouts,
+  userDisplayName,
 }: {
   initial: Today;
   initialSuggestion: Suggestion | null;
+  hasWorkouts: boolean;
+  userDisplayName: string;
 }) {
   const [data, setData] = useState<Today>(initial);
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(
-    initialSuggestion,
-  );
-  const [suggestionLoading, setSuggestionLoading] = useState(
-    !initialSuggestion,
-  );
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(initialSuggestion);
+  const [suggestionLoading, setSuggestionLoading] = useState(!initialSuggestion);
 
   useEffect(() => {
-    // Slower follow-up — workout card + recovery score. Fills in after.
-    (async () => {
-      try {
-        const r = await fetch("/api/today/training", { cache: "no-store" });
-        const j = await r.json();
-        setTraining(j);
-      } catch {
-        // non-fatal — page still works without these sections
-      }
-    })();
-    // Background-refresh the suggestion. /api/suggestion only re-calls Claude
-    // if cached totals are stale, so this is usually a no-op DB read.
+    if (hasWorkouts) {
+      (async () => {
+        try {
+          const r = await fetch("/api/today/training", { cache: "no-store" });
+          const j = await r.json();
+          setTraining(j);
+        } catch {
+          // non-fatal
+        }
+      })();
+    }
     (async () => {
       try {
         setSuggestionLoading(true);
@@ -120,7 +115,7 @@ export default function HomeClient({
         setSuggestionLoading(false);
       }
     })();
-  }, []);
+  }, [hasWorkouts]);
 
   if (err) return <div className="p-6 text-red-400">{err}</div>;
 
@@ -129,10 +124,7 @@ export default function HomeClient({
       <div className="px-5 pt-10 space-y-4">
         <h1 className="text-3xl font-bold">Welcome</h1>
         <p className="text-white/60">Let&apos;s set up your profile so we can calculate personalized targets.</p>
-        <Link
-          href="/onboarding"
-          className="inline-block rounded-xl bg-accent-brand px-5 py-3 text-sm font-semibold"
-        >
+        <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-5 py-3 text-sm font-semibold">
           Start onboarding
         </Link>
       </div>
@@ -143,18 +135,22 @@ export default function HomeClient({
   const todaysWorkout = training?.todaysWorkout ?? null;
   const recovery = training?.recovery ?? null;
   const today = new Date(data.date);
-  // Once /api/today/training resolves, fold its burn into the calorie target.
   const burn = training?.training_burn_kcal ?? 0;
   const baseCal = targets.base_calories;
   const effectiveCal = baseCal + burn;
 
   return (
     <div className="px-5 pt-6 pb-6 space-y-5">
-      <div>
-        <div className="text-xs text-white/50 uppercase tracking-wider">
-          {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="text-xs text-white/50 uppercase tracking-wider">
+            {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+          </div>
+          <h1 className="text-2xl font-bold mt-0.5">Today</h1>
         </div>
-        <h1 className="text-2xl font-bold mt-0.5">Today</h1>
+        <Link href="/profile" className="text-[11px] text-white/50 hover:text-white/80 transition-colors">
+          {userDisplayName}
+        </Link>
       </div>
 
       <section className="card p-5">
@@ -165,41 +161,15 @@ export default function HomeClient({
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-y-4 place-items-center">
-          <MacroRing
-            label="Calories"
-            value={totals.calories}
-            target={effectiveCal || profile.goal_calories || 0}
-            unit=""
-            color="#10b981"
-          />
-          <MacroRing
-            label="Protein"
-            value={totals.protein_g}
-            target={targets.protein_g || profile.goal_protein_g || 0}
-            unit="g"
-            color="#ef4444"
-          />
-          <MacroRing
-            label="Carbs"
-            value={totals.carbs_g}
-            target={targets.carbs_g || profile.goal_carbs_g || 0}
-            unit="g"
-            color="#f59e0b"
-          />
-          <MacroRing
-            label="Fat"
-            value={totals.fat_g}
-            target={targets.fat_g || profile.goal_fat_g || 0}
-            unit="g"
-            color="#3b82f6"
-          />
+          <MacroRing label="Calories" value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" />
+          <MacroRing label="Protein" value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" />
+          <MacroRing label="Carbs" value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" />
+          <MacroRing label="Fat" value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" />
         </div>
         {burn > 0 && (
           <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
             <span className="text-white/80 font-medium">+{burn} kcal</span> from today&apos;s training{" "}
-            <span className="text-white/40">
-              ({baseCal} base → {effectiveCal} effective)
-            </span>
+            <span className="text-white/40">({baseCal} base → {effectiveCal} effective)</span>
           </div>
         )}
       </section>
@@ -209,10 +179,7 @@ export default function HomeClient({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Next meal</h2>
           {suggestion?.updated_at && (
             <span className="text-[10px] text-white/40">
-              {new Date(suggestion.updated_at).toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
+              {new Date(suggestion.updated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </span>
           )}
         </div>
@@ -227,7 +194,7 @@ export default function HomeClient({
         )}
       </section>
 
-      {!training ? (
+      {!hasWorkouts ? null : !training ? (
         <section className="card p-5 animate-pulse">
           <div className="h-3 w-24 rounded bg-white/10 mb-4" />
           <div className="flex items-end gap-4">
@@ -242,28 +209,20 @@ export default function HomeClient({
         <section className="card p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Recovery</h2>
-            <span
-              className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(
-                recovery.band,
-              )}`}
-            >
+            <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(recovery.band)}`}>
               {recovery.band}
             </span>
           </div>
-
           <div className="flex items-end gap-4">
             <div>
               <div className="text-3xl font-bold leading-none">{recovery.score}</div>
-              <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">
-                / 100
-              </div>
+              <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">/ 100</div>
             </div>
             <div className="flex-1">
               <ScoreBar score={recovery.score} band={recovery.band} />
               <p className="text-[12px] text-white/60 mt-2 leading-snug">{recovery.rationale}</p>
             </div>
           </div>
-
           <div className="mt-4">
             <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Per muscle</div>
             <div className="grid grid-cols-5 gap-1.5">
@@ -272,7 +231,6 @@ export default function HomeClient({
               ))}
             </div>
           </div>
-
           {!recovery.signalsUsed.workouts && (
             <p className="text-[10px] text-white/30 mt-3">
               Hit Refresh on the Workouts page to populate per-muscle data.
@@ -281,32 +239,31 @@ export default function HomeClient({
         </section>
       ) : null}
 
-      <section className="card p-5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Today&apos;s workout</h2>
-          <Link href="/workouts" className="text-xs text-accent-brand">All →</Link>
-        </div>
-        {!training ? (
-          <div className="animate-pulse space-y-2">
-            <div className="h-4 w-2/3 rounded bg-white/10" />
-            <div className="h-3 w-1/2 rounded bg-white/10" />
+      {hasWorkouts && (
+        <section className="card p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Today&apos;s workout</h2>
+            <Link href="/workouts" className="text-xs text-accent-brand">All →</Link>
           </div>
-        ) : todaysWorkout ? (
-          <div>
-            <div className="font-semibold">{todaysWorkout.title}</div>
-            <div className="text-xs text-white/50 mt-0.5">
-              {new Date(todaysWorkout.start_time).toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}{" "}
-              · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
+          {!training ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-4 w-2/3 rounded bg-white/10" />
+              <div className="h-3 w-1/2 rounded bg-white/10" />
             </div>
-            <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
-          </div>
-        ) : (
-          <div className="text-sm text-white/50">No workout logged in Hevy yet.</div>
-        )}
-      </section>
+          ) : todaysWorkout ? (
+            <div>
+              <div className="font-semibold">{todaysWorkout.title}</div>
+              <div className="text-xs text-white/50 mt-0.5">
+                {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{" "}
+                · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
+              </div>
+              <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
+            </div>
+          ) : (
+            <div className="text-sm text-white/50">No workout logged in Hevy yet.</div>
+          )}
+        </section>
+      )}
 
       <section>
         <div className="flex items-center justify-between mb-2">
@@ -326,31 +283,22 @@ export default function HomeClient({
             No insights yet.{" "}
             <Link href="/insights" className="text-accent-brand underline underline-offset-2">
               Generate your first one
-            </Link>
-            .
+            </Link>.
           </div>
         )}
       </section>
 
       {meals.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">
-            Today&apos;s meals
-          </h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">Today&apos;s meals</h2>
           <div className="space-y-2">
             {meals.map((m) => (
               <div key={m.id} className="card p-3 flex gap-3 items-center">
-                {m.photo_path ? (
+                {m.photo_thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={m.photo_path}
-                    alt=""
-                    width={56}
-                    height={56}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-14 h-14 rounded-lg object-cover bg-bg-elev"
-                  />
+                  <img src={m.photo_thumb} alt="" width={56} height={56} decoding="async" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
+                ) : m.photo_path ? (
+                  <Image src={m.photo_path} alt="" width={56} height={56} quality={55} sizes="56px" loading="lazy" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
                 ) : (
                   <div className="w-14 h-14 rounded-lg bg-bg-elev" />
                 )}
@@ -361,70 +309,13 @@ export default function HomeClient({
                   </div>
                 </div>
                 <div className="text-[11px] text-white/40">
-                  {new Date(m.created_at).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                  {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                 </div>
               </div>
             ))}
           </div>
         </section>
       )}
-    </div>
-  );
-}
-
-function HomeSkeleton() {
-  return (
-    <div className="px-5 pt-6 pb-6 space-y-5 animate-pulse">
-      <div>
-        <div className="h-3 w-28 rounded bg-white/10" />
-        <div className="h-7 w-20 rounded bg-white/15 mt-2" />
-      </div>
-
-      <section className="card p-5">
-        <div className="flex justify-between items-center mb-4">
-          <div className="h-3 w-16 rounded bg-white/10" />
-          <div className="h-3 w-20 rounded bg-white/10" />
-        </div>
-        <div className="grid grid-cols-2 gap-y-4 place-items-center">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2">
-              <div className="w-24 h-24 rounded-full bg-white/5 border-4 border-white/10" />
-              <div className="h-3 w-12 rounded bg-white/10" />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="card p-5">
-        <div className="h-3 w-20 rounded bg-white/10 mb-3" />
-        <div className="h-3 w-full rounded bg-white/10 mb-2" />
-        <div className="h-3 w-4/5 rounded bg-white/10" />
-      </section>
-
-      <section className="card p-5">
-        <div className="h-3 w-24 rounded bg-white/10 mb-4" />
-        <div className="flex items-end gap-4">
-          <div className="h-10 w-12 rounded bg-white/10" />
-          <div className="flex-1 space-y-2">
-            <div className="h-1.5 w-full rounded-full bg-white/10" />
-            <div className="h-3 w-5/6 rounded bg-white/10" />
-          </div>
-        </div>
-        <div className="grid grid-cols-5 gap-1.5 mt-4">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-10 rounded-md bg-white/5" />
-          ))}
-        </div>
-      </section>
-
-      <section className="card p-5">
-        <div className="h-3 w-32 rounded bg-white/10 mb-3" />
-        <div className="h-4 w-2/3 rounded bg-white/15 mb-2" />
-        <div className="h-3 w-1/2 rounded bg-white/10" />
-      </section>
     </div>
   );
 }
