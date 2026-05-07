@@ -108,6 +108,12 @@ export default function LogMealPage() {
   const [modifier, setModifier] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
 
+  // Manual entry state
+  const [manualMode, setManualMode] = useState(false);
+  const [manualDesc, setManualDesc] = useState("");
+  const [manualMacros, setManualMacros] = useState({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
+  const [manualSaving, setManualSaving] = useState(false);
+
   const loadExisting = useCallback(async (forDate: string) => {
     try {
       const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store" });
@@ -388,6 +394,66 @@ export default function LogMealPage() {
     }
   }
 
+  async function saveManual() {
+    if (!manualDesc.trim() && !manualMacros.calories) {
+      setErr("Add a description or at least calories");
+      return;
+    }
+    setManualSaving(true);
+    setErr(null);
+    setProgress("Saving meal…");
+    try {
+      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+        "/api/meals",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            date,
+            description: manualDesc.trim() || "Meal",
+            calories: manualMacros.calories,
+            protein_g: manualMacros.protein_g,
+            fat_g: manualMacros.fat_g,
+            carbs_g: manualMacros.carbs_g,
+            confidence: "high",
+          }),
+        },
+      );
+      await loadExisting(date);
+      setManualDesc("");
+      setManualMacros({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
+      setManualMode(false);
+      setTip(j.ai_tip || null);
+
+      if (j.id) {
+        setTip("__pending__");
+        (async () => {
+          try {
+            const t = await safeFetchJson<{ ai_tip: string | null }>(
+              `/api/meals/${j.id}/tip`,
+              { method: "POST" },
+            );
+            setTip(t.ai_tip || null);
+          } catch {
+            setTip(null);
+          }
+        })();
+      }
+
+      if (isToday) {
+        setTimeout(() => {
+          router.push("/");
+          router.refresh();
+        }, 2000);
+      }
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setManualSaving(false);
+      setProgress(null);
+    }
+  }
+
   async function deleteMeal(id: number) {
     if (!confirm("Delete this meal?")) return;
     try {
@@ -483,7 +549,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
-      {!photoPreview && !analysis && (
+      {!photoPreview && !analysis && !manualMode && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -516,7 +582,7 @@ export default function LogMealPage() {
         </div>
       )}
 
-      {photoPreview && (
+      {photoPreview && !manualMode && (
         <div className="space-y-3">
           <div className="relative rounded-2xl overflow-hidden border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -553,7 +619,7 @@ export default function LogMealPage() {
       />
 
       {/* --- TEXT INPUT (always visible until an analysis exists) --- */}
-      {!analysis && (
+      {!analysis && !manualMode && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/60 mb-1.5">
@@ -585,6 +651,76 @@ export default function LogMealPage() {
                   : text.trim()
                     ? "Analyze from description"
                     : "Analyze (add photo or text)"}
+          </button>
+          <button
+            onClick={() => { setManualMode(true); clearPhoto(); setText(""); setErr(null); }}
+            className="w-full text-center text-[12px] text-white/40 py-1"
+          >
+            Enter macros manually →
+          </button>
+        </div>
+      )}
+
+      {/* --- MANUAL ENTRY FORM --- */}
+      {manualMode && !analysis && (
+        <div className="card p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Manual entry</h3>
+            <button
+              onClick={() => { setManualMode(false); setErr(null); }}
+              className="text-xs text-white/40"
+            >
+              Cancel
+            </button>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-white/60 mb-1.5">
+              Meal description
+            </label>
+            <input
+              value={manualDesc}
+              onChange={(e) => setManualDesc(e.target.value)}
+              placeholder="e.g. Rice with chicken and salad"
+              className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px]"
+            />
+          </div>
+          <div className="space-y-3">
+            <div className="text-xs font-medium text-white/60">Macros</div>
+            <MacroEdit
+              label="Calories"
+              unit="kcal"
+              value={manualMacros.calories}
+              onChange={(v) => setManualMacros({ ...manualMacros, calories: v })}
+            />
+            <MacroEdit
+              label="Protein"
+              unit="g"
+              value={manualMacros.protein_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, protein_g: v })}
+            />
+            <MacroEdit
+              label="Fat"
+              unit="g"
+              value={manualMacros.fat_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, fat_g: v })}
+            />
+            <MacroEdit
+              label="Carbs"
+              unit="g"
+              value={manualMacros.carbs_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, carbs_g: v })}
+            />
+          </div>
+          <button
+            onClick={saveManual}
+            disabled={manualSaving}
+            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+          >
+            {manualSaving
+              ? progress || "Saving…"
+              : isToday
+                ? "Save meal"
+                : `Save to ${prettyDate(date)}`}
           </button>
         </div>
       )}
