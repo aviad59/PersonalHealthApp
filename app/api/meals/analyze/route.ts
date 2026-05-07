@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       // ramble and occasionally pushed the response past 8 s.
       const resp = await anthropic().messages.create({
         model: CLAUDE_FAST_MODEL,
-        max_tokens: 1500,
+        max_tokens: 800,
         system: MEAL_VISION_SYSTEM,
         messages: [
           {
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
     const resp = await anthropic().messages.create({
       model: CLAUDE_FAST_MODEL,
-      max_tokens: 1500,
+      max_tokens: 800,
       system: MEAL_TEXT_SYSTEM,
       messages: [{ role: "user", content: userMessage }],
     });
