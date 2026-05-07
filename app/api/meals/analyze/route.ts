@@ -56,12 +56,14 @@ export async function POST(req: NextRequest) {
         ? `User context: ${contextText}\n\nAnalyze this meal and return the JSON.`
         : "Analyze this meal and return the JSON.";
 
-      // Haiku 4.5 + a tighter token budget. Meal analyses fit comfortably
-      // in ~700 tokens; the previous 1800-token ceiling let the model
-      // ramble and occasionally pushed the response past 8 s.
+      // Haiku 4.5. The prompt asks for step-by-step reasoning BEFORE the
+      // JSON, and the JSON values are in Hebrew (where each character costs
+      // multiple tokens). 900 was tight enough that responses occasionally
+      // truncated mid-JSON, surfacing as "No JSON object found in model
+      // output" or "Expected ',' or ']'" errors downstream.
       const resp = await anthropic().messages.create({
         model: CLAUDE_FAST_MODEL,
-        max_tokens: 900,
+        max_tokens: 2000,
         system: MEAL_VISION_SYSTEM,
         messages: [
           {
@@ -97,7 +99,9 @@ export async function POST(req: NextRequest) {
 
     const resp = await anthropic().messages.create({
       model: CLAUDE_FAST_MODEL,
-      max_tokens: 600,
+      // Same reasoning as photo mode: Hebrew JSON values + step-by-step
+      // reasoning needs headroom or the response truncates mid-JSON.
+      max_tokens: 1500,
       system: MEAL_TEXT_SYSTEM,
       messages: [{ role: "user", content: userMessage }],
     });
