@@ -98,6 +98,11 @@ export async function POST(req: NextRequest) {
       carbs_g: profile.goal_carbs_g,
       weekly_workout_target: profile.weekly_workout_target,
     },
+    has_workouts: cfg.hasWorkouts,
+    // Per-user training context — only present when the user tracks workouts.
+    ...(cfg.hasWorkouts && {
+      training_notes: "Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.",
+    }),
     today: {
       date: today,
       current_hour: nowHour,
