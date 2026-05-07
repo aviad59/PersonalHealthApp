@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
   const weekStart = daysAgoStr(6);
   const weekWorkouts = workouts.filter((w) => workoutKey(w) >= weekStart);
 
+  const nowHour = new Date().getHours(); // server local hour (0-23)
+
   const context: any = {
     profile: {
       age: profile.age,
@@ -98,6 +100,8 @@ export async function POST(req: NextRequest) {
     },
     today: {
       date: today,
+      current_hour: nowHour,
+      day_complete: false,
       totals: dayTotals(todayMeals),
       meals: todayMeals.map((m) => ({
         description: m.description,
