@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { anthropic, CLAUDE_FAST_MODEL, extractJson } from "@/lib/anthropic";
-import { MEAL_VISION_SYSTEM, MEAL_TEXT_SYSTEM } from "@/lib/prompts";
+import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ type BaseMeal = {
 };
 
 export async function POST(req: NextRequest) {
+  const lang = req.cookies.get("lang")?.value || "en";
   const form = await req.formData();
   const file = form.get("photo");
   const hint = (form.get("hint") as string | null)?.trim() || "";
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       const resp = await anthropic().messages.create({
         model: CLAUDE_FAST_MODEL,
         max_tokens: 800,
-        system: MEAL_VISION_SYSTEM,
+        system: mealVisionPrompt(lang),
         messages: [
           {
             role: "user",
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
     const resp = await anthropic().messages.create({
       model: CLAUDE_FAST_MODEL,
       max_tokens: 800,
-      system: MEAL_TEXT_SYSTEM,
+      system: mealTextPrompt(lang),
       messages: [{ role: "user", content: userMessage }],
     });
     const body = resp.content

@@ -3,22 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLang } from "@/components/LangProvider";
+import { t } from "@/lib/i18n";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: "nav_today" | "nav_log" | "nav_stats" | "nav_insights" | "nav_workouts" | "nav_profile";
   icon: (p: React.SVGProps<SVGSVGElement>) => JSX.Element;
-  // Hide this item for users with hasWorkouts === false (orly).
   workoutsOnly?: boolean;
 };
 
 const items: NavItem[] = [
-  { href: "/", label: "Today", icon: HomeIcon },
-  { href: "/meals/log", label: "Log", icon: CameraIcon },
-  { href: "/stats", label: "Stats", icon: ChartIcon },
-  { href: "/insights", label: "Insights", icon: SparklesIcon },
-  { href: "/workouts", label: "Workouts", icon: DumbbellIcon, workoutsOnly: true },
-  { href: "/profile", label: "Profile", icon: UserIcon },
+  { href: "/", labelKey: "nav_today", icon: HomeIcon },
+  { href: "/meals/log", labelKey: "nav_log", icon: CameraIcon },
+  { href: "/stats", labelKey: "nav_stats", icon: ChartIcon },
+  { href: "/insights", labelKey: "nav_insights", icon: SparklesIcon },
+  { href: "/workouts", labelKey: "nav_workouts", icon: DumbbellIcon, workoutsOnly: true },
+  { href: "/profile", labelKey: "nav_profile", icon: UserIcon },
 ];
 
 /** Read the cowork_user cookie on the client to decide which tabs to show. */
@@ -30,9 +31,7 @@ function readUserCookie(): string | null {
 
 export default function BottomNav() {
   const pathname = usePathname() || "/";
-  // Determine which tabs to show based on the cookie. Default behavior
-  // (before the cookie is read on first paint) shows everything — so the
-  // nav doesn't visibly "pop" tabs in/out for idan, who is the common case.
+  const lang = useLang();
   const [hideWorkouts, setHideWorkouts] = useState(false);
   useEffect(() => {
     const u = readUserCookie();
@@ -63,7 +62,7 @@ export default function BottomNav() {
                 }`}
               >
                 <it.icon className={`h-5 w-5 ${active ? "text-accent-brand" : ""}`} />
-                <span>{it.label}</span>
+                <span>{t(lang, it.labelKey)}</span>
               </Link>
             );
           })}

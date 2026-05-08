@@ -1,18 +1,19 @@
 // Prompt builders for Claude.
 
-export const MEAL_VISION_SYSTEM = `You are a precise nutrition analyst.
-Analyze the food in this photo and return ONE JSON object immediately — no prose, no fences.
-
-Use visible size cues (plate diameter ~26 cm, utensils, packaging, hands) to gauge portions.
-If no reference objects are visible, default to a typical single-person restaurant serving.
-Total kcal must make sense for what's on the plate — adjust if something looks off.
-
-"description" and every item "name" MUST be in Hebrew (עברית).
+function mealLangInstruction(lang: string): string {
+  if (lang === "he") {
+    return `"description" and every item "name" MUST be in Hebrew (עברית).
 Numeric values, "portion" units, and JSON keys stay in English/ASCII.
-"notes" in Hebrew; leave empty string if nothing notable.
+"notes" in Hebrew; leave empty string if nothing notable.`;
+  }
+  return `"description" and every item "name" MUST be in English.
+Numeric values, "portion" units, and JSON keys stay in English/ASCII.
+"notes" in English; leave empty string if nothing notable.`;
+}
 
-JSON schema (output only this, nothing else):
-{
+function mealJsonSchema(lang: string): string {
+  if (lang === "he") {
+    return `{
   "description": "תיאור קצר של הארוחה בעברית",
   "items": [
     { "name": "שם המאכל בעברית", "portion": "150 g", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
@@ -21,6 +22,46 @@ JSON schema (output only this, nothing else):
   "confidence": "low" | "medium" | "high",
   "notes": "משפט קצר בעברית או מחרוזת ריקה"
 }`;
+  }
+  return `{
+  "description": "short meal description in English",
+  "items": [
+    { "name": "food item name in English", "portion": "150 g", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
+  ],
+  "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
+  "confidence": "low" | "medium" | "high",
+  "notes": "one short sentence or empty string"
+}`;
+}
+
+export function mealVisionPrompt(lang = "en"): string {
+  return `You are a precise nutrition analyst.
+Analyze the food in this photo and return ONE JSON object immediately — no prose, no fences.
+
+Use visible size cues (plate diameter ~26 cm, utensils, packaging, hands) to gauge portions.
+If no reference objects are visible, default to a typical single-person restaurant serving.
+Total kcal must make sense for what's on the plate — adjust if something looks off.
+
+${mealLangInstruction(lang)}
+
+JSON schema (output only this, nothing else):
+${mealJsonSchema(lang)}`;
+}
+
+export function mealTextPrompt(lang = "en"): string {
+  return `You are a precise nutrition analyst.
+The user will describe a meal in words, or provide a base meal + modifier to adjust (e.g. "same but smaller", "without the rice", "double the chicken").
+Return ONE JSON object immediately — no prose, no fences.
+
+Use typical single-person servings when portions aren't stated (chicken breast ~150 g, rice ~150 g cooked, salad ~150 g, bread slice ~30 g).
+Apply any size words the user gives ("small", "double", "half", etc.) as multipliers.
+Total kcal must be plausible for one sitting — a snack should not be 2000 kcal; a full dinner should not be 200 kcal.
+
+${mealLangInstruction(lang)}
+
+JSON schema (output only this, nothing else):
+${mealJsonSchema(lang)}`;
+}
 
 export const MEAL_TIP_SYSTEM = `You are a supportive nutrition coach.
 Given the user's daily targets, what they've eaten so far today, and the meal they just logged, give ONE short actionable tip for what to eat next.
@@ -128,25 +169,10 @@ Return STRICT JSON only (no prose, no markdown fences), an array with one entry 
 
 For every row you MUST return all four macro numbers (so the caller can sanity-check), even if some were already known — just echo the known ones unchanged.`;
 
-export const MEAL_TEXT_SYSTEM = `You are a precise nutrition analyst.
-The user will describe a meal in words, or provide a base meal + modifier to adjust (e.g. "same but smaller", "without the rice", "double the chicken").
-Return ONE JSON object immediately — no prose, no fences.
-
-Use typical single-person servings when portions aren't stated (chicken breast ~150 g, rice ~150 g cooked, salad ~150 g, bread slice ~30 g).
-Apply any size words the user gives ("small", "double", "half", etc.) as multipliers.
-Total kcal must be plausible for one sitting — a snack should not be 2000 kcal; a full dinner should not be 200 kcal.
-
-"description" and every item "name" MUST be in Hebrew (עברית), even if the user wrote in English.
-Numeric values, "portion" units, and JSON keys stay in English/ASCII.
-"notes" in Hebrew; leave empty string if nothing notable.
-
-JSON schema (output only this, nothing else):
-{
-  "description": "תיאור קצר של הארוחה בעברית",
-  "items": [
-    { "name": "שם המאכל בעברית", "portion": "150 g", "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number }
-  ],
-  "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
-  "confidence": "low" | "medium" | "high",
-  "notes": "משפט קצר בעברית או מחרוזת ריקה"
-}`;
+/** Append a language instruction to any free-text system prompt. */
+export function withLanguage(system: string, lang: string): string {
+  if (lang === "he") {
+    return system + "\n\nYou MUST respond in Hebrew (עברית).";
+  }
+  return system + "\n\nRespond in English.";
+}

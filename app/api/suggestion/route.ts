@@ -19,7 +19,7 @@ import {
 import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
-import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+import { MEAL_TIP_SYSTEM, withLanguage } from "@/lib/prompts";
 import { HevyWorkout, workoutVolumeKg } from "@/lib/hevy";
 
 export const runtime = "nodejs";
@@ -94,7 +94,7 @@ async function generate(args: {
   const r = await anthropic().messages.create({
     model: CLAUDE_FAST_MODEL,
     max_tokens: 200,
-    system: MEAL_TIP_SYSTEM,
+    system: withLanguage(MEAL_TIP_SYSTEM, profile.language ?? "en"),
     messages: [{ role: "user", content: JSON.stringify(context) }],
   });
   return r.content
