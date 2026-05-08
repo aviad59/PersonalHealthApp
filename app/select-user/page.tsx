@@ -36,9 +36,20 @@ function Picker() {
   // (defaults to home). Profile's "switch user" link passes ?next=/profile.
   const next = searchParams?.get("next") || "/";
 
-  function pick(id: UserId) {
+  async function pick(id: UserId) {
     // 1 year, lax, available to client JS so the picker can switch.
     document.cookie = `${USER_COOKIE}=${id}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    // Check if this user has a profile; if not, send to onboarding.
+    try {
+      const res = await fetch("/api/profile");
+      const j = await res.json();
+      if (!j.profile) {
+        router.push("/onboarding");
+        return;
+      }
+    } catch {
+      // fall through to intended destination on network error
+    }
     router.push(next);
     router.refresh();
   }

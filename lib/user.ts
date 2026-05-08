@@ -7,7 +7,7 @@
 
 export const USER_COOKIE = "cowork_user";
 
-export type UserId = "idan" | "orly";
+export type UserId = "idan" | "orly" | "eran";
 
 export type UserConfig = {
   id: UserId;
@@ -20,12 +20,13 @@ export type UserConfig = {
 export const USERS: Record<UserId, UserConfig> = {
   idan: { id: "idan", displayName: "Idan", hasWorkouts: true },
   orly: { id: "orly", displayName: "Orly", hasWorkouts: false },
+  eran: { id: "eran", displayName: "Eran", hasWorkouts: true },
 };
 
-export const USER_LIST: UserConfig[] = [USERS.idan, USERS.orly];
+export const USER_LIST: UserConfig[] = [USERS.idan, USERS.orly, USERS.eran];
 
 export function isUserId(s: string | null | undefined): s is UserId {
-  return s === "idan" || s === "orly";
+  return s === "idan" || s === "orly" || s === "eran";
 }
 
 export function getUserConfig(id: UserId): UserConfig {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listWorkouts, workoutDurationMin, HevyWorkout } from "@/lib/hevy";
+import { listWorkouts, workoutDurationMin, hasHevyKey, HevyWorkout } from "@/lib/hevy";
 import {
   CachedWorkout,
   upsertWorkouts,
@@ -7,6 +7,7 @@ import {
   getCachedWorkouts,
   dateKey,
 } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,8 @@ const HEVY_PAGE_SIZE = 10;
 const REFRESH_PAGES = 5;
 
 export async function POST() {
-  if (!process.env.HEVY_API_KEY) {
+  const userId = getCurrentUserIdOrDefault();
+  if (!hasHevyKey(userId)) {
     return NextResponse.json(
       { ok: false, error: "HEVY_API_KEY not set" },
       { status: 400 },
@@ -25,7 +27,7 @@ export async function POST() {
   try {
     const collected: HevyWorkout[] = [];
     for (let page = 1; page <= REFRESH_PAGES; page++) {
-      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE });
+      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
       const ws = r.workouts ?? [];
       collected.push(...ws);
       if (ws.length < HEVY_PAGE_SIZE) break;
