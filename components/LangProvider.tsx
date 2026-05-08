@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { type Lang, readLangCookie } from "@/lib/i18n";
+import { type Lang, type TextSize, readLangCookie, readTextSizeCookie, applyTextSize } from "@/lib/i18n";
 
 const LangContext = createContext<Lang>("en");
 
@@ -17,6 +17,8 @@ export default function LangProvider({ children }: { children: React.ReactNode }
     setLang(l);
     document.documentElement.lang = l;
     document.documentElement.dir = l === "he" ? "rtl" : "ltr";
+
+    applyTextSize(readTextSizeCookie());
   }, []);
 
   useEffect(() => {
@@ -26,8 +28,15 @@ export default function LangProvider({ children }: { children: React.ReactNode }
       document.documentElement.lang = l;
       document.documentElement.dir = l === "he" ? "rtl" : "ltr";
     }
+    function onTextSizeChange(e: Event) {
+      applyTextSize((e as CustomEvent<TextSize>).detail);
+    }
     window.addEventListener("langchange", onLangChange);
-    return () => window.removeEventListener("langchange", onLangChange);
+    window.addEventListener("textsizechange", onTextSizeChange);
+    return () => {
+      window.removeEventListener("langchange", onLangChange);
+      window.removeEventListener("textsizechange", onTextSizeChange);
+    };
   }, []);
 
   return <LangContext.Provider value={lang}>{children}</LangContext.Provider>;

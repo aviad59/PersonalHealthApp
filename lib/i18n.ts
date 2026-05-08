@@ -1,4 +1,5 @@
 export type Lang = "en" | "he";
+export type TextSize = "sm" | "md" | "lg";
 
 const en = {
   // BottomNav
@@ -171,6 +172,11 @@ const en = {
   goal_cut: "Cut",
   goal_bulk: "Bulk",
   goal_maintain: "Maintain",
+  // Text size
+  profile_text_size: "Text size",
+  profile_text_sm: "Small",
+  profile_text_md: "Default",
+  profile_text_lg: "Large",
 };
 
 const he: typeof en = {
@@ -344,6 +350,11 @@ const he: typeof en = {
   goal_cut: "הורדת שומן",
   goal_bulk: "עלייה במסה",
   goal_maintain: "שמירת משקל",
+  // Text size
+  profile_text_size: "גודל טקסט",
+  profile_text_sm: "קטן",
+  profile_text_md: "ברירת מחדל",
+  profile_text_lg: "גדול",
 };
 
 export type TKey = keyof typeof en;
@@ -362,4 +373,25 @@ export function readLangCookie(): Lang {
 
 export function setLangCookie(lang: Lang): void {
   document.cookie = `lang=${lang}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
+export function readTextSizeCookie(): TextSize {
+  if (typeof document === "undefined") return "md";
+  const m = document.cookie.match(/(?:^|;\s*)text_size=([^;]+)/);
+  const v = m?.[1];
+  return v === "sm" || v === "lg" ? v : "md";
+}
+
+export function setTextSizeCookie(size: TextSize): void {
+  document.cookie = `text_size=${size}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
+const FONT_SCALE: Record<TextSize, string> = {
+  sm: "87.5%",
+  md: "",
+  lg: "112.5%",
+};
+
+export function applyTextSize(size: TextSize): void {
+  document.documentElement.style.fontSize = FONT_SCALE[size];
 }

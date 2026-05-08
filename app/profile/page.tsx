@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ACTIVITY_LABELS } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
 import { useLang } from "@/components/LangProvider";
-import { t, TKey } from "@/lib/i18n";
+import { t, TKey, type TextSize, readTextSizeCookie, setTextSizeCookie, applyTextSize } from "@/lib/i18n";
 
 type ActivityKey = keyof typeof ACTIVITY_LABELS;
 type Resolution = "keep" | "replace" | "merge";
@@ -33,6 +33,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [langSaving, setLangSaving] = useState(false);
+  const [textSize, setTextSize] = useState<TextSize>("md");
   const [profile, setProfile] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export default function ProfilePage() {
   const [applyToAll, setApplyToAll] = useState<Resolution | null>(null);
 
   useEffect(() => {
+    setTextSize(readTextSizeCookie());
     (async () => {
       const r = await fetch("/api/profile", { cache: "no-store" });
       const j = await r.json();
@@ -98,6 +100,13 @@ export default function ProfilePage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function changeTextSize(size: TextSize) {
+    setTextSize(size);
+    setTextSizeCookie(size);
+    applyTextSize(size);
+    window.dispatchEvent(new CustomEvent("textsizechange", { detail: size }));
   }
 
   async function setLanguage(newLang: "en" | "he") {
@@ -256,6 +265,24 @@ export default function ProfilePage() {
           </button>
         </div>
         {langSaving && <p className="text-xs text-white/40">{t(lang, "profile_lang_saving")}</p>}
+      </section>
+
+      {/* Text size picker */}
+      <section className="card p-5 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_text_size")}</h2>
+        <div className="grid grid-cols-3 gap-2">
+          {(["sm", "md", "lg"] as const).map((size) => (
+            <button
+              key={size}
+              onClick={() => changeTextSize(size)}
+              className={`rounded-xl py-3 font-medium transition-colors ${
+                textSize === size ? "bg-accent-brand text-white" : "bg-bg-elev border border-border text-white/70"
+              } ${size === "sm" ? "text-sm" : size === "lg" ? "text-lg" : "text-base"}`}
+            >
+              {t(lang, `profile_text_${size}` as TKey)}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="card p-5 space-y-4">
