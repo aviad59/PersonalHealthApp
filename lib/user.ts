@@ -20,7 +20,7 @@ export type UserConfig = {
 export const USERS: Record<UserId, UserConfig> = {
   idan: { id: "idan", displayName: "Idan", hasWorkouts: true },
   orly: { id: "orly", displayName: "Orly", hasWorkouts: false },
-  eran: { id: "eran", displayName: "Eran", hasWorkouts: true },
+  eran: { id: "eran", displayName: "Eran", hasWorkouts: false },
 };
 
 export const USER_LIST: UserConfig[] = [USERS.idan, USERS.orly, USERS.eran];
