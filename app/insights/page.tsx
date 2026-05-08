@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import InsightCard from "@/components/InsightCard";
 import { safeFetchJson } from "@/lib/fetch-json";
+import { useLang } from "@/components/LangProvider";
+import { t, TKey } from "@/lib/i18n";
 
 type Insight = {
   id: number;
@@ -15,6 +17,7 @@ type Insight = {
 };
 
 export default function InsightsPage() {
+  const lang = useLang();
   const [filter, setFilter] = useState<"all" | "daily" | "weekly">("all");
   const [items, setItems] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +66,7 @@ export default function InsightsPage() {
   return (
     <div className="px-5 pt-6 pb-10 space-y-5">
       <div className="flex items-end justify-between">
-        <h1 className="text-2xl font-bold">Insights</h1>
+        <h1 className="text-2xl font-bold">{t(lang, "insights_title")}</h1>
       </div>
 
       <div className="flex gap-2">
@@ -72,14 +75,14 @@ export default function InsightsPage() {
           disabled={!!generating}
           className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
-          {generating === "daily" ? "Generating…" : "Generate daily"}
+          {generating === "daily" ? t(lang, "insights_generating") : t(lang, "insights_gen_daily")}
         </button>
         <button
           onClick={() => generate("weekly")}
           disabled={!!generating}
           className="flex-1 rounded-xl bg-bg-elev border border-border py-3 text-sm font-semibold disabled:opacity-40"
         >
-          {generating === "weekly" ? "Generating…" : "Generate weekly"}
+          {generating === "weekly" ? t(lang, "insights_generating") : t(lang, "insights_gen_weekly")}
         </button>
       </div>
 
@@ -94,7 +97,7 @@ export default function InsightsPage() {
                 : "bg-bg-elev border-border text-white/60"
             }`}
           >
-            {k[0].toUpperCase() + k.slice(1)}
+            {t(lang, `insights_${k}` as TKey)}
           </button>
         ))}
       </div>
@@ -102,10 +105,10 @@ export default function InsightsPage() {
       {err && <div className="text-sm text-red-400">{err}</div>}
 
       {loading ? (
-        <div className="text-white/50 text-sm">Loading…</div>
+        <div className="text-white/50 text-sm">{t(lang, "insights_loading")}</div>
       ) : items.length === 0 ? (
         <div className="card p-6 text-center text-sm text-white/60">
-          No insights yet. Generate your first one above.
+          {t(lang, "insights_empty")}
         </div>
       ) : (
         <div className="space-y-3">

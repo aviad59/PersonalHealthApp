@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import LangProvider from "@/components/LangProvider";
 
 export const metadata: Metadata = {
   title: "Health",
@@ -24,10 +25,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-bg text-white">
-        <div className="mx-auto max-w-md min-h-dvh flex flex-col">
-          <main className="flex-1 pb-24 safe-top">{children}</main>
-          <BottomNav />
-        </div>
+        <LangProvider>
+          <div className="mx-auto max-w-md min-h-dvh flex flex-col">
+            <main className="flex-1 pb-24 safe-top">{children}</main>
+            <BottomNav />
+          </div>
+        </LangProvider>
       </body>
     </html>
   );

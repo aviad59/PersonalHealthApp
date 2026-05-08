@@ -13,6 +13,7 @@ import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
 import {
   DAILY_INSIGHT_SYSTEM,
   WEEKLY_INSIGHT_SYSTEM,
+  withLanguage,
 } from "@/lib/prompts";
 import { listWorkouts, summarizeWeek, workoutVolumeKg, HevyWorkout } from "@/lib/hevy";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
@@ -169,7 +170,8 @@ export async function POST(req: NextRequest) {
     context.last_7_days = recent;
   }
 
-  const system = type === "weekly" ? WEEKLY_INSIGHT_SYSTEM : DAILY_INSIGHT_SYSTEM;
+  const baseSystem = type === "weekly" ? WEEKLY_INSIGHT_SYSTEM : DAILY_INSIGHT_SYSTEM;
+  const system = withLanguage(baseSystem, profile.language ?? "en");
 
   let parsed: { headline: string; body: string; tags?: string[] };
   try {

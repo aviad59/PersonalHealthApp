@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, getMealsByDate, getProfile } from "@/lib/db";
 import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
-import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+import { MEAL_TIP_SYSTEM, withLanguage } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
@@ -78,7 +78,7 @@ export async function POST(
     const resp = await anthropic().messages.create({
       model: CLAUDE_FAST_MODEL,
       max_tokens: 150,
-      system: MEAL_TIP_SYSTEM,
+      system: withLanguage(MEAL_TIP_SYSTEM, profile.language ?? "en"),
       messages: [{ role: "user", content: JSON.stringify(context) }],
     });
     tip = resp.content

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLang } from "@/components/LangProvider";
+import { t } from "@/lib/i18n";
 
 type Entry = {
   date: string;
@@ -33,6 +35,7 @@ export default function WeightLogSection({
 }: {
   onProfileMaybeChanged?: () => void;
 }) {
+  const lang = useLang();
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export default function WeightLogSection({
   if (loading) {
     return (
       <section className="card p-5">
-        <div className="text-sm text-white/60">Loading weight log...</div>
+        <div className="text-sm text-white/60">{t(lang, "weight_title")}…</div>
       </section>
     );
   }
@@ -124,7 +127,7 @@ export default function WeightLogSection({
     <section className="card p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-          Weight log
+          {t(lang, "weight_title")}
         </h2>
         {trend && trend.count > 0 && (
           <span className="text-[11px] text-white/40">
@@ -139,7 +142,7 @@ export default function WeightLogSection({
           inputMode="decimal"
           value={input}
           onChange={(e) => setInput(e.target.value.replace(/[^\d.]/g, ""))}
-          placeholder="Today's weight (kg)"
+          placeholder={t(lang, "weight_today_placeholder")}
           className="flex-1 rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] focus:outline-none focus:border-accent-brand"
         />
         <button
@@ -147,7 +150,7 @@ export default function WeightLogSection({
           disabled={busy || !input}
           className="rounded-xl bg-accent-brand px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
-          Log
+          {t(lang, "weight_log_btn")}
         </button>
       </div>
 
@@ -156,10 +159,10 @@ export default function WeightLogSection({
       {/* Trend stats */}
       {trend && trend.count > 0 && (
         <div className="grid grid-cols-3 gap-2 text-center">
-          <Stat label="7-day avg" value={trend.ma7_kg != null ? `${trend.ma7_kg} kg` : "—"} />
-          <Stat label="28-day avg" value={trend.ma28_kg != null ? `${trend.ma28_kg} kg` : "—"} />
+          <Stat label={t(lang, "weight_7day")} value={trend.ma7_kg != null ? `${trend.ma7_kg} kg` : "—"} />
+          <Stat label={t(lang, "weight_28day")} value={trend.ma28_kg != null ? `${trend.ma28_kg} kg` : "—"} />
           <Stat
-            label="Trend / wk"
+            label={t(lang, "weight_trend")}
             value={
               trend.slope_kg_per_week != null
                 ? `${trend.slope_kg_per_week > 0 ? "+" : ""}${trend.slope_kg_per_week} kg`
@@ -176,7 +179,7 @@ export default function WeightLogSection({
       {trend?.suggestion && !applied && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
           <div className="text-[11px] uppercase tracking-wider text-amber-400">
-            Calorie adjustment suggested
+            {t(lang, "weight_cal_adj")}
           </div>
           <div className="text-sm text-white/80">{trend.suggestion.reason}</div>
           <button
@@ -185,15 +188,15 @@ export default function WeightLogSection({
             className="w-full rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 py-2 text-xs font-semibold disabled:opacity-40"
           >
             {busy
-              ? "Applying..."
-              : `Apply ${trend.suggestion.delta_kcal > 0 ? "+" : ""}${trend.suggestion.delta_kcal} kcal/day`}
+              ? t(lang, "weight_applying")
+              : `${t(lang, "weight_apply")} ${trend.suggestion.delta_kcal > 0 ? "+" : ""}${trend.suggestion.delta_kcal} ${t(lang, "weight_kcal_day")}`}
           </button>
         </div>
       )}
 
       {applied && (
         <div className="rounded-xl border border-green-500/40 bg-green-500/5 p-3 text-sm text-green-300">
-          Updated to {applied.kcal} kcal/day, {applied.carbs} g carbs.
+          {t(lang, "weight_updated_prefix")} {applied.kcal} kcal/day, {applied.carbs} {t(lang, "weight_updated_carbs")}
         </div>
       )}
 

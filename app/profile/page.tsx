@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ACTIVITY_LABELS } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
+import { useLang } from "@/components/LangProvider";
+import { t, TKey } from "@/lib/i18n";
 
 type ActivityKey = keyof typeof ACTIVITY_LABELS;
 type Resolution = "keep" | "replace" | "merge";
@@ -27,8 +29,10 @@ type Conflict = {
 };
 
 export default function ProfilePage() {
+  const lang = useLang();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [langSaving, setLangSaving] = useState(false);
   const [profile, setProfile] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -93,6 +97,20 @@ export default function ProfilePage() {
       setErr(e.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function setLanguage(newLang: "en" | "he") {
+    setLangSaving(true);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ language: newLang }),
+      });
+      window.dispatchEvent(new CustomEvent("langchange", { detail: newLang }));
+    } finally {
+      setLangSaving(false);
     }
   }
 
@@ -188,15 +206,15 @@ export default function ProfilePage() {
     setApplyToAll(null); // user diverged from the blanket policy
   }
 
-  if (loading) return <div className="p-6 text-white/60">Loading…</div>;
+  if (loading) return <div className="p-6 text-white/60">{t(lang, "profile_saving")}</div>;
 
   if (!profile) {
     return (
       <div className="px-5 pt-10">
-        <h1 className="text-2xl font-bold mb-2">Profile</h1>
-        <p className="text-sm text-white/60 mb-6">You haven&apos;t set up your profile yet.</p>
+        <h1 className="text-2xl font-bold mb-2">{t(lang, "profile_title")}</h1>
+        <p className="text-sm text-white/60 mb-6">{t(lang, "profile_no_profile")}</p>
         <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-4 py-2 text-sm font-semibold">
-          Run onboarding
+          {t(lang, "profile_run_onboarding")}
         </Link>
       </div>
     );
@@ -210,55 +228,81 @@ export default function ProfilePage() {
 
   return (
     <div className="px-5 pt-6 pb-6 space-y-6">
-      <h1 className="text-2xl font-bold">Profile</h1>
+      <h1 className="text-2xl font-bold">{t(lang, "profile_title")}</h1>
 
       <CurrentUserCard />
 
+      {/* Language toggle */}
+      <section className="card p-5 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_language")}</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setLanguage("en")}
+            disabled={langSaving}
+            className={`rounded-xl py-3 text-sm font-medium disabled:opacity-40 ${
+              lang === "en" ? "bg-accent-brand text-white" : "bg-bg-elev border border-border text-white/70"
+            }`}
+          >
+            English
+          </button>
+          <button
+            onClick={() => setLanguage("he")}
+            disabled={langSaving}
+            className={`rounded-xl py-3 text-sm font-medium disabled:opacity-40 ${
+              lang === "he" ? "bg-accent-brand text-white" : "bg-bg-elev border border-border text-white/70"
+            }`}
+          >
+            עברית
+          </button>
+        </div>
+        {langSaving && <p className="text-xs text-white/40">{t(lang, "profile_lang_saving")}</p>}
+      </section>
+
       <section className="card p-5 space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Body metrics</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_body_metrics")}</h2>
         <NumField label="Age" value={profile.age} onChange={(v) => update("age", v)} />
         <div>
-          <label className="block text-xs font-medium text-white/60 mb-1.5">Sex</label>
+          <label className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "profile_sex")}</label>
           <div className="grid grid-cols-2 gap-2">
-            <SexBtn active={profile.sex === "male"} onClick={() => update("sex", "male")}>Male</SexBtn>
-            <SexBtn active={profile.sex === "female"} onClick={() => update("sex", "female")}>Female</SexBtn>
+            <SexBtn active={profile.sex === "male"} onClick={() => update("sex", "male")}>{t(lang, "profile_male")}</SexBtn>
+            <SexBtn active={profile.sex === "female"} onClick={() => update("sex", "female")}>{t(lang, "profile_female")}</SexBtn>
           </div>
         </div>
-        <NumField label="Height (cm)" value={profile.height_cm} onChange={(v) => update("height_cm", v)} />
-        <NumField label="Weight (kg)" value={profile.weight_kg} onChange={(v) => update("weight_kg", v)} />
-        <NumField label="Neck (cm)" value={profile.neck_cm} onChange={(v) => update("neck_cm", v)} />
-        <NumField label="Waist (cm)" value={profile.waist_cm} onChange={(v) => update("waist_cm", v)} />
+        <NumField label={t(lang, "profile_height")} value={profile.height_cm} onChange={(v) => update("height_cm", v)} />
+        <NumField label={t(lang, "profile_weight")} value={profile.weight_kg} onChange={(v) => update("weight_kg", v)} />
+        <NumField label={t(lang, "profile_neck")} value={profile.neck_cm} onChange={(v) => update("neck_cm", v)} />
+        <NumField label={t(lang, "profile_waist")} value={profile.waist_cm} onChange={(v) => update("waist_cm", v)} />
         {profile.sex === "female" && (
-          <NumField label="Hips (cm)" value={profile.hips_cm ?? ""} onChange={(v) => update("hips_cm", v)} />
+          <NumField label={t(lang, "profile_hips")} value={profile.hips_cm ?? ""} onChange={(v) => update("hips_cm", v)} />
         )}
         <div>
-          <label className="block text-xs font-medium text-white/60 mb-1.5">Activity</label>
+          <label className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "profile_activity")}</label>
           <select
             value={profile.activity_level}
             onChange={(e) => update("activity_level", e.target.value as ActivityKey)}
             className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-sm"
           >
             {(Object.keys(ACTIVITY_LABELS) as ActivityKey[]).map((k) => (
-              <option key={k} value={k}>{ACTIVITY_LABELS[k]}</option>
+              <option key={k} value={k}>{t(lang, `act_${k}` as TKey)}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/60 mb-1.5">Goal mode</label>
+          <label className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "profile_goal_mode")}</label>
           <select
             value={profile.goal_mode ?? "recomp"}
             onChange={(e) => update("goal_mode", e.target.value)}
             className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-sm"
           >
-            <option value="recomp">Recomp</option>
-            <option value="cut">Cut</option>
-            <option value="bulk">Bulk</option>
-            <option value="maintain">Maintain</option>
+            <option value="recomp">{t(lang, "goal_recomp")}</option>
+            <option value="cut">{t(lang, "goal_cut")}</option>
+            <option value="bulk">{t(lang, "goal_bulk")}</option>
+            <option value="maintain">{t(lang, "goal_maintain")}</option>
           </select>
         </div>
         <div>
           <label className="block text-xs font-medium text-white/60 mb-1.5">
-            Workouts per week
+            {t(lang, "profile_workouts_per_week")}
           </label>
           <div className="grid grid-cols-7 gap-1.5">
             {[1, 2, 3, 4, 5, 6, 7].map((n) => (
@@ -276,23 +320,23 @@ export default function ProfilePage() {
             ))}
           </div>
           <div className="text-[11px] text-white/40 mt-1.5">
-            Overrides the activity-based default. Recovery & weekly insights use this number.
+            {t(lang, "profile_workouts_note")}
           </div>
         </div>
       </section>
 
       <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Current goals</h2>
-        <Row k="Body fat" v={profile.body_fat_pct ? `${profile.body_fat_pct}%` : "—"} />
-        <Row k="Lean mass" v={profile.lean_mass_kg ? `${profile.lean_mass_kg} kg` : "—"} />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_current_goals")}</h2>
+        <Row k={t(lang, "profile_body_fat")} v={profile.body_fat_pct ? `${profile.body_fat_pct}%` : "—"} />
+        <Row k={t(lang, "profile_lean_mass")} v={profile.lean_mass_kg ? `${profile.lean_mass_kg} kg` : "—"} />
         <Row k="BMR" v={profile.bmr ? `${profile.bmr} kcal` : "—"} />
         <Row k="TDEE" v={profile.tdee ? `${profile.tdee} kcal` : "—"} />
         <div className="h-px bg-border my-1" />
-        <Row k="Calories" v={`${profile.goal_calories} kcal`} emphasize />
-        <Row k="Protein" v={`${profile.goal_protein_g} g`} emphasize />
-        <Row k="Fat" v={`${profile.goal_fat_g} g`} emphasize />
-        <Row k="Carbs" v={`${profile.goal_carbs_g} g`} emphasize />
-        <Row k="Workouts / wk" v={`${profile.weekly_workout_target}`} />
+        <Row k={t(lang, "macro_calories")} v={`${profile.goal_calories} kcal`} emphasize />
+        <Row k={t(lang, "macro_protein")} v={`${profile.goal_protein_g} g`} emphasize />
+        <Row k={t(lang, "macro_fat")} v={`${profile.goal_fat_g} g`} emphasize />
+        <Row k={t(lang, "macro_carbs")} v={`${profile.goal_carbs_g} g`} emphasize />
+        <Row k={t(lang, "profile_workouts_wk")} v={`${profile.weekly_workout_target}`} />
       </section>
 
       <WeightLogSection
@@ -305,15 +349,15 @@ export default function ProfilePage() {
 
       {preview && (
         <section className="card p-5 space-y-3 border-accent-brand/40">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-brand">New targets (preview)</h2>
-          <Row k="Body fat" v={`${preview.body_fat_pct}%`} />
-          <Row k="Lean mass" v={`${preview.lean_mass_kg} kg`} />
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-brand">{t(lang, "profile_new_targets")}</h2>
+          <Row k={t(lang, "profile_body_fat")} v={`${preview.body_fat_pct}%`} />
+          <Row k={t(lang, "profile_lean_mass")} v={`${preview.lean_mass_kg} kg`} />
           <Row k="TDEE" v={`${preview.tdee} kcal`} />
-          <Row k="Calories" v={`${preview.goal_calories} kcal`} emphasize />
-          <Row k="Protein" v={`${preview.goal_protein_g} g`} emphasize />
-          <Row k="Fat" v={`${preview.goal_fat_g} g`} emphasize />
-          <Row k="Carbs" v={`${preview.goal_carbs_g} g`} emphasize />
-          <Row k="Workouts / wk" v={`${preview.weekly_workout_target}`} />
+          <Row k={t(lang, "macro_calories")} v={`${preview.goal_calories} kcal`} emphasize />
+          <Row k={t(lang, "macro_protein")} v={`${preview.goal_protein_g} g`} emphasize />
+          <Row k={t(lang, "macro_fat")} v={`${preview.goal_fat_g} g`} emphasize />
+          <Row k={t(lang, "macro_carbs")} v={`${preview.goal_carbs_g} g`} emphasize />
+          <Row k={t(lang, "profile_workouts_wk")} v={`${preview.weekly_workout_target}`} />
         </section>
       )}
 
@@ -324,14 +368,14 @@ export default function ProfilePage() {
           onClick={recalculate}
           className="flex-1 rounded-xl border border-border bg-bg-elev py-3 text-sm font-medium"
         >
-          Preview recalc
+          {t(lang, "profile_preview")}
         </button>
         <button
           onClick={save}
           disabled={saving}
           className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
         >
-          {saving ? "Saving…" : "Save & recalculate"}
+          {saving ? t(lang, "profile_saving") : t(lang, "profile_save")}
         </button>
       </div>
 
@@ -611,6 +655,7 @@ function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean })
  * is already user-scoped server-side).
  */
 function CurrentUserCard() {
+  const lang = useLang();
   const [name, setName] = useState<string>("");
   useEffect(() => {
     const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
@@ -626,7 +671,7 @@ function CurrentUserCard() {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-white/40">
-          Signed in as
+          {t(lang, "profile_signed_in")}
         </div>
         <div className="text-sm font-semibold truncate">{name || "—"}</div>
       </div>
@@ -634,7 +679,7 @@ function CurrentUserCard() {
         href="/select-user?next=/profile"
         className="text-xs font-medium text-accent-brand"
       >
-        Switch user
+        {t(lang, "profile_switch_user")}
       </Link>
     </section>
   );
