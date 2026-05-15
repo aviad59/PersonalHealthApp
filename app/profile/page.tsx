@@ -80,13 +80,33 @@ export default function ProfilePage() {
     setSaving(true);
     setErr(null);
     try {
+      // Catch the common "female without hips" case up-front so we can
+      // show a clear message instead of a server-side Zod "validation" error.
+      if (profile.sex === "female" && !Number.isFinite(Number(profile.hips_cm))) {
+        throw new Error(
+          "Hips (cm) is required when sex is female — please fill it in.",
+        );
+      }
       const res = await fetch("/api/profile", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(toPayload(profile)),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "save failed");
+      if (!res.ok) {
+        // Surface the offending field(s) from the server's Zod issues so
+        // the user knows WHAT went wrong, not just "validation".
+        if (j.error === "validation" && Array.isArray(j.issues) && j.issues.length) {
+          const lines = j.issues
+            .map((iss: any) => {
+              const path = Array.isArray(iss.path) ? iss.path.join(".") : "";
+              return `${path}: ${iss.message}`;
+            })
+            .join(" · ");
+          throw new Error(lines || "validation");
+        }
+        throw new Error(j.error || "save failed");
+      }
       setProfile(j.profile);
       setPreview(null);
     } catch (e: any) {

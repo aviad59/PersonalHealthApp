@@ -11,6 +11,7 @@ import {
   getMealsByDateLite,
   getCachedWorkoutsSince,
   getSuggestion,
+  getRecentSuggestions,
   upsertSuggestion,
   todayStr,
   daysAgoStr,
@@ -73,8 +74,9 @@ async function generate(args: {
   totals: Totals;
   todaysMealsBrief: { description: string | null; calories: number | null; protein_g: number | null }[];
   todaysWorkout: HevyWorkout | null;
+  recentSuggestions: string[];
 }): Promise<string> {
-  const { profile, totals, todaysMealsBrief, todaysWorkout } = args;
+  const { profile, totals, todaysMealsBrief, todaysWorkout, recentSuggestions } = args;
   const context = {
     targets: {
       calories: profile.goal_calories,
@@ -90,10 +92,17 @@ async function generate(args: {
           volume_kg: workoutVolumeKg(todaysWorkout),
         }
       : null,
+    // Anti-repetition context — the model is instructed to NOT pick a meal
+    // similar to anything in this list.
+    recentSuggestions,
   };
   const r = await anthropic().messages.create({
     model: CLAUDE_FAST_MODEL,
     max_tokens: 200,
+    // Push variety: max temperature + top_p so the model stops collapsing
+    // onto its highest-prior answer ("grilled chicken + vegetables").
+    temperature: 1,
+    top_p: 0.95,
     system: MEAL_TIP_SYSTEM,
     messages: [{ role: "user", content: JSON.stringify(context) }],
   });
@@ -148,6 +157,11 @@ export async function GET() {
       return Number.isFinite(t) && dateKey(new Date(t)) === date;
     }) ?? null;
 
+  // Pull the last 5 suggestion bodies so the model can avoid repeating
+  // itself. Includes today's previous suggestion if one already exists.
+  const recent = await getRecentSuggestions(userId, 5);
+  const recentSuggestions = recent.map((s) => s.body);
+
   let body: string;
   try {
     body = await generate({
@@ -159,6 +173,7 @@ export async function GET() {
         protein_g: m.protein_g,
       })),
       todaysWorkout,
+      recentSuggestions,
     });
   } catch (e: any) {
     if (cached) {

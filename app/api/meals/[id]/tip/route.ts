@@ -6,7 +6,7 @@
 // errors, it fails quietly — the meal is already saved.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, getMealsByDate, getProfile } from "@/lib/db";
+import { getDb, getMealsByDate, getProfile, getRecentSuggestions } from "@/lib/db";
 import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
 import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
@@ -56,6 +56,9 @@ export async function POST(
     { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
   );
 
+  // Anti-repetition context so the next-meal tip doesn't keep proposing
+  // the same archetype every save.
+  const recent = await getRecentSuggestions(userId, 5);
   const context = {
     targets: {
       calories: profile.goal_calories,
@@ -71,6 +74,7 @@ export async function POST(
       fat_g: row.fat_g,
       carbs_g: row.carbs_g,
     },
+    recentSuggestions: recent.map((s) => s.body),
   };
 
   let tip: string | null = null;
@@ -78,6 +82,8 @@ export async function POST(
     const resp = await anthropic().messages.create({
       model: CLAUDE_FAST_MODEL,
       max_tokens: 150,
+      temperature: 1,
+      top_p: 0.95,
       system: MEAL_TIP_SYSTEM,
       messages: [{ role: "user", content: JSON.stringify(context) }],
     });

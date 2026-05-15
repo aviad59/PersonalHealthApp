@@ -600,6 +600,25 @@ export async function getSuggestion(
   return row ? (row as unknown as DaySuggestion) : null;
 }
 
+/** Return the last `limit` suggestion bodies for this user, newest first.
+ *  Used as anti-repetition context so the model doesn't keep suggesting
+ *  the same grilled-chicken-and-veg every day. */
+export async function getRecentSuggestions(
+  userId: string,
+  limit = 5,
+): Promise<DaySuggestion[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at
+            FROM user_suggestions
+           WHERE user_id = ?
+           ORDER BY date DESC
+           LIMIT ?`,
+    args: [userId, limit],
+  });
+  return res.rows as unknown as DaySuggestion[];
+}
+
 export async function upsertSuggestion(
   userId: string,
   s: Omit<DaySuggestion, "created_at" | "updated_at">,

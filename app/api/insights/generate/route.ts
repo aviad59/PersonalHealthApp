@@ -4,6 +4,7 @@ import {
   getProfile,
   getMealsByDate,
   getMealsSince,
+  getInsights,
   todayStr,
   daysAgoStr,
   dateKey,
@@ -38,6 +39,16 @@ function dayTotals(meals: Meal[]) {
   );
 }
 
+function safeParseTags(s: string | null): string[] {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
 async function safeLoadWorkouts(): Promise<HevyWorkout[]> {
   if (!process.env.HEVY_API_KEY) return [];
   try {
@@ -64,10 +75,13 @@ export async function POST(req: NextRequest) {
 
   const today = todayStr();
 
-  const [todayMeals, weekMeals, workouts] = await Promise.all([
+  const [todayMeals, weekMeals, workouts, recentInsights] = await Promise.all([
     getMealsByDate(userId, today),
     getMealsSince(userId, daysAgoStr(6)),
     cfg.hasWorkouts ? safeLoadWorkouts() : Promise.resolve([] as HevyWorkout[]),
+    // Pull the last 5 insights so the model can deliberately pick a
+    // different angle than what we already said this week.
+    getInsights(userId, 5),
   ]);
 
   const workoutKey = (w: HevyWorkout): string => {
@@ -114,6 +128,13 @@ export async function POST(req: NextRequest) {
       })),
     },
     zepp: null as null | any,
+    // What we've already said recently — model is instructed to NOT
+    // repeat the same lead/angle from these.
+    recentInsights: recentInsights.map((i) => ({
+      headline: i.headline,
+      tags: i.tags_json ? safeParseTags(i.tags_json) : [],
+      for_date: i.for_date,
+    })),
   };
 
   if (type === "weekly") {
@@ -176,6 +197,10 @@ export async function POST(req: NextRequest) {
     const resp = await anthropic().messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 500,
+      // Higher temperature + top_p so the lead/angle varies across runs
+      // even when underlying numbers haven't shifted much.
+      temperature: 1,
+      top_p: 0.95,
       system,
       messages: [{ role: "user", content: JSON.stringify(context, null, 2) }],
     });
