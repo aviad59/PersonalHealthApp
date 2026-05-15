@@ -114,3 +114,20 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, profile: await getProfile(userId) });
 }
+
+export async function PATCH(req: NextRequest) {
+  const json = await req.json().catch(() => ({}));
+  const { language } = json;
+  if (language !== "en" && language !== "he") {
+    return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
+  }
+  const userId = getCurrentUserIdOrDefault();
+  const db = await getDb();
+  await db.execute({
+    sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",
+    args: [language, userId],
+  });
+  const resp = NextResponse.json({ ok: true });
+  resp.cookies.set("lang", language, { path: "/", maxAge: 31536000, sameSite: "lax" });
+  return resp;
+}

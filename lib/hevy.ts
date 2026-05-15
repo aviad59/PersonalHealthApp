@@ -9,16 +9,26 @@ import { dateKey } from "@/lib/db";
 
 const BASE = "https://api.hevyapp.com/v1";
 
-function key(): string {
+export function hevyKey(userId?: string): string {
+  if (userId === "eran") {
+    const k = process.env.HEVY_API_KEY_ERAN;
+    if (!k) throw new Error("HEVY_API_KEY_ERAN is not set. Add it to .env.local");
+    return k;
+  }
   const k = process.env.HEVY_API_KEY;
   if (!k) throw new Error("HEVY_API_KEY is not set. Add it to .env.local");
   return k;
 }
 
-async function get<T>(path: string): Promise<T> {
+export function hasHevyKey(userId?: string): boolean {
+  if (userId === "eran") return !!process.env.HEVY_API_KEY_ERAN;
+  return !!process.env.HEVY_API_KEY;
+}
+
+async function get<T>(path: string, userId?: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: {
-      "api-key": key(),
+      "api-key": hevyKey(userId),
       "accept": "application/json",
     },
     // Next.js: don't cache — Hevy data is user-specific & lightweight.
@@ -68,14 +78,14 @@ export type WorkoutsResponse = {
   workouts: HevyWorkout[];
 };
 
-export async function listWorkouts(opts: { page?: number; pageSize?: number } = {}): Promise<WorkoutsResponse> {
+export async function listWorkouts(opts: { page?: number; pageSize?: number } = {}, userId?: string): Promise<WorkoutsResponse> {
   const page = opts.page ?? 1;
   const pageSize = opts.pageSize ?? 10;
-  return get<WorkoutsResponse>(`/workouts?page=${page}&pageSize=${pageSize}`);
+  return get<WorkoutsResponse>(`/workouts?page=${page}&pageSize=${pageSize}`, userId);
 }
 
-export async function workoutCount(): Promise<{ workout_count: number }> {
-  return get<{ workout_count: number }>(`/workouts/count`);
+export async function workoutCount(userId?: string): Promise<{ workout_count: number }> {
+  return get<{ workout_count: number }>(`/workouts/count`, userId);
 }
 
 // --- Lightweight derivations ---

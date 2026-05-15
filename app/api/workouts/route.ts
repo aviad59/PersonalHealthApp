@@ -4,8 +4,10 @@ import {
   summarizeWeek,
   workoutVolumeKg,
   workoutDurationMin,
+  hasHevyKey,
   HevyWorkout,
 } from "@/lib/hevy";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import {
   CachedWorkout,
   getCachedWorkouts,
@@ -33,7 +35,7 @@ function topSet(sets: any[]) {
   return best ? { weight_kg: best.weight_kg, reps: best.reps } : null;
 }
 
-async function refreshCache(): Promise<{
+async function refreshCache(userId: string): Promise<{
   pulled: number;
   workouts: HevyWorkout[];
   error?: string;
@@ -41,7 +43,7 @@ async function refreshCache(): Promise<{
   try {
     const collected: HevyWorkout[] = [];
     for (let page = 1; page <= REFRESH_PAGES; page++) {
-      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE });
+      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
       const ws = r.workouts ?? [];
       collected.push(...ws);
       // Stop early if we've reached the end of history
@@ -103,7 +105,8 @@ function buildResponse(workouts: HevyWorkout[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const haveKey = !!process.env.HEVY_API_KEY;
+  const userId = getCurrentUserIdOrDefault();
+  const haveKey = hasHevyKey(userId);
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";
   const limit = Number(url.searchParams.get("limit") ?? "20");
@@ -147,7 +150,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const refresh = await refreshCache();
+  const refresh = await refreshCache(userId);
   const fresh = await getCachedWorkouts(50);
   const useRows = fresh.length > 0 ? fresh : cachedRows;
   const built = buildResponse(cacheRowsToHevy(useRows).slice(0, limit));

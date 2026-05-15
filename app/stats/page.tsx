@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useLang } from "@/components/LangProvider";
+import { t, Lang } from "@/lib/i18n";
 
 type DayBucket = {
   date: string;
@@ -25,13 +27,10 @@ type Stats = {
   highestCal: DayBucket | null;
 };
 
-const RANGES = [
-  { days: 7, label: "7 days" },
-  { days: 14, label: "14 days" },
-  { days: 30, label: "30 days" },
-] as const;
+const RANGES = [7, 14, 30] as const;
 
 export default function StatsPage() {
+  const lang = useLang();
   const [days, setDays] = useState<number>(14);
   const [data, setData] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,34 +70,34 @@ export default function StatsPage() {
   }, [data, metric, target]);
 
   const metricLabel: Record<typeof metric, string> = {
-    calories: "Calories",
-    protein_g: "Protein",
-    fat_g: "Fat",
-    carbs_g: "Carbs",
-  } as any;
+    calories: t(lang, "macro_calories"),
+    protein_g: t(lang, "macro_protein"),
+    fat_g: t(lang, "macro_fat"),
+    carbs_g: t(lang, "macro_carbs"),
+  };
   const metricUnit: Record<typeof metric, string> = {
-    calories: "kcal",
+    calories: t(lang, "macro_kcal"),
     protein_g: "g",
     fat_g: "g",
     carbs_g: "g",
-  } as any;
+  };
 
   return (
     <div className="px-5 pt-6 pb-32 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Stats</h1>
+        <h1 className="text-2xl font-bold">{t(lang, "stats_title")}</h1>
         <div className="flex gap-1">
           {RANGES.map((r) => (
             <button
-              key={r.days}
-              onClick={() => setDays(r.days)}
+              key={r}
+              onClick={() => setDays(r)}
               className={`text-[11px] rounded-full px-3 py-1.5 border transition-colors ${
-                days === r.days
+                days === r
                   ? "bg-accent-brand text-white border-accent-brand"
                   : "bg-bg-elev text-white/70 border-border"
               }`}
             >
-              {r.label}
+              {r}d
             </button>
           ))}
         </div>
@@ -115,31 +114,35 @@ export default function StatsPage() {
           {/* Averages summary */}
           <section className="card p-4">
             <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
-              Daily averages — last {data.days} days · logged {data.daysLogged}/{data.days}
+              {t(lang, "stats_avg_prefix")} {data.days} {t(lang, "stats_days")} · {t(lang, "stats_logged")} {data.daysLogged}/{data.days}
             </div>
             <div className="grid grid-cols-4 gap-3">
               <Stat
-                label="kcal"
+                label={t(lang, "macro_kcal")}
                 value={data.averages.calories}
                 target={data.targets?.calories}
+                ofTarget={t(lang, "stats_of_target")}
               />
               <Stat
-                label="Protein"
+                label={t(lang, "macro_protein")}
                 value={data.averages.protein_g}
                 unit="g"
                 target={data.targets?.protein_g}
+                ofTarget={t(lang, "stats_of_target")}
               />
               <Stat
-                label="Fat"
+                label={t(lang, "macro_fat")}
                 value={data.averages.fat_g}
                 unit="g"
                 target={data.targets?.fat_g}
+                ofTarget={t(lang, "stats_of_target")}
               />
               <Stat
-                label="Carbs"
+                label={t(lang, "macro_carbs")}
                 value={data.averages.carbs_g}
                 unit="g"
                 target={data.targets?.carbs_g}
+                ofTarget={t(lang, "stats_of_target")}
               />
             </div>
           </section>
@@ -148,7 +151,7 @@ export default function StatsPage() {
           <section className="card p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="text-[10px] uppercase tracking-wider text-white/50">
-                {metricLabel[metric]} per day
+                {metricLabel[metric]} {t(lang, "stats_per_day")}
               </div>
               <div className="flex gap-1">
                 {(["calories", "protein_g", "fat_g", "carbs_g"] as const).map((k) => (
@@ -161,7 +164,7 @@ export default function StatsPage() {
                         : "bg-bg-elev text-white/60 border-border"
                     }`}
                   >
-                    {k === "calories" ? "kcal" : k === "protein_g" ? "P" : k === "fat_g" ? "F" : "C"}
+                    {k === "calories" ? t(lang, "macro_kcal") : k === "protein_g" ? "P" : k === "fat_g" ? "F" : "C"}
                   </button>
                 ))}
               </div>
@@ -173,42 +176,43 @@ export default function StatsPage() {
               max={max}
               target={target ?? null}
               unit={metricUnit[metric]}
+              lang={lang}
             />
           </section>
 
           {/* Highlights */}
           <section className="card p-4 space-y-3">
-            <div className="text-[10px] uppercase tracking-wider text-white/50">Highlights</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/50">{t(lang, "stats_highlights")}</div>
             {data.proteinHitRate !== null && (
               <Row
-                k="Days hit protein (≥90% of target)"
+                k={t(lang, "stats_protein_hit")}
                 v={`${data.proteinHitRate}%`}
               />
             )}
             {data.bestProtein && (
               <Row
-                k="Top protein day"
-                v={`${formatDay(data.bestProtein.date)} · ${data.bestProtein.protein_g}g`}
+                k={t(lang, "stats_top_protein")}
+                v={`${formatDay(data.bestProtein.date, lang)} · ${data.bestProtein.protein_g}g`}
               />
             )}
             {data.highestCal && (
               <Row
-                k="Highest calorie day"
-                v={`${formatDay(data.highestCal.date)} · ${data.highestCal.calories} kcal`}
+                k={t(lang, "stats_highest_cal")}
+                v={`${formatDay(data.highestCal.date, lang)} · ${data.highestCal.calories} ${t(lang, "macro_kcal")}`}
               />
             )}
-            <Row k="Total kcal in window" v={`${data.totals.calories.toLocaleString()}`} />
-            <Row k="Total protein in window" v={`${data.totals.protein_g} g`} />
+            <Row k={t(lang, "stats_total_kcal")} v={`${data.totals.calories.toLocaleString()}`} />
+            <Row k={t(lang, "stats_total_protein")} v={`${data.totals.protein_g} g`} />
           </section>
 
           {/* Daily breakdown */}
           <section className="card p-4">
             <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
-              Daily breakdown
+              {t(lang, "stats_breakdown")}
             </div>
             <div className="divide-y divide-border">
               {[...data.series].reverse().map((d) => (
-                <DayRow key={d.date} day={d} targets={data.targets} />
+                <DayRow key={d.date} day={d} targets={data.targets} lang={lang} />
               ))}
             </div>
           </section>
@@ -263,11 +267,13 @@ function Stat({
   value,
   unit,
   target,
+  ofTarget,
 }: {
   label: string;
   value: number;
   unit?: string;
   target?: number;
+  ofTarget: string;
 }) {
   const pct = target ? Math.min(150, Math.round((value / target) * 100)) : null;
   return (
@@ -283,7 +289,7 @@ function Stat({
             pct >= 95 && pct <= 110 ? "text-green-400" : pct < 90 ? "text-amber-400" : "text-white/50"
           }`}
         >
-          {pct}% of target
+          {pct}% {ofTarget}
         </div>
       )}
     </div>
@@ -296,12 +302,14 @@ function BarChart({
   max,
   target,
   unit,
+  lang,
 }: {
   series: DayBucket[];
   metric: "calories" | "protein_g" | "fat_g" | "carbs_g";
   max: number;
   target: number | null;
   unit: string;
+  lang: Lang;
 }) {
   // Render up to ~30 bars. Container height ~120px.
   const HEIGHT = 120;
@@ -345,8 +353,8 @@ function BarChart({
           })}
         </div>
         <div className="absolute inset-x-0 bottom-0 flex justify-between text-[9px] text-white/40">
-          <span>{formatDay(series[0]?.date)}</span>
-          <span>{formatDay(series[series.length - 1]?.date)}</span>
+          <span>{formatDay(series[0]?.date, lang)}</span>
+          <span>{formatDay(series[series.length - 1]?.date, lang)}</span>
         </div>
       </div>
     </div>
@@ -356,26 +364,28 @@ function BarChart({
 function DayRow({
   day,
   targets,
+  lang,
 }: {
   day: DayBucket;
   targets: Stats["targets"];
+  lang: Lang;
 }) {
   const pct = targets ? Math.round((day.calories / targets.calories) * 100) : null;
   const empty = day.meals === 0;
   return (
     <div className="flex items-center justify-between py-2.5 text-sm">
       <div>
-        <div className="font-medium">{formatDay(day.date)}</div>
+        <div className="font-medium">{formatDay(day.date, lang)}</div>
         <div className="text-[11px] text-white/50">
           {empty
-            ? "No meals logged"
+            ? t(lang, "stats_no_meals")
             : `${day.meals} meal${day.meals === 1 ? "" : "s"} · P ${day.protein_g}g · F ${day.fat_g}g · C ${day.carbs_g}g`}
         </div>
       </div>
       <div className="text-right">
         <div className="font-semibold">{day.calories}</div>
         <div className="text-[10px] text-white/40">
-          kcal{pct !== null ? ` · ${pct}%` : ""}
+          {t(lang, "macro_kcal")}{pct !== null ? ` · ${pct}%` : ""}
         </div>
       </div>
     </div>
@@ -391,11 +401,11 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-function formatDay(s?: string): string {
+function formatDay(s: string | undefined, lang: Lang): string {
   if (!s) return "";
   try {
     const d = new Date(s + "T00:00:00");
-    return d.toLocaleDateString("he-IL", {
+    return d.toLocaleDateString(lang === "he" ? "he-IL" : undefined, {
       weekday: "short",
       month: "short",
       day: "numeric",

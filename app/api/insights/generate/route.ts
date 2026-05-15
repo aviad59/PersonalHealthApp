@@ -14,8 +14,9 @@ import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
 import {
   DAILY_INSIGHT_SYSTEM,
   WEEKLY_INSIGHT_SYSTEM,
+  withLanguage,
 } from "@/lib/prompts";
-import { listWorkouts, summarizeWeek, workoutVolumeKg, HevyWorkout } from "@/lib/hevy";
+import { listWorkouts, summarizeWeek, workoutVolumeKg, hasHevyKey, HevyWorkout } from "@/lib/hevy";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
 
@@ -49,10 +50,10 @@ function safeParseTags(s: string | null): string[] {
   }
 }
 
-async function safeLoadWorkouts(): Promise<HevyWorkout[]> {
-  if (!process.env.HEVY_API_KEY) return [];
+async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
+  if (!hasHevyKey(userId)) return [];
   try {
-    const r = await listWorkouts({ page: 1, pageSize: 10 });
+    const r = await listWorkouts({ page: 1, pageSize: 10 }, userId);
     return r.workouts || [];
   } catch {
     return [];
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
   const [todayMeals, weekMeals, workouts, recentInsights] = await Promise.all([
     getMealsByDate(userId, today),
     getMealsSince(userId, daysAgoStr(6)),
-    cfg.hasWorkouts ? safeLoadWorkouts() : Promise.resolve([] as HevyWorkout[]),
+    cfg.hasWorkouts ? safeLoadWorkouts(userId) : Promise.resolve([] as HevyWorkout[]),
     // Pull the last 5 insights so the model can deliberately pick a
     // different angle than what we already said this week.
     getInsights(userId, 5),
@@ -91,6 +92,8 @@ export async function POST(req: NextRequest) {
   const todayWorkouts = workouts.filter((w) => workoutKey(w) === today);
   const weekStart = daysAgoStr(6);
   const weekWorkouts = workouts.filter((w) => workoutKey(w) >= weekStart);
+
+  const nowHour = new Date().getHours(); // server local hour (0-23)
 
   const context: any = {
     profile: {
@@ -110,8 +113,15 @@ export async function POST(req: NextRequest) {
       carbs_g: profile.goal_carbs_g,
       weekly_workout_target: profile.weekly_workout_target,
     },
+    has_workouts: cfg.hasWorkouts,
+    // Per-user training context — only present when the user tracks workouts.
+    ...(cfg.hasWorkouts && {
+      training_notes: "Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.",
+    }),
     today: {
       date: today,
+      current_hour: nowHour,
+      day_complete: false,
       totals: dayTotals(todayMeals),
       meals: todayMeals.map((m) => ({
         description: m.description,
@@ -128,11 +138,11 @@ export async function POST(req: NextRequest) {
       })),
     },
     zepp: null as null | any,
-    // What we've already said recently — model is instructed to NOT
+    // What we've already said recently — the model is instructed to NOT
     // repeat the same lead/angle from these.
     recentInsights: recentInsights.map((i) => ({
       headline: i.headline,
-      tags: i.tags_json ? safeParseTags(i.tags_json) : [],
+      tags: safeParseTags(i.tags_json),
       for_date: i.for_date,
     })),
   };
@@ -190,15 +200,16 @@ export async function POST(req: NextRequest) {
     context.last_7_days = recent;
   }
 
-  const system = type === "weekly" ? WEEKLY_INSIGHT_SYSTEM : DAILY_INSIGHT_SYSTEM;
+  const baseSystem = type === "weekly" ? WEEKLY_INSIGHT_SYSTEM : DAILY_INSIGHT_SYSTEM;
+  const system = withLanguage(baseSystem, profile.language ?? "en");
 
   let parsed: { headline: string; body: string; tags?: string[] };
   try {
     const resp = await anthropic().messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 500,
-      // Higher temperature + top_p so the lead/angle varies across runs
-      // even when underlying numbers haven't shifted much.
+      // Higher decoding spread so the lead/angle varies day to day even
+      // when underlying numbers haven't shifted much.
       temperature: 1,
       top_p: 0.95,
       system,

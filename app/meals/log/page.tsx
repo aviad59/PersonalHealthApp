@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
+import { useLang } from "@/components/LangProvider";
+import { t, Lang } from "@/lib/i18n";
 
 type Analysis = {
   description: string;
@@ -56,6 +58,7 @@ function todayStr() {
 
 export default function LogMealPage() {
   const router = useRouter();
+  const lang = useLang();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -108,6 +111,12 @@ export default function LogMealPage() {
   const [modifier, setModifier] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
 
+  // Manual entry state
+  const [manualMode, setManualMode] = useState(false);
+  const [manualDesc, setManualDesc] = useState("");
+  const [manualMacros, setManualMacros] = useState({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
+  const [manualSaving, setManualSaving] = useState(false);
+
   const loadExisting = useCallback(async (forDate: string) => {
     try {
       const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store" });
@@ -143,7 +152,7 @@ export default function LogMealPage() {
     setErr(null);
     setAnalysis(null);
     setEditing(null);
-    setProgress("Compressing photo…");
+    setProgress(t(lang, "meal_compress"));
     try {
       // Generate the full-size compressed JPEG and the inline thumbnail
       // in parallel — both pull pixels from the same decoded source.
@@ -210,12 +219,12 @@ export default function LogMealPage() {
       // Step labels surface in the button so the user knows which slow part
       // we're in. Claude's vision call is the bulk of the wait when a photo
       // is attached; text-only calls are noticeably faster.
-      setProgress(hasPhoto ? "Asking Claude to read the photo…" : "Asking Claude to read the meal…");
+      setProgress(hasPhoto ? t(lang, "meal_asking_photo") : t(lang, "meal_asking_text"));
       const j = await safeFetchJson<{ analysis: Analysis }>(
         "/api/meals/analyze",
         { method: "POST", body: fd },
       );
-      setProgress("Reading the response…");
+      setProgress(t(lang, "meal_reading"));
       setAnalysis(j.analysis as Analysis);
       setEditing({
         calories: j.analysis.total.calories,
@@ -235,7 +244,7 @@ export default function LogMealPage() {
     if (!analysis || !editing) return;
     setSaving(true);
     setErr(null);
-    setProgress("Saving meal…");
+    setProgress(t(lang, "meal_saving"));
     try {
       // 1) Fast DB insert. /api/meals no longer waits on Claude.
       const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
@@ -315,7 +324,7 @@ export default function LogMealPage() {
 
       const mod = modifierText.trim();
       if (mod) {
-        setProgress("Adjusting macros for the change…");
+        setProgress(t(lang, "meal_adjusting"));
         const fd = new FormData();
         fd.append(
           "base",
@@ -343,7 +352,7 @@ export default function LogMealPage() {
         };
       }
 
-      setProgress("Saving meal…");
+      setProgress(t(lang, "meal_saving"));
       const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
         "/api/meals",
         {
@@ -388,8 +397,68 @@ export default function LogMealPage() {
     }
   }
 
+  async function saveManual() {
+    if (!manualDesc.trim() && !manualMacros.calories) {
+      setErr(t(lang, "meal_err_no_data"));
+      return;
+    }
+    setManualSaving(true);
+    setErr(null);
+    setProgress("Saving meal…");
+    try {
+      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+        "/api/meals",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            date,
+            description: manualDesc.trim() || "Meal",
+            calories: manualMacros.calories,
+            protein_g: manualMacros.protein_g,
+            fat_g: manualMacros.fat_g,
+            carbs_g: manualMacros.carbs_g,
+            confidence: "high",
+          }),
+        },
+      );
+      await loadExisting(date);
+      setManualDesc("");
+      setManualMacros({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
+      setManualMode(false);
+      setTip(j.ai_tip || null);
+
+      if (j.id) {
+        setTip("__pending__");
+        (async () => {
+          try {
+            const t = await safeFetchJson<{ ai_tip: string | null }>(
+              `/api/meals/${j.id}/tip`,
+              { method: "POST" },
+            );
+            setTip(t.ai_tip || null);
+          } catch {
+            setTip(null);
+          }
+        })();
+      }
+
+      if (isToday) {
+        setTimeout(() => {
+          router.push("/");
+          router.refresh();
+        }, 2000);
+      }
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setManualSaving(false);
+      setProgress(null);
+    }
+  }
+
   async function deleteMeal(id: number) {
-    if (!confirm("Delete this meal?")) return;
+    if (!confirm(t(lang, "meal_delete_confirm"))) return;
     try {
       const r = await fetch(`/api/meals/${id}`, { method: "DELETE" });
       if (!r.ok) {
@@ -424,19 +493,19 @@ export default function LogMealPage() {
   return (
     <div className="px-5 pt-6 pb-10 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">Log a meal</h1>
+        <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
         <p className="text-sm text-white/60 mt-1">
           {isToday
-            ? "Snap a photo, describe it in words, or re-log a frequent meal."
-            : `Logging for ${prettyDate(date)}.`}
+            ? t(lang, "meal_subtitle_today")
+            : `${t(lang, "meal_subtitle_past")} ${prettyDate(date, lang)}.`}
         </p>
       </div>
 
       {/* --- DATE PICKER --- */}
       <div className="card p-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-white/50">Date</div>
-          <div className="text-sm font-medium mt-0.5">{prettyDate(date)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/50">{t(lang, "meal_date")}</div>
+          <div className="text-sm font-medium mt-0.5">{prettyDate(date, lang)}</div>
         </div>
         <div className="flex items-center gap-2">
           {!isToday && (
@@ -444,7 +513,7 @@ export default function LogMealPage() {
               onClick={() => setDate(todayStr())}
               className="text-[11px] text-accent-brand"
             >
-              Today
+              {t(lang, "meal_today_btn")}
             </button>
           )}
           <input
@@ -463,7 +532,7 @@ export default function LogMealPage() {
       {existing.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-            {isToday ? "Today's meals" : "Logged for this day"}
+            {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
           </h2>
           <div className="space-y-2">
             {existing.map((m) => (
@@ -483,7 +552,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
-      {!photoPreview && !analysis && (
+      {!photoPreview && !analysis && !manualMode && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -496,7 +565,7 @@ export default function LogMealPage() {
                   <circle cx="12" cy="13" r="4" />
                 </svg>
               </div>
-              <div className="text-xs text-white/70">Take photo</div>
+              <div className="text-xs text-white/70">{t(lang, "meal_take_photo")}</div>
             </button>
             <button
               onClick={() => galleryRef.current?.click()}
@@ -509,14 +578,14 @@ export default function LogMealPage() {
                   <path d="m21 15-5-5L5 21" />
                 </svg>
               </div>
-              <div className="text-xs text-white/70">From gallery</div>
+              <div className="text-xs text-white/70">{t(lang, "meal_from_gallery")}</div>
             </button>
           </div>
-          <div className="text-[11px] text-white/40 text-center">…or describe your meal below</div>
+          <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
         </div>
       )}
 
-      {photoPreview && (
+      {photoPreview && !manualMode && (
         <div className="space-y-3">
           <div className="relative rounded-2xl overflow-hidden border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -524,13 +593,13 @@ export default function LogMealPage() {
           </div>
           <div className="flex gap-4 text-sm">
             <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
-              Retake
+              {t(lang, "meal_retake")}
             </button>
             <button onClick={() => galleryRef.current?.click()} className="text-accent-brand">
-              Pick from gallery
+              {t(lang, "meal_pick_gallery")}
             </button>
             <button onClick={clearPhoto} className="text-white/50 ml-auto">
-              Remove
+              {t(lang, "meal_remove_photo")}
             </button>
           </div>
         </div>
@@ -553,11 +622,11 @@ export default function LogMealPage() {
       />
 
       {/* --- TEXT INPUT (always visible until an analysis exists) --- */}
-      {!analysis && (
+      {!analysis && !manualMode && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/60 mb-1.5">
-              {photoPreview ? "Notes for the photo (optional)" : "Describe your meal"}
+              {photoPreview ? t(lang, "meal_notes_hint") : t(lang, "meal_describe_label")}
             </label>
             <textarea
               value={text}
@@ -577,14 +646,84 @@ export default function LogMealPage() {
             className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {analyzing
-              ? progress || "Analyzing…"
+              ? progress || t(lang, "meal_analyzing")
               : progress
                 ? progress
                 : photoPreview
-                  ? "Analyze with Claude"
+                  ? t(lang, "meal_analyze_photo")
                   : text.trim()
-                    ? "Analyze from description"
-                    : "Analyze (add photo or text)"}
+                    ? t(lang, "meal_analyze_text")
+                    : t(lang, "meal_analyze_empty")}
+          </button>
+          <button
+            onClick={() => { setManualMode(true); clearPhoto(); setText(""); setErr(null); }}
+            className="w-full text-center text-[12px] text-white/40 py-1"
+          >
+            {t(lang, "meal_manual_link")}
+          </button>
+        </div>
+      )}
+
+      {/* --- MANUAL ENTRY FORM --- */}
+      {manualMode && !analysis && (
+        <div className="card p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">{t(lang, "meal_manual_title")}</h3>
+            <button
+              onClick={() => { setManualMode(false); setErr(null); }}
+              className="text-xs text-white/40"
+            >
+              {t(lang, "meal_cancel")}
+            </button>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-white/60 mb-1.5">
+              {t(lang, "meal_manual_desc_label")}
+            </label>
+            <input
+              value={manualDesc}
+              onChange={(e) => setManualDesc(e.target.value)}
+              placeholder={t(lang, "meal_manual_desc_placeholder")}
+              className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px]"
+            />
+          </div>
+          <div className="space-y-3">
+            <div className="text-xs font-medium text-white/60">{t(lang, "meal_macros_label")}</div>
+            <MacroEdit
+              label={t(lang, "macro_calories")}
+              unit={t(lang, "macro_kcal")}
+              value={manualMacros.calories}
+              onChange={(v) => setManualMacros({ ...manualMacros, calories: v })}
+            />
+            <MacroEdit
+              label={t(lang, "macro_protein")}
+              unit="g"
+              value={manualMacros.protein_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, protein_g: v })}
+            />
+            <MacroEdit
+              label={t(lang, "macro_fat")}
+              unit="g"
+              value={manualMacros.fat_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, fat_g: v })}
+            />
+            <MacroEdit
+              label={t(lang, "macro_carbs")}
+              unit="g"
+              value={manualMacros.carbs_g}
+              onChange={(v) => setManualMacros({ ...manualMacros, carbs_g: v })}
+            />
+          </div>
+          <button
+            onClick={saveManual}
+            disabled={manualSaving}
+            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+          >
+            {manualSaving
+              ? progress || t(lang, "meal_saving_short")
+              : isToday
+                ? t(lang, "meal_save")
+                : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`}
           </button>
         </div>
       )}
@@ -596,7 +735,7 @@ export default function LogMealPage() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold">{analysis.description}</h3>
               <span className="text-[10px] uppercase tracking-wider text-white/50 bg-bg-elev border border-border rounded-full px-2 py-0.5">
-                {analysis.confidence} confidence
+                {analysis.confidence} {t(lang, "meal_confidence")}
               </span>
             </div>
             {analysis.items?.length > 0 && (
@@ -617,27 +756,27 @@ export default function LogMealPage() {
           </div>
 
           <div className="card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Totals (editable)</h3>
+            <h3 className="text-sm font-semibold">{t(lang, "meal_totals")}</h3>
             <MacroEdit
-              label="Calories"
-              unit="kcal"
+              label={t(lang, "macro_calories")}
+              unit={t(lang, "macro_kcal")}
               value={editing.calories}
               onChange={(v) => setEditing({ ...editing, calories: v })}
             />
             <MacroEdit
-              label="Protein"
+              label={t(lang, "macro_protein")}
               unit="g"
               value={editing.protein_g}
               onChange={(v) => setEditing({ ...editing, protein_g: v })}
             />
             <MacroEdit
-              label="Fat"
+              label={t(lang, "macro_fat")}
               unit="g"
               value={editing.fat_g}
               onChange={(v) => setEditing({ ...editing, fat_g: v })}
             />
             <MacroEdit
-              label="Carbs"
+              label={t(lang, "macro_carbs")}
               unit="g"
               value={editing.carbs_g}
               onChange={(v) => setEditing({ ...editing, carbs_g: v })}
@@ -649,7 +788,7 @@ export default function LogMealPage() {
               onClick={resetNewMealForm}
               className="flex-1 rounded-xl border border-border bg-bg-elev py-3 text-sm font-medium"
             >
-              Discard
+              {t(lang, "meal_discard")}
             </button>
             <button
               onClick={save}
@@ -657,10 +796,10 @@ export default function LogMealPage() {
               className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
               {saving
-                ? progress || "Saving…"
+                ? progress || t(lang, "meal_saving_short")
                 : isToday
-                  ? "Confirm & save"
-                  : `Save to ${prettyDate(date)}`}
+                  ? t(lang, "meal_confirm_save")
+                  : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`}
             </button>
           </div>
         </div>
@@ -669,11 +808,11 @@ export default function LogMealPage() {
       {tip && (
         <div className="card p-4 border-accent-cal/40">
           <div className="text-xs uppercase tracking-wider text-accent-cal font-semibold mb-1">
-            Next meal tip
+            {t(lang, "meal_next_tip")}
           </div>
           {tip === "__pending__" ? (
             <p className="text-sm text-white/50 animate-pulse">
-              Generating next-meal tip…
+              {t(lang, "meal_generating_tip")}
             </p>
           ) : (
             <p className="text-sm text-white/80">{tip}</p>
@@ -688,9 +827,9 @@ export default function LogMealPage() {
         <section className="space-y-3 pt-2">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-              Log again
+              {t(lang, "meal_log_again")}
             </h2>
-            <span className="text-[11px] text-white/40">recurring meals</span>
+            <span className="text-[11px] text-white/40">{t(lang, "meal_recurring")}</span>
           </div>
           <div className="space-y-2">
             {frequent.map((m, i) => {
@@ -726,7 +865,7 @@ export default function LogMealPage() {
                       <input
                         value={modifier}
                         onChange={(e) => setModifier(e.target.value)}
-                        placeholder="Same as last time, or e.g. 'a bit smaller'"
+                        placeholder={t(lang, "meal_modifier_placeholder")}
                         className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
                       />
                       <div className="flex gap-2">
@@ -736,19 +875,19 @@ export default function LogMealPage() {
                           className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-xs font-medium disabled:opacity-40"
                         >
                           {quickBusy
-                            ? progress || "Saving…"
-                            : `Log as-is${isToday ? "" : ` to ${date}`}`}
+                            ? progress || t(lang, "meal_saving_short")
+                            : `${t(lang, "meal_log_asis")}${isToday ? "" : ` to ${date}`}`}
                         </button>
                         <button
                           onClick={() => quickLog(m, modifier)}
                           disabled={quickBusy || !modifier.trim()}
                           className="flex-1 rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
                         >
-                          {quickBusy ? progress || "Saving…" : "Log with change"}
+                          {quickBusy ? progress || t(lang, "meal_saving_short") : t(lang, "meal_log_with_change")}
                         </button>
                       </div>
                       <p className="text-[10px] text-white/40">
-                        &quot;Log with change&quot; asks Claude to adjust macros based on your note.
+                        {t(lang, "meal_log_with_change_hint")}
                       </p>
                     </div>
                   )}
@@ -775,6 +914,7 @@ function ExistingMealRow({
   onDelete: () => void;
   onSave: (fields: Partial<ExistingMeal>) => Promise<void>;
 }) {
+  const lang = useLang();
   const [desc, setDesc] = useState(meal.description ?? "");
   const [cal, setCal] = useState<number>(Math.round(meal.calories ?? 0));
   const [p, setP] = useState<number>(Math.round(meal.protein_g ?? 0));
@@ -837,7 +977,7 @@ function ExistingMealRow({
         )}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate">
-            {meal.description || "Meal"}
+            {meal.description || t(lang, "meal_unnamed")}
           </div>
           <div className="text-[11px] text-white/50 mt-0.5">
             {Math.round(meal.calories ?? 0)} kcal · P{Math.round(meal.protein_g ?? 0)}{" "}
@@ -849,13 +989,13 @@ function ExistingMealRow({
             onClick={onEditToggle}
             className="text-[11px] text-accent-brand px-2 py-1"
           >
-            {isEditing ? "Cancel" : "Edit"}
+            {isEditing ? t(lang, "meal_cancel") : t(lang, "meal_edit")}
           </button>
           <button
             onClick={onDelete}
             className="text-[11px] text-red-400/80 px-2 py-1"
           >
-            Delete
+            {t(lang, "meal_delete")}
           </button>
         </div>
       </div>
@@ -865,21 +1005,21 @@ function ExistingMealRow({
           <input
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
-            placeholder="Description"
+            placeholder={t(lang, "meal_description_label")}
             className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
           />
           <div className="grid grid-cols-2 gap-2">
-            <NumField label="Calories" unit="kcal" value={cal} onChange={setCal} />
-            <NumField label="Protein" unit="g" value={p} onChange={setP} />
-            <NumField label="Fat" unit="g" value={f} onChange={setF} />
-            <NumField label="Carbs" unit="g" value={c} onChange={setC} />
+            <NumField label={t(lang, "macro_calories")} unit={t(lang, "macro_kcal")} value={cal} onChange={setCal} />
+            <NumField label={t(lang, "macro_protein")} unit="g" value={p} onChange={setP} />
+            <NumField label={t(lang, "macro_fat")} unit="g" value={f} onChange={setF} />
+            <NumField label={t(lang, "macro_carbs")} unit="g" value={c} onChange={setC} />
           </div>
           <button
             onClick={handleSave}
             disabled={busy}
             className="w-full rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
           >
-            {busy ? "Saving…" : "Save changes"}
+            {busy ? t(lang, "meal_saving_short") : t(lang, "meal_save_changes")}
           </button>
         </div>
       )}
@@ -912,10 +1052,10 @@ function NumField({
   );
 }
 
-function prettyDate(s: string): string {
-  if (s === todayStr()) return "היום";
+function prettyDate(s: string, lang: Lang): string {
+  if (s === todayStr()) return t(lang, "meal_today_btn");
   const d = new Date(s + "T00:00:00");
-  return d.toLocaleDateString("he-IL", {
+  return d.toLocaleDateString(lang === "he" ? "he-IL" : undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",

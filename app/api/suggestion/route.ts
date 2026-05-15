@@ -20,7 +20,7 @@ import {
 import { anthropic, CLAUDE_FAST_MODEL } from "@/lib/anthropic";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
-import { MEAL_TIP_SYSTEM } from "@/lib/prompts";
+import { MEAL_TIP_SYSTEM, withLanguage } from "@/lib/prompts";
 import { HevyWorkout, workoutVolumeKg } from "@/lib/hevy";
 
 export const runtime = "nodejs";
@@ -103,7 +103,7 @@ async function generate(args: {
     // onto its highest-prior answer ("grilled chicken + vegetables").
     temperature: 1,
     top_p: 0.95,
-    system: MEAL_TIP_SYSTEM,
+    system: withLanguage(MEAL_TIP_SYSTEM, profile.language ?? "en"),
     messages: [{ role: "user", content: JSON.stringify(context) }],
   });
   return r.content
@@ -157,8 +157,7 @@ export async function GET() {
       return Number.isFinite(t) && dateKey(new Date(t)) === date;
     }) ?? null;
 
-  // Pull the last 5 suggestion bodies so the model can avoid repeating
-  // itself. Includes today's previous suggestion if one already exists.
+  // Pull the last 5 suggestion bodies so the model can avoid repeating itself.
   const recent = await getRecentSuggestions(userId, 5);
   const recentSuggestions = recent.map((s) => s.body);
 

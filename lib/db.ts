@@ -130,6 +130,7 @@ const COLUMN_ADDS: { sql: string }[] = [
   // legacy user) so all of his historical data continues to work unchanged.
   { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE insights ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
+  { sql: "ALTER TABLE user_profile ADD COLUMN language TEXT NOT NULL DEFAULT 'en'" },
 ];
 
 // Per-user variants of the tables that previously had a `date` primary key
@@ -340,6 +341,7 @@ export type Profile = {
   weekly_workout_target: number | null;
   weekly_volume_note: string | null;
   goal_mode: string;
+  language: string;
   updated_at: string;
 };
 

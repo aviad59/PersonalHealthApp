@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
+import { useLang } from "@/components/LangProvider";
+import { t } from "@/lib/i18n";
 
 type MuscleStatus = {
   muscle: string;
@@ -85,6 +87,7 @@ export default function HomeClient({
   hasWorkouts: boolean;
   userDisplayName: string;
 }) {
+  const lang = useLang();
   const [data, setData] = useState<Today>(initial);
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -122,10 +125,10 @@ export default function HomeClient({
   if (!data.profile) {
     return (
       <div className="px-5 pt-10 space-y-4">
-        <h1 className="text-3xl font-bold">Welcome</h1>
-        <p className="text-white/60">Let&apos;s set up your profile so we can calculate personalized targets.</p>
+        <h1 className="text-3xl font-bold">{t(lang, "home_welcome")}</h1>
+        <p className="text-white/60">{t(lang, "home_onboarding_desc")}</p>
         <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-5 py-3 text-sm font-semibold">
-          Start onboarding
+          {t(lang, "home_start_onboarding")}
         </Link>
       </div>
     );
@@ -146,7 +149,7 @@ export default function HomeClient({
           <div className="text-xs text-white/50 uppercase tracking-wider">
             {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
           </div>
-          <h1 className="text-2xl font-bold mt-0.5">Today</h1>
+          <h1 className="text-2xl font-bold mt-0.5">{t(lang, "home_title")}</h1>
         </div>
         <Link href="/profile" className="text-[11px] text-white/50 hover:text-white/80 transition-colors">
           {userDisplayName}
@@ -155,28 +158,28 @@ export default function HomeClient({
 
       <section className="card p-5">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Macros</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_macros")}</h2>
           <Link href="/meals/log" className="text-xs text-accent-brand font-medium">
-            + Log meal
+            {t(lang, "home_log_meal")}
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-y-4 place-items-center">
-          <MacroRing label="Calories" value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" />
-          <MacroRing label="Protein" value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" />
-          <MacroRing label="Carbs" value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" />
-          <MacroRing label="Fat" value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" />
+          <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" />
+          <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" />
+          <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" />
+          <MacroRing label={t(lang, "macro_fat")} value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" />
         </div>
         {burn > 0 && (
           <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
-            <span className="text-white/80 font-medium">+{burn} kcal</span> from today&apos;s training{" "}
-            <span className="text-white/40">({baseCal} base → {effectiveCal} effective)</span>
+            <span className="text-white/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
+            <span className="text-white/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
           </div>
         )}
       </section>
 
       <section className="card p-5">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Next meal</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_next_meal")}</h2>
           {suggestion?.updated_at && (
             <span className="text-[10px] text-white/40">
               {new Date(suggestion.updated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -186,11 +189,9 @@ export default function HomeClient({
         {suggestion ? (
           <p className="text-[13px] leading-relaxed text-white/80">{suggestion.body}</p>
         ) : suggestionLoading ? (
-          <p className="text-[13px] text-white/40">Thinking…</p>
+          <p className="text-[13px] text-white/40">{t(lang, "home_thinking")}</p>
         ) : (
-          <p className="text-[13px] text-white/40">
-            Log a meal or set up your profile to get a personalized suggestion.
-          </p>
+          <p className="text-[13px] text-white/40">{t(lang, "home_no_suggestion")}</p>
         )}
       </section>
 
@@ -208,7 +209,7 @@ export default function HomeClient({
       ) : recovery ? (
         <section className="card p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Recovery</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_recovery")}</h2>
             <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(recovery.band)}`}>
               {recovery.band}
             </span>
@@ -224,16 +225,16 @@ export default function HomeClient({
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Per muscle</div>
+            <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
             <div className="grid grid-cols-5 gap-1.5">
               {recovery.byMuscle.map((m) => (
-                <MusclePill key={m.muscle} status={m} />
+                <MusclePill key={m.muscle} status={m} todayLabel={t(lang, "home_today_label")} />
               ))}
             </div>
           </div>
           {!recovery.signalsUsed.workouts && (
             <p className="text-[10px] text-white/30 mt-3">
-              Hit Refresh on the Workouts page to populate per-muscle data.
+              {t(lang, "home_refresh_workouts")}
             </p>
           )}
         </section>
@@ -242,8 +243,8 @@ export default function HomeClient({
       {hasWorkouts && (
         <section className="card p-5">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Today&apos;s workout</h2>
-            <Link href="/workouts" className="text-xs text-accent-brand">All →</Link>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_todays_workout")}</h2>
+            <Link href="/workouts" className="text-xs text-accent-brand">{t(lang, "home_all_workouts")}</Link>
           </div>
           {!training ? (
             <div className="animate-pulse space-y-2">
@@ -260,15 +261,15 @@ export default function HomeClient({
               <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
             </div>
           ) : (
-            <div className="text-sm text-white/50">No workout logged in Hevy yet.</div>
+            <div className="text-sm text-white/50">{t(lang, "home_no_workout")}</div>
           )}
         </section>
       )}
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Latest insight</h2>
-          <Link href="/insights" className="text-xs text-accent-brand">All →</Link>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_latest_insight")}</h2>
+          <Link href="/insights" className="text-xs text-accent-brand">{t(lang, "home_all_insights")}</Link>
         </div>
         {latestInsight ? (
           <InsightCard
@@ -280,9 +281,9 @@ export default function HomeClient({
           />
         ) : (
           <div className="card p-5 text-sm text-white/60">
-            No insights yet.{" "}
+            {t(lang, "home_no_insights")}{" "}
             <Link href="/insights" className="text-accent-brand underline underline-offset-2">
-              Generate your first one
+              {t(lang, "home_generate_first")}
             </Link>.
           </div>
         )}
@@ -290,7 +291,7 @@ export default function HomeClient({
 
       {meals.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">Today&apos;s meals</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">{t(lang, "home_todays_meals")}</h2>
           <div className="space-y-2">
             {meals.map((m) => (
               <div key={m.id} className="card p-3 flex gap-3 items-center">
@@ -347,7 +348,7 @@ function ScoreBar({ score, band }: { score: number; band: Recovery["band"] }) {
   );
 }
 
-function MusclePill({ status }: { status: MuscleStatus }) {
+function MusclePill({ status, todayLabel }: { status: MuscleStatus; todayLabel: string }) {
   const cls =
     status.readiness === "rest"
       ? "border-red-500/40 bg-red-500/10 text-red-300"
@@ -358,7 +359,7 @@ function MusclePill({ status }: { status: MuscleStatus }) {
     status.daysSince === null
       ? "—"
       : status.daysSince === 0
-        ? "today"
+        ? todayLabel
         : `${status.daysSince}d`;
   return (
     <div

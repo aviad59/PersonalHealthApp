@@ -30,8 +30,11 @@ export function extractJson<T = unknown>(text: string): T {
   // Try fenced block first
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : text;
-  // Find first { ... } or [ ... ]
-  const obj = candidate.match(/[\[{][\s\S]*[\]}]/);
+  // Prefer object ({...}) since all meal/insight responses are objects.
+  // Fall back to array ([...]) for the backfill endpoint.
+  // Searching for { first avoids latching onto [...] brackets that appear
+  // in the model's chain-of-thought reasoning (e.g. "[no reference objects]").
+  const obj = candidate.match(/{[\s\S]*}/) ?? candidate.match(/\[[\s\S]*\]/);
   if (!obj) throw new Error("No JSON object found in model output");
   return JSON.parse(obj[0]) as T;
 }
