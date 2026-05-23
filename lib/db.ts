@@ -799,28 +799,3 @@ export async function clearCoachMessages(userId: string): Promise<void> {
     args: [userId],
   });
 }
-res.rows as unknown as CoachMessage[];
-  return rows.reverse();
-}
-
-export async function addCoachMessage(
-  userId: string,
-  role: "user" | "assistant",
-  content: string,
-): Promise<number> {
-  const db = await getDb();
-  const r = await db.execute({
-    sql: `INSERT INTO user_coach_messages (user_id, role, content)
-          VALUES (?, ?, ?)`,
-    args: [userId, role, content],
-  });
-  return Number(r.lastInsertRowid ?? 0);
-}
-
-export async function clearCoachMessages(userId: string): Promise<void> {
-  const db = await getDb();
-  await db.execute({
-    sql: `DELETE FROM user_coach_messages WHERE user_id = ?`,
-    args: [userId],
-  });
-}
