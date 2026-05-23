@@ -7,6 +7,7 @@ const en = {
   nav_log: "Log",
   nav_stats: "Stats",
   nav_insights: "Insights",
+  nav_coach: "Coach",
   nav_workouts: "Workouts",
   nav_profile: "Profile",
   // Home
@@ -185,6 +186,7 @@ const he: typeof en = {
   nav_log: "יומן",
   nav_stats: "סטטיסטיקה",
   nav_insights: "תובנות",
+  nav_coach: "מאמן",
   nav_workouts: "אימונים",
   nav_profile: "פרופיל",
   // Home

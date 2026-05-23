@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
+import InstallPromptBanner from "@/components/InstallPromptBanner";
 import { useLang } from "@/components/LangProvider";
 import { t } from "@/lib/i18n";
 
@@ -155,6 +156,11 @@ export default function HomeClient({
           {userDisplayName}
         </Link>
       </div>
+
+      {/* Android-only "Install app" prompt. Renders nothing if the browser
+          hasn't fired beforeinstallprompt or if the user already dismissed
+          it for 14 days. */}
+      <InstallPromptBanner />
 
       <section className="card p-5">
         <div className="flex justify-between items-center mb-4">

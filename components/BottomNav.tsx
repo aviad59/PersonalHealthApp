@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n";
 
 type NavItem = {
   href: string;
-  labelKey: "nav_today" | "nav_log" | "nav_stats" | "nav_insights" | "nav_workouts" | "nav_profile";
+  labelKey: "nav_today" | "nav_log" | "nav_stats" | "nav_insights" | "nav_coach" | "nav_workouts" | "nav_profile";
   icon: (p: React.SVGProps<SVGSVGElement>) => JSX.Element;
   workoutsOnly?: boolean;
 };
@@ -17,6 +17,7 @@ const items: NavItem[] = [
   { href: "/", labelKey: "nav_today", icon: HomeIcon },
   { href: "/meals/log", labelKey: "nav_log", icon: CameraIcon },
   { href: "/stats", labelKey: "nav_stats", icon: ChartIcon },
+  { href: "/coach", labelKey: "nav_coach", icon: ChatIcon },
   { href: "/insights", labelKey: "nav_insights", icon: SparklesIcon },
   { href: "/workouts", labelKey: "nav_workouts", icon: DumbbellIcon, workoutsOnly: true },
   { href: "/profile", labelKey: "nav_profile", icon: UserIcon },
@@ -117,6 +118,13 @@ function UserIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+    </svg>
+  );
+}
+function ChatIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
     </svg>
   );
 }

@@ -184,6 +184,20 @@ const PER_USER_TABLES = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, date)
   );
+
+  -- Persistent chat history for the AI coach. We keep the full thread per
+  -- user so the conversation feels continuous across sessions, and so the
+  -- model can reference earlier turns. Old turns can be trimmed later if
+  -- the thread gets long enough to matter.
+  CREATE TABLE IF NOT EXISTS user_coach_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_coach_user_date ON user_coach_messages(user_id, created_at);
 `;
 
 // One-time copy of the legacy single-row / date-keyed tables into the new
@@ -731,5 +745,82 @@ export async function setProfileGoalCalories(
              SET goal_calories = ?, goal_carbs_g = ?, updated_at = datetime('now')
            WHERE user_id = ?`,
     args: [goalCalories, goalCarbsG, userId],
+  });
+}
+
+// ---------------------------------------------------------------
+// Coach chat history (one row per turn, per user)
+// ---------------------------------------------------------------
+
+export type CoachMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+/** Fetch the user's coach thread, oldest-first, up to `limit` most recent turns. */
+export async function getCoachMessages(
+  userId: string,
+  limit = 40,
+): Promise<CoachMessage[]> {
+  const db = await getDb();
+  // Grab the latest N then reverse so the model sees them in chronological order.
+  const res = await db.execute({
+    sql: `SELECT id, role, content, created_at
+            FROM user_coach_messages
+           WHERE user_id = ?
+           ORDER BY id DESC
+           LIMIT ?`,
+    args: [userId, limit],
+  });
+  const rows = res.rows as unknown as CoachMessage[];
+  return rows.reverse();
+}
+
+export async function addCoachMessage(
+  userId: string,
+  role: "user" | "assistant",
+  content: string,
+): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute({
+    sql: `INSERT INTO user_coach_messages (user_id, role, content)
+          VALUES (?, ?, ?)`,
+    args: [userId, role, content],
+  });
+  return Number(r.lastInsertRowid ?? 0);
+}
+
+export async function clearCoachMessages(userId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `DELETE FROM user_coach_messages WHERE user_id = ?`,
+    args: [userId],
+  });
+}
+res.rows as unknown as CoachMessage[];
+  return rows.reverse();
+}
+
+export async function addCoachMessage(
+  userId: string,
+  role: "user" | "assistant",
+  content: string,
+): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute({
+    sql: `INSERT INTO user_coach_messages (user_id, role, content)
+          VALUES (?, ?, ?)`,
+    args: [userId, role, content],
+  });
+  return Number(r.lastInsertRowid ?? 0);
+}
+
+export async function clearCoachMessages(userId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `DELETE FROM user_coach_messages WHERE user_id = ?`,
+    args: [userId],
   });
 }
