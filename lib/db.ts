@@ -721,7 +721,7 @@ export async function getWeightLogSince(
             FROM user_weight_log
            WHERE user_id = ? AND date >= ?
            ORDER BY date ASC`,
-    args: [sinceDate],
+    args: [userId, sinceDate],
   });
   return res.rows as unknown as WeightLogEntry[];
 }
