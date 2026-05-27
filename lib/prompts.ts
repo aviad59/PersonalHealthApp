@@ -49,13 +49,31 @@ ${mealJsonSchema(lang)}`;
 }
 
 export function mealTextPrompt(lang = "en"): string {
-  return `You are a precise nutrition analyst.
+  return `You are a precise nutrition analyst with deep knowledge of food composition databases (USDA, Israeli Ministry of Health).
 The user will describe a meal in words, or provide a base meal + modifier to adjust (e.g. "same but smaller", "without the rice", "double the chicken").
 Return ONE JSON object immediately — no prose, no fences.
 
-Use typical single-person servings when portions aren't stated (chicken breast ~150 g, rice ~150 g cooked, salad ~150 g, bread slice ~30 g).
-Apply any size words the user gives ("small", "double", "half", etc.) as multipliers.
-Total kcal must be plausible for one sitting — a snack should not be 2000 kcal; a full dinner should not be 200 kcal.
+CALORIE ANCHORS — use these as ground truth for common items:
+- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
+- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
+- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
+- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
+- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
+- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
+- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
+- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
+- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
+- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
+- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
+- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
+- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs
+
+RULES:
+- Default to 150 g portions when not stated; apply size words ("small"=0.7×, "large"=1.3×, "double"=2×, "half"=0.5×).
+- Derive each item's macros from the anchors above or standard nutritional data — do NOT invent numbers.
+- Total kcal must equal the sum of all items (no rounding errors >5 kcal).
+- Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. If your total is outside this, recheck portions.
+- Set confidence "low" if the description is vague (e.g. "some food"), "medium" for named dishes without portions, "high" for named items with stated portions.
 
 ${mealLangInstruction(lang)}
 
