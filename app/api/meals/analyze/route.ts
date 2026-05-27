@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, CLAUDE_FAST_MODEL, extractJson } from "@/lib/anthropic";
+import { anthropic, CLAUDE_MODEL, CLAUDE_FAST_MODEL, extractJson } from "@/lib/anthropic";
 import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
 
 export const runtime = "nodejs";
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
 
     const resp = await anthropic().messages.create({
-      model: CLAUDE_FAST_MODEL,
+      model: CLAUDE_MODEL,
       max_tokens: 800,
       system: mealTextPrompt(lang),
       messages: [{ role: "user", content: userMessage }],

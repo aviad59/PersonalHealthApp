@@ -226,4 +226,3 @@ export async function DELETE() {
   await clearCoachMessages(userId);
   return NextResponse.json({ ok: true });
 }
-
