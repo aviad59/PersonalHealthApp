@@ -45,8 +45,8 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom">
-      <div className="mx-auto max-w-md">
-        <div className="mx-3 mb-3 rounded-2xl border border-border bg-bg-card/90 backdrop-blur px-2 py-2 flex justify-between">
+      <div className="mx-auto w-full max-w-md sm:max-w-lg lg:max-w-xl">
+        <div className="mx-3 mb-3 rounded-3xl border border-border bg-bg-card/80 backdrop-blur-xl shadow-elev px-1.5 py-1.5 flex justify-between gap-0.5">
           {visible.map((it) => {
             const active =
               it.href === "/"
@@ -56,14 +56,18 @@ export default function BottomNav() {
               <Link
                 key={it.href}
                 href={it.href}
-                className={`flex-1 flex flex-col items-center gap-0.5 rounded-xl py-2 text-[10px] font-medium transition-colors ${
+                className={`flex-1 min-w-0 flex flex-col items-center gap-1 rounded-2xl py-2 text-[10px] font-medium transition-all active:scale-95 ${
                   active
-                    ? "text-white bg-bg-elev"
-                    : "text-white/50 hover:text-white/80"
+                    ? "text-white bg-accent-brand/15"
+                    : "text-white/45 hover:text-white/80 hover:bg-white/5"
                 }`}
               >
-                <it.icon className={`h-5 w-5 ${active ? "text-accent-brand" : ""}`} />
-                <span>{t(lang, it.labelKey)}</span>
+                <it.icon
+                  className={`h-5 w-5 shrink-0 transition-colors ${
+                    active ? "text-accent-brand" : ""
+                  }`}
+                />
+                <span className="max-w-full truncate px-0.5">{t(lang, it.labelKey)}</span>
               </Link>
             );
           })}

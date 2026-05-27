@@ -50,8 +50,8 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className="bg-bg text-white">
         <LangProvider>
-          <div className="mx-auto max-w-md min-h-dvh flex flex-col">
-            <main className="flex-1 pb-24 safe-top">{children}</main>
+          <div className="mx-auto w-full max-w-md sm:max-w-lg lg:max-w-xl min-h-dvh flex flex-col">
+            <main className="flex-1 pb-28 safe-top">{children}</main>
             <BottomNav />
           </div>
         </LangProvider>
