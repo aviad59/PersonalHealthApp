@@ -11,7 +11,6 @@ import {
   getMealsByDateLite,
   getCachedWorkoutsSince,
   getSuggestion,
-  getRecentSuggestions,
   upsertSuggestion,
   todayStr,
   daysAgoStr,
@@ -74,9 +73,8 @@ async function generate(args: {
   totals: Totals;
   todaysMealsBrief: { description: string | null; calories: number | null; protein_g: number | null }[];
   todaysWorkout: HevyWorkout | null;
-  recentSuggestions: string[];
 }): Promise<string> {
-  const { profile, totals, todaysMealsBrief, todaysWorkout, recentSuggestions } = args;
+  const { profile, totals, todaysMealsBrief, todaysWorkout } = args;
   const context = {
     targets: {
       calories: profile.goal_calories,
@@ -92,17 +90,10 @@ async function generate(args: {
           volume_kg: workoutVolumeKg(todaysWorkout),
         }
       : null,
-    // Anti-repetition context — the model is instructed to NOT pick a meal
-    // similar to anything in this list.
-    recentSuggestions,
   };
   const r = await anthropic().messages.create({
     model: CLAUDE_FAST_MODEL,
     max_tokens: 200,
-    // Push variety: max temperature + top_p so the model stops collapsing
-    // onto its highest-prior answer ("grilled chicken + vegetables").
-    temperature: 1,
-    top_p: 0.95,
     system: withLanguage(MEAL_TIP_SYSTEM, profile.language ?? "en"),
     messages: [{ role: "user", content: JSON.stringify(context) }],
   });
@@ -118,52 +109,49 @@ export async function GET() {
   const cfg = getUserConfig(userId);
   const date = todayStr();
 
-  const [profile, meals, cachedRecent] = await Promise.all([
-    getProfile(userId),
-    getMealsByDateLite(userId, date),
-    cfg.hasWorkouts
-      ? getCachedWorkoutsSince(daysAgoStr(2))
-      : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
-  ]);
+  let cached: Awaited<ReturnType<typeof getSuggestion>> = null;
 
-  if (!profile) {
-    return NextResponse.json({ suggestion: null, reason: "no_profile" });
-  }
-
-  const totals = sumTotals(meals);
-  const current = {
-    meals_count: meals.length,
-    totals_calories: Math.round(totals.calories),
-    totals_protein_g: Math.round(totals.protein_g),
-  };
-
-  const cached = await getSuggestion(userId, date);
-  if (cached && !isStale(cached, current)) {
-    return NextResponse.json({
-      suggestion: {
-        body: cached.body,
-        meals_count: cached.meals_count,
-        totals_calories: cached.totals_calories,
-        totals_protein_g: cached.totals_protein_g,
-        updated_at: cached.updated_at,
-        cached: true,
-      },
-    });
-  }
-
-  const todaysWorkout =
-    rowsToHevy(cachedRecent).find((w) => {
-      const t = Date.parse(w.start_time || "");
-      return Number.isFinite(t) && dateKey(new Date(t)) === date;
-    }) ?? null;
-
-  // Pull the last 5 suggestion bodies so the model can avoid repeating itself.
-  const recent = await getRecentSuggestions(userId, 5);
-  const recentSuggestions = recent.map((s) => s.body);
-
-  let body: string;
   try {
-    body = await generate({
+    const [profile, meals, cachedRecent] = await Promise.all([
+      getProfile(userId),
+      getMealsByDateLite(userId, date),
+      cfg.hasWorkouts
+        ? getCachedWorkoutsSince(daysAgoStr(2))
+        : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
+    ]);
+
+    if (!profile) {
+      return NextResponse.json({ suggestion: null, reason: "no_profile" });
+    }
+
+    const totals = sumTotals(meals);
+    const current = {
+      meals_count: meals.length,
+      totals_calories: Math.round(totals.calories),
+      totals_protein_g: Math.round(totals.protein_g),
+    };
+
+    cached = await getSuggestion(userId, date);
+    if (cached && !isStale(cached, current)) {
+      return NextResponse.json({
+        suggestion: {
+          body: cached.body,
+          meals_count: cached.meals_count,
+          totals_calories: cached.totals_calories,
+          totals_protein_g: cached.totals_protein_g,
+          updated_at: cached.updated_at,
+          cached: true,
+        },
+      });
+    }
+
+    const todaysWorkout =
+      rowsToHevy(cachedRecent).find((w) => {
+        const t = Date.parse(w.start_time || "");
+        return Number.isFinite(t) && dateKey(new Date(t)) === date;
+      }) ?? null;
+
+    const body = await generate({
       profile,
       totals,
       todaysMealsBrief: meals.map((m) => ({
@@ -172,9 +160,28 @@ export async function GET() {
         protein_g: m.protein_g,
       })),
       todaysWorkout,
-      recentSuggestions,
+    });
+
+    await upsertSuggestion(userId, {
+      date,
+      body,
+      meals_count: current.meals_count,
+      totals_calories: current.totals_calories,
+      totals_protein_g: current.totals_protein_g,
+    });
+
+    return NextResponse.json({
+      suggestion: {
+        body,
+        meals_count: current.meals_count,
+        totals_calories: current.totals_calories,
+        totals_protein_g: current.totals_protein_g,
+        updated_at: new Date().toISOString(),
+        cached: false,
+      },
     });
   } catch (e: any) {
+    const errMsg = e?.message ?? "suggestion_failed";
     if (cached) {
       return NextResponse.json({
         suggestion: {
@@ -185,32 +192,12 @@ export async function GET() {
           updated_at: cached.updated_at,
           cached: true,
           stale: true,
-          error: e?.message ?? "generation_failed",
         },
       });
     }
     return NextResponse.json(
-      { suggestion: null, error: e?.message ?? "generation_failed" },
+      { suggestion: null, error: errMsg },
       { status: 500 },
     );
   }
-
-  await upsertSuggestion(userId, {
-    date,
-    body,
-    meals_count: current.meals_count,
-    totals_calories: current.totals_calories,
-    totals_protein_g: current.totals_protein_g,
-  });
-
-  return NextResponse.json({
-    suggestion: {
-      body,
-      meals_count: current.meals_count,
-      totals_calories: current.totals_calories,
-      totals_protein_g: current.totals_protein_g,
-      updated_at: new Date().toISOString(),
-      cached: false,
-    },
-  });
 }

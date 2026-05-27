@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
-import InstallPromptBanner from "@/components/InstallPromptBanner";
 import { useLang } from "@/components/LangProvider";
 import { t } from "@/lib/i18n";
 
@@ -96,6 +95,18 @@ export default function HomeClient({
   const [suggestionLoading, setSuggestionLoading] = useState(!initialSuggestion);
 
   useEffect(() => {
+    // Always re-fetch the core today data on mount so macros/meals are fresh
+    // even when Next.js serves a cached RSC payload from the router cache.
+    (async () => {
+      try {
+        const r = await fetch("/api/today", { cache: "no-store" });
+        const j = await r.json();
+        if (j && !j.error) setData(j);
+      } catch {
+        // non-fatal — initial SSR data is still shown
+      }
+    })();
+
     if (hasWorkouts) {
       (async () => {
         try {
@@ -156,11 +167,6 @@ export default function HomeClient({
           {userDisplayName}
         </Link>
       </div>
-
-      {/* Android-only "Install app" prompt. Renders nothing if the browser
-          hasn't fired beforeinstallprompt or if the user already dismissed
-          it for 14 days. */}
-      <InstallPromptBanner />
 
       <section className="card p-5">
         <div className="flex justify-between items-center mb-4">
@@ -328,54 +334,37 @@ export default function HomeClient({
 }
 
 function bandClasses(band: Recovery["band"]) {
-  switch (band) {
-    case "high":
-      return "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
-    case "good":
-      return "text-emerald-300 border-emerald-500/30 bg-emerald-500/5";
-    case "moderate":
-      return "text-amber-300 border-amber-500/40 bg-amber-500/10";
-    case "low":
-      return "text-red-300 border-red-500/40 bg-red-500/10";
-  }
+  if (band === "high") return "border-emerald-500/40 text-emerald-400 bg-emerald-500/10";
+  if (band === "good") return "border-green-500/40 text-green-400 bg-green-500/10";
+  if (band === "moderate") return "border-yellow-500/40 text-yellow-400 bg-yellow-500/10";
+  return "border-red-500/40 text-red-400 bg-red-500/10";
 }
 
 function ScoreBar({ score, band }: { score: number; band: Recovery["band"] }) {
-  const fill =
-    band === "high" || band === "good"
-      ? "bg-emerald-500"
-      : band === "moderate"
-        ? "bg-amber-500"
-        : "bg-red-500";
+  const pct = Math.min(100, Math.max(0, score));
+  const color =
+    band === "high" ? "bg-emerald-500" :
+    band === "good" ? "bg-green-500" :
+    band === "moderate" ? "bg-yellow-500" : "bg-red-500";
   return (
-    <div className="h-1.5 rounded-full bg-bg-elev overflow-hidden">
-      <div className={`h-full ${fill}`} style={{ width: `${Math.max(2, score)}%` }} />
+    <div className="h-1.5 w-full rounded-full bg-white/10">
+      <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
 
 function MusclePill({ status, todayLabel }: { status: MuscleStatus; todayLabel: string }) {
-  const cls =
-    status.readiness === "rest"
-      ? "border-red-500/40 bg-red-500/10 text-red-300"
-      : status.readiness === "cautious"
-        ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-        : "border-emerald-500/30 bg-emerald-500/5 text-emerald-300";
-  const days =
-    status.daysSince === null
-      ? "—"
-      : status.daysSince === 0
-        ? todayLabel
-        : `${status.daysSince}d`;
+  const colors = {
+    rest: "border-red-500/40 text-red-400 bg-red-500/10",
+    cautious: "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
+    ready: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+  };
   return (
-    <div
-      className={`rounded-md border ${cls} px-1.5 py-1 text-center`}
-      title={`${status.muscle} — ${status.readiness}${
-        status.daysSince === null ? "" : ` (last hit ${days} ago)`
-      }`}
-    >
-      <div className="text-[10px] capitalize leading-tight">{status.muscle}</div>
-      <div className="text-[9px] opacity-70 leading-tight">{days}</div>
+    <div className={`rounded-lg border px-1.5 py-1 text-center ${colors[status.readiness]}`}>
+      <div className="text-[9px] font-semibold uppercase tracking-wide truncate">{status.muscle}</div>
+      <div className="text-[9px] mt-0.5">
+        {status.daysSince === 0 ? todayLabel : status.daysSince === null ? "—" : `${status.daysSince}d`}
+      </div>
     </div>
   );
 }
