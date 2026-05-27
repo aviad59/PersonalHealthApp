@@ -144,75 +144,80 @@ async function buildContext(userId: UserId): Promise<any> {
 }
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
-  const messages = await getCoachMessages(userId, HISTORY_LIMIT);
-  return NextResponse.json({ messages });
+  try {
+    const userId = getCurrentUserIdOrDefault();
+    const messages = await getCoachMessages(userId, HISTORY_LIMIT);
+    return NextResponse.json({ messages });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message ?? "failed to load thread" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
-  const body = await req.json().catch(() => ({}));
-  const parsed = PostSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "validation", issues: parsed.error.issues },
-      { status: 400 },
-    );
-  }
-  const userMessage = parsed.data.message.trim();
-
-  // Append the user turn first so it shows up in history even if the model
-  // call fails or times out. We'll add the assistant turn after it returns.
-  await addCoachMessage(userId, "user", userMessage);
-
-  // Fetch context AND the just-saved history in parallel.
-  const [context, history] = await Promise.all([
-    buildContext(userId),
-    getCoachMessages(userId, HISTORY_LIMIT),
-  ]);
-
-  // We pass the data snapshot as a synthetic first user message so the
-  // model sees it as fresh ground truth without us having to stuff a huge
-  // blob into the system prompt every turn.
-  const messages: { role: "user" | "assistant"; content: string }[] = [
-    {
-      role: "user",
-      content:
-        "[CURRENT DATA SNAPSHOT — refreshed each turn so use these numbers, not anything older]\n\n" +
-        JSON.stringify(context, null, 2),
-    },
-    {
-      role: "assistant",
-      content: "Got it — I have your latest profile, today's meals, weight log, and (if enabled) recent workouts. Ask anything.",
-    },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-  ];
-
-  let reply: string;
   try {
+    const userId = getCurrentUserIdOrDefault();
+    const body = await req.json().catch(() => ({}));
+    const parsed = PostSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "validation", issues: parsed.error.issues },
+        { status: 400 },
+      );
+    }
+    const userMessage = parsed.data.message.trim();
+
+    // Append the user turn first so it shows up in history even if the model
+    // call fails or times out. We'll add the assistant turn after it returns.
+    await addCoachMessage(userId, "user", userMessage);
+
+    // Fetch context AND the just-saved history in parallel.
+    const [context, history] = await Promise.all([
+      buildContext(userId),
+      getCoachMessages(userId, HISTORY_LIMIT),
+    ]);
+
+    // We pass the data snapshot as a synthetic first user message so the
+    // model sees it as fresh ground truth without us having to stuff a huge
+    // blob into the system prompt every turn.
+    const messages: { role: "user" | "assistant"; content: string }[] = [
+      {
+        role: "user",
+        content:
+          "[CURRENT DATA SNAPSHOT — refreshed each turn so use these numbers, not anything older]\n\n" +
+          JSON.stringify(context, null, 2),
+      },
+      {
+        role: "assistant",
+        content: "Got it — I have your latest profile, today's meals, weight log, and (if enabled) recent workouts. Ask anything.",
+      },
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
     const resp = await anthropic().messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 600,
-      // Slight temperature push so the coach doesn't sound rote across turns.
       temperature: 0.7,
       system: COACH_SYSTEM,
       messages,
     });
-    reply = resp.content
+    let reply = resp.content
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("\n")
       .trim();
     if (!reply) reply = "(no response)";
+
+    await addCoachMessage(userId, "assistant", reply);
+    return NextResponse.json({ reply });
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message ?? "coach_failed" },
       { status: 500 },
     );
   }
-
-  await addCoachMessage(userId, "assistant", reply);
-  return NextResponse.json({ reply });
 }
 
 export async function DELETE() {
