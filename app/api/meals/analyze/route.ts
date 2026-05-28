@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, CLAUDE_MODEL, CLAUDE_FAST_MODEL, extractJson } from "@/lib/anthropic";
+import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
 import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
 
 export const runtime = "nodejs";
@@ -57,11 +57,8 @@ export async function POST(req: NextRequest) {
         ? `User context: ${contextText}\n\nAnalyze this meal and return the JSON.`
         : "Analyze this meal and return the JSON.";
 
-      // Haiku 4.5 + a tighter token budget. Meal analyses fit comfortably
-      // in ~700 tokens; the previous 1800-token ceiling let the model
-      // ramble and occasionally pushed the response past 8 s.
       const resp = await anthropic().messages.create({
-        model: CLAUDE_FAST_MODEL,
+        model: CLAUDE_MODEL,
         max_tokens: 800,
         system: mealVisionPrompt(lang),
         messages: [

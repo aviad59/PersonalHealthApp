@@ -35,12 +35,33 @@ function mealJsonSchema(lang: string): string {
 }
 
 export function mealVisionPrompt(lang = "en"): string {
-  return `You are a precise nutrition analyst.
+  return `You are a precise nutrition analyst with deep knowledge of food composition databases (USDA, Israeli Ministry of Health).
 Analyze the food in this photo and return ONE JSON object immediately — no prose, no fences.
 
-Use visible size cues (plate diameter ~26 cm, utensils, packaging, hands) to gauge portions.
-If no reference objects are visible, default to a typical single-person restaurant serving.
-Total kcal must make sense for what's on the plate — adjust if something looks off.
+PORTION ESTIMATION:
+- Use visible size cues: plate diameter (~26 cm standard), utensils, packaging labels, hands.
+- If no reference is visible, default to a typical single-person restaurant serving.
+- Err on the side of the portion you can actually see — don't inflate.
+
+CALORIE ANCHORS — derive from these known values, not guesswork:
+- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
+- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
+- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
+- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
+- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
+- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
+- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
+- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
+- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
+- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
+- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
+- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
+- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs
+
+RULES:
+- Total kcal must equal the sum of all items (no rounding errors >5 kcal).
+- Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. Recheck if outside this range.
+- Set confidence "high" when portions are clearly visible or labeled, "medium" for visible food with estimated portions, "low" when food is obscured or ambiguous.
 
 ${mealLangInstruction(lang)}
 
