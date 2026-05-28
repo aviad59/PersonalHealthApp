@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
@@ -57,7 +56,6 @@ function todayStr() {
 }
 
 export default function LogMealPage() {
-  const router = useRouter();
   const lang = useLang();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -103,10 +101,12 @@ export default function LogMealPage() {
 
   // Existing meals state
   const [existing, setExisting] = useState<ExistingMeal[]>([]);
+  const [existingLoading, setExistingLoading] = useState(true);
   const [existingEditId, setExistingEditId] = useState<number | null>(null);
 
   // Frequent meals state
   const [frequent, setFrequent] = useState<FrequentMeal[]>([]);
+  const [frequentLoading, setFrequentLoading] = useState(true);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [modifier, setModifier] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
@@ -124,16 +124,19 @@ export default function LogMealPage() {
       setExisting(j.meals || []);
     } catch {
       // non-fatal
+    } finally {
+      setExistingLoading(false);
     }
   }, []);
 
   // Reload existing meals whenever the date changes.
   useEffect(() => {
     setExistingEditId(null);
+    setExistingLoading(true);
     loadExisting(date);
   }, [date, loadExisting]);
 
-  // Frequent meals are global to the user; load once.
+  // Frequent meals are global; load once in parallel with existing.
   useEffect(() => {
     (async () => {
       try {
@@ -142,6 +145,8 @@ export default function LogMealPage() {
         setFrequent(j.meals || []);
       } catch {
         // non-fatal
+      } finally {
+        setFrequentLoading(false);
       }
     })();
   }, []);
@@ -292,12 +297,6 @@ export default function LogMealPage() {
         })();
       }
 
-      if (isToday) {
-        setTimeout(() => {
-          router.push("/");
-          router.refresh();
-        }, 2000);
-      }
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -383,12 +382,6 @@ export default function LogMealPage() {
         })();
       }
 
-      if (isToday) {
-        setTimeout(() => {
-          router.push("/");
-          router.refresh();
-        }, 2000);
-      }
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -443,12 +436,6 @@ export default function LogMealPage() {
         })();
       }
 
-      if (isToday) {
-        setTimeout(() => {
-          router.push("/");
-          router.refresh();
-        }, 2000);
-      }
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -529,7 +516,18 @@ export default function LogMealPage() {
       </div>
 
       {/* --- EXISTING MEALS FOR THIS DATE --- */}
-      {existing.length > 0 && (
+      {existingLoading ? (
+        <section className="space-y-2">
+          <div className="h-4 w-32 rounded bg-bg-elev animate-pulse" />
+          <div className="card p-3 flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-bg-elev animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 w-3/4 rounded bg-bg-elev animate-pulse" />
+              <div className="h-3 w-1/2 rounded bg-bg-elev animate-pulse" />
+            </div>
+          </div>
+        </section>
+      ) : existing.length > 0 ? (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
             {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
@@ -549,7 +547,7 @@ export default function LogMealPage() {
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
       {!photoPreview && !analysis && !manualMode && (
@@ -823,7 +821,7 @@ export default function LogMealPage() {
       {err && <div className="text-sm text-red-400">{err}</div>}
 
       {/* --- FREQUENT MEALS --- */}
-      {!analysis && frequent.length > 0 && (
+      {!analysis && (frequentLoading || frequent.length > 0) && (
         <section className="space-y-3 pt-2">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
@@ -831,6 +829,16 @@ export default function LogMealPage() {
             </h2>
             <span className="text-[11px] text-white/40">{t(lang, "meal_recurring")}</span>
           </div>
+          {frequentLoading ? (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="card p-4 space-y-2">
+                  <div className="h-3 w-2/3 rounded bg-bg-elev animate-pulse" />
+                  <div className="h-3 w-1/3 rounded bg-bg-elev animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="space-y-2">
             {frequent.map((m, i) => {
               const open = expandedIdx === i;
@@ -895,6 +903,7 @@ export default function LogMealPage() {
               );
             })}
           </div>
+          )}
         </section>
       )}
     </div>
