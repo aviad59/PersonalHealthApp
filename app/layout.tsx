@@ -35,7 +35,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0a0a0b",
+  themeColor: "#080c10",
   // viewportFit: cover lets the app draw under the status bar / nav bar when
   // installed as a PWA — needed for the immersive feel on Android.
   viewportFit: "cover",

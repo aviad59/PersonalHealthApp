@@ -10,12 +10,11 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0a0a0c",
-          card: "#15151a",
-          elev: "#20202a",
+          DEFAULT: "#080c10",
+          card: "#111620",
+          elev: "#1a2030",
         },
         border: {
-          // Hairline white keeps dividers crisp without heavy lines.
           DEFAULT: "rgba(255,255,255,0.08)",
           strong: "rgba(255,255,255,0.12)",
         },
@@ -24,7 +23,7 @@ const config: Config = {
           carbs: "#f5a623",
           fat: "#4a90e2",
           cal: "#13c08a",
-          brand: "#a855f7",
+          brand: "#0ea5e9",
         },
       },
       fontFamily: {

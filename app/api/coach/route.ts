@@ -97,7 +97,18 @@ async function buildContext(userId: UserId): Promise<any> {
   const recentWorkouts = workouts.slice(0, 8).map((w) => ({
     title: w.title,
     date: dateKey(new Date(w.start_time || Date.now())),
+    duration_min: Math.round((new Date(w.end_time).getTime() - new Date(w.start_time).getTime()) / 60000),
     volume_kg: Math.round(workoutVolumeKg(w)),
+    exercises: w.exercises.map((ex) => ({
+      name: ex.title,
+      sets: ex.sets
+        .filter((s) => s.type !== "warmup" && (s.reps ?? 0) > 0)
+        .map((s) => ({
+          reps: s.reps,
+          weight_kg: s.weight_kg,
+          type: s.type !== "normal" ? s.type : undefined,
+        })),
+    })).filter((ex) => ex.sets.length > 0),
   }));
 
   return {
@@ -123,14 +134,28 @@ async function buildContext(userId: UserId): Promise<any> {
     },
     today: {
       totals: totalsForMeals(todayMeals),
-      meals: todayMeals.map((m) => ({
-        description: m.description,
-        calories: m.calories,
-        protein_g: m.protein_g,
-        fat_g: m.fat_g,
-        carbs_g: m.carbs_g,
-        time: m.created_at,
-      })),
+      meals: todayMeals.map((m) => {
+        let items: any[] | null = null;
+        if (m.items_json) {
+          try { items = JSON.parse(m.items_json); } catch {}
+        }
+        return {
+          description: m.description,
+          time: m.created_at,
+          calories: m.calories,
+          protein_g: m.protein_g,
+          fat_g: m.fat_g,
+          carbs_g: m.carbs_g,
+          ...(items && items.length > 0 && {
+            items: items.map((it: any) => ({
+              name: it.name,
+              portion: it.portion,
+              calories: it.calories,
+              protein_g: it.protein_g,
+            })),
+          }),
+        };
+      }),
     },
     week_by_day,
     weight_log_last_14d: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),

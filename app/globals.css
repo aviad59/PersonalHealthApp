@@ -3,17 +3,16 @@
 @tailwind utilities;
 
 :root {
-  /* Layered dark palette with clearer elevation steps. */
-  --bg: #0a0a0c;
-  --card: #15151a;
-  --elev: #20202a;
-  --border: #2c2c36;
-  /* Hairline borders read better as a low-opacity white than a flat hex. */
+  /* Layered dark palette — cool blue-tinted darks with teal brand. */
+  --bg: #080c10;
+  --card: #111620;
+  --elev: #1a2030;
+  --border: #252e3d;
   --hairline: rgba(255, 255, 255, 0.07);
   --hairline-strong: rgba(255, 255, 255, 0.11);
-  --text: #f6f6f8;
-  --muted: #8a8a96;
-  --brand: #a855f7;
+  --text: #e8edf5;
+  --muted: #7a8799;
+  --brand: #0ea5e9;
 }
 
 html, body {
@@ -33,7 +32,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   /* Very subtle top-down glow so the page has depth instead of flat black. */
   background-image:
-    radial-gradient(120% 80% at 50% -10%, rgba(168, 85, 247, 0.08), transparent 60%);
+    radial-gradient(120% 80% at 50% -10%, rgba(14, 165, 233, 0.07), transparent 60%);
   background-attachment: fixed;
 }
 
@@ -47,9 +46,9 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Softer, on-brand focus ring */
+/* On-brand focus ring */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--brand) 70%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--brand) 65%, transparent);
   outline-offset: 2px;
 }
 
@@ -73,7 +72,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 /* Brand glow for primary actions / active accents. */
-.glow-brand { box-shadow: 0 6px 24px -8px rgba(168, 85, 247, 0.55); }
+.glow-brand { box-shadow: 0 6px 24px -8px rgba(14, 165, 233, 0.5); }
 
 /* Safe-area padding for mobile */
 .safe-top { padding-top: env(safe-area-inset-top); }
