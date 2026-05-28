@@ -515,40 +515,6 @@ export default function LogMealPage() {
         </div>
       </div>
 
-      {/* --- EXISTING MEALS FOR THIS DATE --- */}
-      {existingLoading ? (
-        <section className="space-y-2">
-          <div className="h-4 w-32 rounded bg-bg-elev animate-pulse" />
-          <div className="card p-3 flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-bg-elev animate-pulse shrink-0" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-3/4 rounded bg-bg-elev animate-pulse" />
-              <div className="h-3 w-1/2 rounded bg-bg-elev animate-pulse" />
-            </div>
-          </div>
-        </section>
-      ) : existing.length > 0 ? (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-            {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
-          </h2>
-          <div className="space-y-2">
-            {existing.map((m) => (
-              <ExistingMealRow
-                key={m.id}
-                meal={m}
-                isEditing={existingEditId === m.id}
-                onEditToggle={() =>
-                  setExistingEditId(existingEditId === m.id ? null : m.id)
-                }
-                onDelete={() => deleteMeal(m.id)}
-                onSave={(fields) => patchMeal(m.id, fields)}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
       {!photoPreview && !analysis && !manualMode && (
         <div className="space-y-2">
@@ -819,6 +785,43 @@ export default function LogMealPage() {
       )}
 
       {err && <div className="text-sm text-red-400">{err}</div>}
+
+      {/* --- EXISTING MEALS FOR THIS DATE --- */}
+      {(existingLoading || existing.length > 0) && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+            {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
+          </h2>
+          {existingLoading ? (
+            <div className="space-y-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="card p-3 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-bg-elev animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-3/4 rounded bg-bg-elev animate-pulse" />
+                    <div className="h-3 w-1/2 rounded bg-bg-elev animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {existing.map((m) => (
+                <ExistingMealRow
+                  key={m.id}
+                  meal={m}
+                  isEditing={existingEditId === m.id}
+                  onEditToggle={() =>
+                    setExistingEditId(existingEditId === m.id ? null : m.id)
+                  }
+                  onDelete={() => deleteMeal(m.id)}
+                  onSave={(fields) => patchMeal(m.id, fields)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* --- FREQUENT MEALS --- */}
       {!analysis && (frequentLoading || frequent.length > 0) && (
