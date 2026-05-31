@@ -41,11 +41,34 @@ type ExistingMeal = {
   fat_g: number | null;
   carbs_g: number | null;
   photo_path: string | null;
-  // Inline thumbnail data URI for fast list rendering, when available.
   photo_thumb: string | null;
+  items_json: string | null;
   ai_tip: string | null;
   created_at: string;
 };
+
+type ProteinPowder = {
+  id: string;
+  name: string;       // display name
+  scoop_g: number;    // grams per scoop
+  cal: number;        // kcal per scoop
+  protein: number;    // g per scoop
+  fat: number;
+  carbs: number;
+  dairy: boolean;     // true = milchig (whey/casein)
+};
+
+const PROTEIN_POWDERS: ProteinPowder[] = [
+  { id: "on_gold",       name: "ON Gold Standard Whey",     scoop_g: 30, cal: 120, protein: 24,   fat: 1,   carbs: 3, dairy: true  },
+  { id: "myprotein",     name: "MyProtein Impact Whey",     scoop_g: 25, cal: 103, protein: 21,   fat: 2,   carbs: 1, dairy: true  },
+  { id: "dymatize_iso",  name: "Dymatize ISO 100",          scoop_g: 29, cal: 110, protein: 25,   fat: 0.5, carbs: 1, dairy: true  },
+  { id: "nitrotech",     name: "MuscleTech NitroTech",      scoop_g: 46, cal: 160, protein: 30,   fat: 2.5, carbs: 4, dairy: true  },
+  { id: "bsn_syntha",    name: "BSN Syntha-6",              scoop_g: 47, cal: 200, protein: 22,   fat: 6,   carbs: 14, dairy: true },
+  { id: "concentrate",   name: "ווי קונסנטרט (גנרי)",      scoop_g: 30, cal: 120, protein: 22,   fat: 3,   carbs: 5, dairy: true  },
+  { id: "isolate",       name: "ווי איזולאט (גנרי)",       scoop_g: 30, cal: 110, protein: 26,   fat: 0.5, carbs: 1, dairy: true  },
+  { id: "casein",        name: "קזאין",                    scoop_g: 34, cal: 120, protein: 24,   fat: 1,   carbs: 4, dairy: true  },
+  { id: "soy",           name: "חלבון סויה (פרווה)",       scoop_g: 30, cal: 110, protein: 22,   fat: 1,   carbs: 3, dairy: false },
+];
 
 function todayStr() {
   const d = new Date();
@@ -116,6 +139,12 @@ export default function LogMealPage() {
   const [manualDesc, setManualDesc] = useState("");
   const [manualMacros, setManualMacros] = useState({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
   const [manualSaving, setManualSaving] = useState(false);
+
+  // Protein powder state
+  const [proteinMode, setProteinMode] = useState(false);
+  const [powderId, setPowderId] = useState<string>(PROTEIN_POWDERS[0].id);
+  const [scoops, setScoops] = useState<number>(1);
+  const [proteinSaving, setProteinSaving] = useState(false);
 
   const loadExisting = useCallback(async (forDate: string) => {
     try {
@@ -444,6 +473,47 @@ export default function LogMealPage() {
     }
   }
 
+  async function saveProtein() {
+    const powder = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
+    const calc = {
+      calories: Math.round(scoops * powder.cal),
+      protein_g: parseFloat((scoops * powder.protein).toFixed(1)),
+      fat_g: parseFloat((scoops * powder.fat).toFixed(1)),
+      carbs_g: parseFloat((scoops * powder.carbs).toFixed(1)),
+    };
+    const scoopLabel = scoops === 1 ? "סקופ" : "סקופים";
+    const description = `${powder.name} — ${scoops} ${scoopLabel}`;
+
+    setProteinSaving(true);
+    setErr(null);
+    try {
+      await safeFetchJson("/api/meals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date,
+          description,
+          ...calc,
+          confidence: "high",
+          items: [{
+            type: "protein_powder",
+            brand_id: powder.id,
+            name: powder.name,
+            portion: `${scoops} סקופ (${Math.round(scoops * powder.scoop_g)}g)`,
+            ...calc,
+          }],
+        }),
+      });
+      await loadExisting(date);
+      setProteinMode(false);
+      setScoops(1);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setProteinSaving(false);
+    }
+  }
+
   async function deleteMeal(id: number) {
     if (!confirm(t(lang, "meal_delete_confirm"))) return;
     try {
@@ -516,7 +586,7 @@ export default function LogMealPage() {
       </div>
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
-      {!photoPreview && !analysis && !manualMode && (
+      {!photoPreview && !analysis && !manualMode && !proteinMode && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -546,10 +616,105 @@ export default function LogMealPage() {
             </button>
           </div>
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
+          <button
+            onClick={() => { setProteinMode(true); setErr(null); }}
+            className="w-full rounded-2xl border border-accent-protein/30 bg-accent-protein/5 py-3 flex items-center justify-center gap-2.5 text-sm text-accent-protein font-medium"
+          >
+            <ShakerIcon className="h-5 w-5" />
+            אבקת חלבון
+          </button>
         </div>
       )}
 
-      {photoPreview && !manualMode && (
+      {/* --- PROTEIN POWDER QUICK-LOG --- */}
+      {proteinMode && !analysis && (
+        <div className="card p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShakerIcon className="h-5 w-5 text-accent-protein" />
+              <h3 className="text-sm font-semibold">אבקת חלבון</h3>
+            </div>
+            <button onClick={() => { setProteinMode(false); setErr(null); }} className="text-xs text-white/40">
+              {t(lang, "meal_cancel")}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-white/60 mb-1.5">בחר מוצר</label>
+              <select
+                value={powderId}
+                onChange={(e) => setPowderId(e.target.value)}
+                className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] text-white"
+              >
+                {PROTEIN_POWDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.dairy ? " (חלבי)" : " (פרווה)"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/60 mb-1.5">מספר סקופים</label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setScoops((s) => Math.max(0.5, parseFloat((s - 0.5).toFixed(1))))}
+                  className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
+                >−</button>
+                <span className="flex-1 text-center text-xl font-semibold tabular-nums">{scoops}</span>
+                <button
+                  onClick={() => setScoops((s) => parseFloat((s + 0.5).toFixed(1)))}
+                  className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
+                >+</button>
+              </div>
+              {(() => {
+                const p = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
+                return (
+                  <p className="text-[11px] text-white/40 text-center mt-1">
+                    {Math.round(scoops * p.scoop_g)}g סה״כ · סקופ = {p.scoop_g}g
+                  </p>
+                );
+              })()}
+            </div>
+
+            {/* Calculated macros preview */}
+            {(() => {
+              const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
+              return (
+                <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <div className="text-[11px] text-accent-cal font-semibold">{Math.round(scoops * p.cal)}</div>
+                    <div className="text-[10px] text-white/40">קק״ל</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-accent-protein font-semibold">{(scoops * p.protein).toFixed(1)}g</div>
+                    <div className="text-[10px] text-white/40">חלבון</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-accent-fat font-semibold">{(scoops * p.fat).toFixed(1)}g</div>
+                    <div className="text-[10px] text-white/40">שומן</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-accent-carbs font-semibold">{(scoops * p.carbs).toFixed(1)}g</div>
+                    <div className="text-[10px] text-white/40">פחמימות</div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          <button
+            onClick={saveProtein}
+            disabled={proteinSaving}
+            className="w-full rounded-xl bg-accent-protein py-3 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {proteinSaving ? "שומר…" : isToday ? "שמור" : `שמור ל-${prettyDate(date, lang)}`}
+          </button>
+        </div>
+      )}
+
+      {photoPreview && !manualMode && !proteinMode && (
         <div className="space-y-3">
           <div className="relative rounded-2xl overflow-hidden border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -586,7 +751,7 @@ export default function LogMealPage() {
       />
 
       {/* --- TEXT INPUT (always visible until an analysis exists) --- */}
-      {!analysis && !manualMode && (
+      {!analysis && !manualMode && !proteinMode && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/60 mb-1.5">
@@ -629,7 +794,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- MANUAL ENTRY FORM --- */}
-      {manualMode && !analysis && (
+      {manualMode && !analysis && !proteinMode && (
         <div className="card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">{t(lang, "meal_manual_title")}</h3>
@@ -958,11 +1123,20 @@ function ExistingMealRow({
     }
   }
 
+  const isProteinPowder = (() => {
+    if (!meal.items_json) return false;
+    try { return JSON.parse(meal.items_json)?.[0]?.type === "protein_powder"; }
+    catch { return false; }
+  })();
+
   return (
     <div className="card p-3">
       <div className="flex items-center gap-3">
-        {meal.photo_thumb ? (
-          // Inline thumbnail data URI — already tiny, no optimizer hop.
+        {isProteinPowder ? (
+          <div className="w-12 h-12 rounded-lg bg-accent-protein/10 border border-accent-protein/20 flex items-center justify-center shrink-0">
+            <ShakerIcon className="h-6 w-6 text-accent-protein" />
+          </div>
+        ) : meal.photo_thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={meal.photo_thumb}
@@ -973,7 +1147,6 @@ function ExistingMealRow({
             className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
           />
         ) : meal.photo_path ? (
-          // Older meal: fall back to the optimizer-resized full image.
           <Image
             src={meal.photo_path}
             alt=""
@@ -1072,6 +1245,17 @@ function prettyDate(s: string, lang: Lang): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M8 2h8l1 3H7L8 2Z" />
+      <path d="M7 5l-1 15.5A1 1 0 0 0 7 22h10a1 1 0 0 0 1-1.5L17 5H7Z" />
+      <line x1="9" y1="10" x2="15" y2="10" />
+      <line x1="9" y1="13.5" x2="13" y2="13.5" />
+    </svg>
+  );
 }
 
 function MacroEdit({
