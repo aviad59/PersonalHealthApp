@@ -18,7 +18,7 @@ import {
   daysAgoStr,
   dateKey,
 } from "@/lib/db";
-import { anthropic, CLAUDE_MODEL } from "@/lib/anthropic";
+import { anthropic, CLAUDE_OPUS_MODEL } from "@/lib/anthropic";
 import { COACH_SYSTEM } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig, type UserId } from "@/lib/user";
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const resp = await anthropic().messages.create({
-      model: CLAUDE_MODEL,
+      model: CLAUDE_OPUS_MODEL,
       max_tokens: 600,
       temperature: 0.7,
       system: COACH_SYSTEM,

@@ -4,6 +4,9 @@ import Anthropic from "@anthropic-ai/sdk";
 // stronger reasoning over a week of meals + workouts.
 export const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
+// "Best" model — used for the AI coach where response quality matters most.
+export const CLAUDE_OPUS_MODEL = "claude-opus-4-8";
+
 // "Fast" model — used for time-sensitive calls the user is sitting and
 // waiting on: meal photo/text analysis, the next-meal tip, and the
 // home-page suggestion. Haiku 4.5 is dramatically faster (typical
