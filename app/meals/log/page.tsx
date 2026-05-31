@@ -60,16 +60,16 @@ type ProteinPowder = {
 };
 
 const PROTEIN_POWDERS: ProteinPowder[] = [
-  { id: "allin_whey",  name: "Allin Whey וניל",        scoop_ml: 100, scoop_g: 33, cal: 127, protein: 23,  fat: 1.2, carbs: 3.6, dairy: true  },
-  { id: "on_gold",     name: "ON Gold Standard Whey",  scoop_ml: 120, scoop_g: 30, cal: 120, protein: 24,  fat: 1,   carbs: 3,   dairy: true  },
-  { id: "myprotein",   name: "MyProtein Impact Whey",  scoop_ml:  75, scoop_g: 25, cal: 103, protein: 21,  fat: 2,   carbs: 1,   dairy: true  },
-  { id: "dymatize",    name: "Dymatize ISO 100",        scoop_ml:  80, scoop_g: 29, cal: 110, protein: 25,  fat: 0.5, carbs: 1,   dairy: true  },
-  { id: "nitrotech",   name: "MuscleTech NitroTech",   scoop_ml: 120, scoop_g: 46, cal: 160, protein: 30,  fat: 2.5, carbs: 4,   dairy: true  },
-  { id: "bsn_syntha",  name: "BSN Syntha-6",           scoop_ml: 130, scoop_g: 47, cal: 200, protein: 22,  fat: 6,   carbs: 14,  dairy: true  },
-  { id: "concentrate", name: "ווי קונסנטרט (גנרי)",   scoop_ml: 100, scoop_g: 30, cal: 120, protein: 22,  fat: 3,   carbs: 5,   dairy: true  },
-  { id: "isolate",     name: "ווי איזולאט (גנרי)",    scoop_ml:  80, scoop_g: 30, cal: 110, protein: 26,  fat: 0.5, carbs: 1,   dairy: true  },
-  { id: "casein",      name: "קזאין",                 scoop_ml: 120, scoop_g: 34, cal: 120, protein: 24,  fat: 1,   carbs: 4,   dairy: true  },
-  { id: "soy",         name: "חלבון סויה (פרווה)",    scoop_ml: 100, scoop_g: 30, cal: 110, protein: 22,  fat: 1,   carbs: 3,   dairy: false },
+  { id: "allin_whey",  name: "Allin Whey וניל",        scoop_ml:  70, scoop_g: 33, cal: 127, protein: 23,  fat: 1.2, carbs: 3.6, dairy: true  },
+  { id: "on_gold",     name: "ON Gold Standard Whey",  scoop_ml:  65, scoop_g: 30, cal: 120, protein: 24,  fat: 1,   carbs: 3,   dairy: true  },
+  { id: "myprotein",   name: "MyProtein Impact Whey",  scoop_ml:  55, scoop_g: 25, cal: 103, protein: 21,  fat: 2,   carbs: 1,   dairy: true  },
+  { id: "dymatize",    name: "Dymatize ISO 100",        scoop_ml:  60, scoop_g: 29, cal: 110, protein: 25,  fat: 0.5, carbs: 1,   dairy: true  },
+  { id: "nitrotech",   name: "MuscleTech NitroTech",   scoop_ml:  95, scoop_g: 46, cal: 160, protein: 30,  fat: 2.5, carbs: 4,   dairy: true  },
+  { id: "bsn_syntha",  name: "BSN Syntha-6",           scoop_ml: 100, scoop_g: 47, cal: 200, protein: 22,  fat: 6,   carbs: 14,  dairy: true  },
+  { id: "concentrate", name: "ווי קונסנטרט (גנרי)",   scoop_ml:  65, scoop_g: 30, cal: 120, protein: 22,  fat: 3,   carbs: 5,   dairy: true  },
+  { id: "isolate",     name: "ווי איזולאט (גנרי)",    scoop_ml:  60, scoop_g: 30, cal: 110, protein: 26,  fat: 0.5, carbs: 1,   dairy: true  },
+  { id: "casein",      name: "קזאין",                 scoop_ml:  75, scoop_g: 34, cal: 120, protein: 24,  fat: 1,   carbs: 4,   dairy: true  },
+  { id: "soy",         name: "חלבון סויה (פרווה)",    scoop_ml:  65, scoop_g: 30, cal: 110, protein: 22,  fat: 1,   carbs: 3,   dairy: false },
 ];
 
 function todayStr() {
