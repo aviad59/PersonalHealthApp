@@ -47,30 +47,8 @@ type ExistingMeal = {
   created_at: string;
 };
 
-type ProteinPowder = {
-  id: string;
-  name: string;
-  scoop_ml: number;   // ml printed on the scoop
-  scoop_g: number;    // weight of one scoop (for macro ratio)
-  cal: number;        // kcal per scoop
-  protein: number;    // g per scoop
-  fat: number;
-  carbs: number;
-  dairy: boolean;
-};
-
-const PROTEIN_POWDERS: ProteinPowder[] = [
-  { id: "allin_whey",  name: "Allin Whey וניל",        scoop_ml:  70, scoop_g: 33, cal: 127, protein: 23,  fat: 1.2, carbs: 3.6, dairy: true  },
-  { id: "on_gold",     name: "ON Gold Standard Whey",  scoop_ml:  65, scoop_g: 30, cal: 120, protein: 24,  fat: 1,   carbs: 3,   dairy: true  },
-  { id: "myprotein",   name: "MyProtein Impact Whey",  scoop_ml:  55, scoop_g: 25, cal: 103, protein: 21,  fat: 2,   carbs: 1,   dairy: true  },
-  { id: "dymatize",    name: "Dymatize ISO 100",        scoop_ml:  60, scoop_g: 29, cal: 110, protein: 25,  fat: 0.5, carbs: 1,   dairy: true  },
-  { id: "nitrotech",   name: "MuscleTech NitroTech",   scoop_ml:  95, scoop_g: 46, cal: 160, protein: 30,  fat: 2.5, carbs: 4,   dairy: true  },
-  { id: "bsn_syntha",  name: "BSN Syntha-6",           scoop_ml: 100, scoop_g: 47, cal: 200, protein: 22,  fat: 6,   carbs: 14,  dairy: true  },
-  { id: "concentrate", name: "ווי קונסנטרט (גנרי)",   scoop_ml:  65, scoop_g: 30, cal: 120, protein: 22,  fat: 3,   carbs: 5,   dairy: true  },
-  { id: "isolate",     name: "ווי איזולאט (גנרי)",    scoop_ml:  60, scoop_g: 30, cal: 110, protein: 26,  fat: 0.5, carbs: 1,   dairy: true  },
-  { id: "casein",      name: "קזאין",                 scoop_ml:  75, scoop_g: 34, cal: 120, protein: 24,  fat: 1,   carbs: 4,   dairy: true  },
-  { id: "soy",         name: "חלבון סויה (פרווה)",    scoop_ml:  65, scoop_g: 30, cal: 110, protein: 22,  fat: 1,   carbs: 3,   dairy: false },
-];
+const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
+const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
 function todayStr() {
   const d = new Date();
@@ -144,8 +122,7 @@ export default function LogMealPage() {
 
   // Protein powder state
   const [proteinMode, setProteinMode] = useState(false);
-  const [powderId, setPowderId] = useState<string>(PROTEIN_POWDERS[0].id);
-  const [proteinMl, setProteinMl] = useState<number>(PROTEIN_POWDERS[0].scoop_ml);
+  const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
   const [proteinSaving, setProteinSaving] = useState(false);
 
   const loadExisting = useCallback(async (forDate: string) => {
@@ -476,15 +453,13 @@ export default function LogMealPage() {
   }
 
   async function saveProtein() {
-    const powder = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
-    const ratio = proteinMl / powder.scoop_ml;
     const calc = {
-      calories: Math.round(ratio * powder.cal),
-      protein_g: parseFloat((ratio * powder.protein).toFixed(1)),
-      fat_g: parseFloat((ratio * powder.fat).toFixed(1)),
-      carbs_g: parseFloat((ratio * powder.carbs).toFixed(1)),
+      calories: ALLIN_WHEY.cal,
+      protein_g: ALLIN_WHEY.protein,
+      fat_g: ALLIN_WHEY.fat,
+      carbs_g: ALLIN_WHEY.carbs,
     };
-    const description = `${powder.name} — ${proteinMl} מ״ל`;
+    const description = `Allin Whey וניל עם ${proteinBase}`;
 
     setProteinSaving(true);
     setErr(null);
@@ -499,16 +474,16 @@ export default function LogMealPage() {
           confidence: "high",
           items: [{
             type: "protein_powder",
-            brand_id: powder.id,
-            name: powder.name,
-            portion: `${proteinMl} מ״ל`,
+            brand_id: "allin_whey",
+            name: "Allin Whey וניל",
+            portion: "33g (סקופ אחד)",
             ...calc,
           }],
         }),
       });
       await loadExisting(date);
       setProteinMode(false);
-      setProteinMl(PROTEIN_POWDERS.find((p) => p.id === powderId)?.scoop_ml ?? PROTEIN_POWDERS[0].scoop_ml);
+      setProteinBase(PROTEIN_BASES[0]);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -634,7 +609,7 @@ export default function LogMealPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShakerIcon className="h-5 w-5 text-white/60" />
-              <h3 className="text-sm font-semibold">אבקת חלבון</h3>
+              <h3 className="text-sm font-semibold">Allin Whey וניל — סקופ אחד (33g)</h3>
             </div>
             <button onClick={() => { setProteinMode(false); setErr(null); }} className="text-xs text-white/40">
               {t(lang, "meal_cancel")}
@@ -642,78 +617,39 @@ export default function LogMealPage() {
           </div>
 
           <div className="space-y-3">
+            {/* Fixed macros display */}
+            <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
+              <div>
+                <div className="text-[11px] text-accent-cal font-semibold">{ALLIN_WHEY.cal}</div>
+                <div className="text-[10px] text-white/40">קק״ל</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-accent-protein font-semibold">{ALLIN_WHEY.protein}g</div>
+                <div className="text-[10px] text-white/40">חלבון</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-accent-fat font-semibold">{ALLIN_WHEY.fat}g</div>
+                <div className="text-[10px] text-white/40">שומן</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-accent-carbs font-semibold">{ALLIN_WHEY.carbs}g</div>
+                <div className="text-[10px] text-white/40">פחמימות</div>
+              </div>
+            </div>
+
+            {/* Liquid base */}
             <div>
-              <label className="block text-xs font-medium text-white/60 mb-1.5">בחר מוצר</label>
+              <label className="block text-xs font-medium text-white/60 mb-1.5">עם מה?</label>
               <select
-                value={powderId}
-                onChange={(e) => {
-                  setPowderId(e.target.value);
-                  const p = PROTEIN_POWDERS.find((p) => p.id === e.target.value);
-                  if (p) setProteinMl(p.scoop_ml);
-                }}
+                value={proteinBase}
+                onChange={(e) => setProteinBase(e.target.value)}
                 className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] text-white"
               >
-                {PROTEIN_POWDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}{p.dairy ? " (חלבי)" : " (פרווה)"}
-                  </option>
+                {PROTEIN_BASES.map((b) => (
+                  <option key={b} value={b}>{b}</option>
                 ))}
               </select>
             </div>
-
-            {(() => {
-              const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
-              return (
-                <div>
-                  <label className="block text-xs font-medium text-white/60 mb-1.5">כמות (מ״ל)</label>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setProteinMl((m) => Math.max(p.scoop_ml, m - p.scoop_ml))}
-                      className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
-                    >−</button>
-                    <input
-                      inputMode="numeric"
-                      value={proteinMl}
-                      onChange={(e) => setProteinMl(Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1))}
-                      className="flex-1 text-center text-xl font-semibold tabular-nums bg-bg-elev border border-border rounded-xl py-2"
-                    />
-                    <button
-                      onClick={() => setProteinMl((m) => m + p.scoop_ml)}
-                      className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
-                    >+</button>
-                  </div>
-                  <p className="text-[11px] text-white/40 text-center mt-1">
-                    סקופ אחד = {p.scoop_ml} מ״ל · ≈ {(proteinMl / p.scoop_ml).toFixed(1)} סקופ
-                  </p>
-                </div>
-              );
-            })()}
-
-            {/* Calculated macros preview */}
-            {(() => {
-              const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
-              const r = proteinMl / p.scoop_ml;
-              return (
-                <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
-                  <div>
-                    <div className="text-[11px] text-accent-cal font-semibold">{Math.round(r * p.cal)}</div>
-                    <div className="text-[10px] text-white/40">קק״ל</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-accent-protein font-semibold">{(r * p.protein).toFixed(1)}g</div>
-                    <div className="text-[10px] text-white/40">חלבון</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-accent-fat font-semibold">{(r * p.fat).toFixed(1)}g</div>
-                    <div className="text-[10px] text-white/40">שומן</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-accent-carbs font-semibold">{(r * p.carbs).toFixed(1)}g</div>
-                    <div className="text-[10px] text-white/40">פחמימות</div>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
           <button
