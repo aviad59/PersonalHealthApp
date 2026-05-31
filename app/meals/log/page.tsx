@@ -144,7 +144,7 @@ export default function LogMealPage() {
   // Protein powder state
   const [proteinMode, setProteinMode] = useState(false);
   const [powderId, setPowderId] = useState<string>(PROTEIN_POWDERS[0].id);
-  const [scoops, setScoops] = useState<number>(1);
+  const [proteinGrams, setProteinGrams] = useState<number>(PROTEIN_POWDERS[0].scoop_g);
   const [proteinSaving, setProteinSaving] = useState(false);
 
   const loadExisting = useCallback(async (forDate: string) => {
@@ -476,14 +476,14 @@ export default function LogMealPage() {
 
   async function saveProtein() {
     const powder = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
+    const ratio = proteinGrams / powder.scoop_g;
     const calc = {
-      calories: Math.round(scoops * powder.cal),
-      protein_g: parseFloat((scoops * powder.protein).toFixed(1)),
-      fat_g: parseFloat((scoops * powder.fat).toFixed(1)),
-      carbs_g: parseFloat((scoops * powder.carbs).toFixed(1)),
+      calories: Math.round(ratio * powder.cal),
+      protein_g: parseFloat((ratio * powder.protein).toFixed(1)),
+      fat_g: parseFloat((ratio * powder.fat).toFixed(1)),
+      carbs_g: parseFloat((ratio * powder.carbs).toFixed(1)),
     };
-    const scoopLabel = scoops === 1 ? "סקופ" : "סקופים";
-    const description = `${powder.name} — ${scoops} ${scoopLabel}`;
+    const description = `${powder.name} — ${proteinGrams}g`;
 
     setProteinSaving(true);
     setErr(null);
@@ -500,14 +500,14 @@ export default function LogMealPage() {
             type: "protein_powder",
             brand_id: powder.id,
             name: powder.name,
-            portion: `${scoops} סקופ (${Math.round(scoops * powder.scoop_g)}g)`,
+            portion: `${proteinGrams}g`,
             ...calc,
           }],
         }),
       });
       await loadExisting(date);
       setProteinMode(false);
-      setScoops(1);
+      setProteinGrams(PROTEIN_POWDERS.find((p) => p.id === powderId)?.scoop_g ?? PROTEIN_POWDERS[0].scoop_g);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -619,9 +619,9 @@ export default function LogMealPage() {
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
           <button
             onClick={() => { setProteinMode(true); setErr(null); }}
-            className="w-full rounded-2xl border border-accent-protein/30 bg-accent-protein/5 py-3 flex items-center justify-center gap-2.5 text-sm text-accent-protein font-medium"
+            className="w-full rounded-2xl border border-border bg-bg-elev py-3 flex items-center justify-center gap-2.5 text-sm text-white/70 font-medium"
           >
-            <ShakerIcon className="h-5 w-5" />
+            <ShakerIcon className="h-5 w-5 text-white/50" />
             אבקת חלבון
           </button>
         </div>
@@ -632,7 +632,7 @@ export default function LogMealPage() {
         <div className="card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShakerIcon className="h-5 w-5 text-accent-protein" />
+              <ShakerIcon className="h-5 w-5 text-white/60" />
               <h3 className="text-sm font-semibold">אבקת חלבון</h3>
             </div>
             <button onClick={() => { setProteinMode(false); setErr(null); }} className="text-xs text-white/40">
@@ -645,7 +645,11 @@ export default function LogMealPage() {
               <label className="block text-xs font-medium text-white/60 mb-1.5">בחר מוצר</label>
               <select
                 value={powderId}
-                onChange={(e) => setPowderId(e.target.value)}
+                onChange={(e) => {
+                  setPowderId(e.target.value);
+                  const p = PROTEIN_POWDERS.find((p) => p.id === e.target.value);
+                  if (p) setProteinGrams(p.scoop_g);
+                }}
                 className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] text-white"
               >
                 {PROTEIN_POWDERS.map((p) => (
@@ -656,48 +660,54 @@ export default function LogMealPage() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-white/60 mb-1.5">מספר סקופים</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setScoops((s) => Math.max(0.5, parseFloat((s - 0.5).toFixed(1))))}
-                  className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
-                >−</button>
-                <span className="flex-1 text-center text-xl font-semibold tabular-nums">{scoops}</span>
-                <button
-                  onClick={() => setScoops((s) => parseFloat((s + 0.5).toFixed(1)))}
-                  className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
-                >+</button>
-              </div>
-              {(() => {
-                const p = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
-                return (
+            {(() => {
+              const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
+              return (
+                <div>
+                  <label className="block text-xs font-medium text-white/60 mb-1.5">כמות (גרם)</label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setProteinGrams((g) => Math.max(p.scoop_g, g - p.scoop_g))}
+                      className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
+                    >−</button>
+                    <input
+                      inputMode="numeric"
+                      value={proteinGrams}
+                      onChange={(e) => setProteinGrams(Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1))}
+                      className="flex-1 text-center text-xl font-semibold tabular-nums bg-bg-elev border border-border rounded-xl py-2"
+                    />
+                    <button
+                      onClick={() => setProteinGrams((g) => g + p.scoop_g)}
+                      className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
+                    >+</button>
+                  </div>
                   <p className="text-[11px] text-white/40 text-center mt-1">
-                    {Math.round(scoops * p.scoop_g)}g סה״כ · סקופ = {p.scoop_g}g
+                    סקופ אחד = {p.scoop_g}g · ≈ {(proteinGrams / p.scoop_g).toFixed(1)} סקופ
                   </p>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Calculated macros preview */}
             {(() => {
               const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
+              const r = proteinGrams / p.scoop_g;
               return (
                 <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
                   <div>
-                    <div className="text-[11px] text-accent-cal font-semibold">{Math.round(scoops * p.cal)}</div>
+                    <div className="text-[11px] text-accent-cal font-semibold">{Math.round(r * p.cal)}</div>
                     <div className="text-[10px] text-white/40">קק״ל</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-accent-protein font-semibold">{(scoops * p.protein).toFixed(1)}g</div>
+                    <div className="text-[11px] text-accent-protein font-semibold">{(r * p.protein).toFixed(1)}g</div>
                     <div className="text-[10px] text-white/40">חלבון</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-accent-fat font-semibold">{(scoops * p.fat).toFixed(1)}g</div>
+                    <div className="text-[11px] text-accent-fat font-semibold">{(r * p.fat).toFixed(1)}g</div>
                     <div className="text-[10px] text-white/40">שומן</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-accent-carbs font-semibold">{(scoops * p.carbs).toFixed(1)}g</div>
+                    <div className="text-[11px] text-accent-carbs font-semibold">{(r * p.carbs).toFixed(1)}g</div>
                     <div className="text-[10px] text-white/40">פחמימות</div>
                   </div>
                 </div>
@@ -708,7 +718,7 @@ export default function LogMealPage() {
           <button
             onClick={saveProtein}
             disabled={proteinSaving}
-            className="w-full rounded-xl bg-accent-protein py-3 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
           >
             {proteinSaving ? "שומר…" : isToday ? "שמור" : `שמור ל-${prettyDate(date, lang)}`}
           </button>
@@ -1134,8 +1144,8 @@ function ExistingMealRow({
     <div className="card p-3">
       <div className="flex items-center gap-3">
         {isProteinPowder ? (
-          <div className="w-12 h-12 rounded-lg bg-accent-protein/10 border border-accent-protein/20 flex items-center justify-center shrink-0">
-            <ShakerIcon className="h-6 w-6 text-accent-protein" />
+          <div className="w-12 h-12 rounded-lg bg-bg-elev border border-border flex items-center justify-center shrink-0">
+            <ShakerIcon className="h-6 w-6 text-white/50" />
           </div>
         ) : meal.photo_thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
