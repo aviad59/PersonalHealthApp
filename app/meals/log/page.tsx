@@ -49,26 +49,27 @@ type ExistingMeal = {
 
 type ProteinPowder = {
   id: string;
-  name: string;       // display name
-  scoop_g: number;    // grams per scoop
+  name: string;
+  scoop_ml: number;   // ml printed on the scoop
+  scoop_g: number;    // weight of one scoop (for macro ratio)
   cal: number;        // kcal per scoop
   protein: number;    // g per scoop
   fat: number;
   carbs: number;
-  dairy: boolean;     // true = milchig (whey/casein)
+  dairy: boolean;
 };
 
 const PROTEIN_POWDERS: ProteinPowder[] = [
-  { id: "allin_whey",   name: "Allin Whey וניל",            scoop_g: 33, cal: 127, protein: 23,   fat: 1.2, carbs: 3.6, dairy: true },
-  { id: "on_gold",       name: "ON Gold Standard Whey",     scoop_g: 30, cal: 120, protein: 24,   fat: 1,   carbs: 3, dairy: true  },
-  { id: "myprotein",     name: "MyProtein Impact Whey",     scoop_g: 25, cal: 103, protein: 21,   fat: 2,   carbs: 1, dairy: true  },
-  { id: "dymatize_iso",  name: "Dymatize ISO 100",          scoop_g: 29, cal: 110, protein: 25,   fat: 0.5, carbs: 1, dairy: true  },
-  { id: "nitrotech",     name: "MuscleTech NitroTech",      scoop_g: 46, cal: 160, protein: 30,   fat: 2.5, carbs: 4, dairy: true  },
-  { id: "bsn_syntha",    name: "BSN Syntha-6",              scoop_g: 47, cal: 200, protein: 22,   fat: 6,   carbs: 14, dairy: true },
-  { id: "concentrate",   name: "ווי קונסנטרט (גנרי)",      scoop_g: 30, cal: 120, protein: 22,   fat: 3,   carbs: 5, dairy: true  },
-  { id: "isolate",       name: "ווי איזולאט (גנרי)",       scoop_g: 30, cal: 110, protein: 26,   fat: 0.5, carbs: 1, dairy: true  },
-  { id: "casein",        name: "קזאין",                    scoop_g: 34, cal: 120, protein: 24,   fat: 1,   carbs: 4, dairy: true  },
-  { id: "soy",           name: "חלבון סויה (פרווה)",       scoop_g: 30, cal: 110, protein: 22,   fat: 1,   carbs: 3, dairy: false },
+  { id: "allin_whey",  name: "Allin Whey וניל",        scoop_ml: 100, scoop_g: 33, cal: 127, protein: 23,  fat: 1.2, carbs: 3.6, dairy: true  },
+  { id: "on_gold",     name: "ON Gold Standard Whey",  scoop_ml: 120, scoop_g: 30, cal: 120, protein: 24,  fat: 1,   carbs: 3,   dairy: true  },
+  { id: "myprotein",   name: "MyProtein Impact Whey",  scoop_ml:  75, scoop_g: 25, cal: 103, protein: 21,  fat: 2,   carbs: 1,   dairy: true  },
+  { id: "dymatize",    name: "Dymatize ISO 100",        scoop_ml:  80, scoop_g: 29, cal: 110, protein: 25,  fat: 0.5, carbs: 1,   dairy: true  },
+  { id: "nitrotech",   name: "MuscleTech NitroTech",   scoop_ml: 120, scoop_g: 46, cal: 160, protein: 30,  fat: 2.5, carbs: 4,   dairy: true  },
+  { id: "bsn_syntha",  name: "BSN Syntha-6",           scoop_ml: 130, scoop_g: 47, cal: 200, protein: 22,  fat: 6,   carbs: 14,  dairy: true  },
+  { id: "concentrate", name: "ווי קונסנטרט (גנרי)",   scoop_ml: 100, scoop_g: 30, cal: 120, protein: 22,  fat: 3,   carbs: 5,   dairy: true  },
+  { id: "isolate",     name: "ווי איזולאט (גנרי)",    scoop_ml:  80, scoop_g: 30, cal: 110, protein: 26,  fat: 0.5, carbs: 1,   dairy: true  },
+  { id: "casein",      name: "קזאין",                 scoop_ml: 120, scoop_g: 34, cal: 120, protein: 24,  fat: 1,   carbs: 4,   dairy: true  },
+  { id: "soy",         name: "חלבון סויה (פרווה)",    scoop_ml: 100, scoop_g: 30, cal: 110, protein: 22,  fat: 1,   carbs: 3,   dairy: false },
 ];
 
 function todayStr() {
@@ -144,7 +145,7 @@ export default function LogMealPage() {
   // Protein powder state
   const [proteinMode, setProteinMode] = useState(false);
   const [powderId, setPowderId] = useState<string>(PROTEIN_POWDERS[0].id);
-  const [proteinGrams, setProteinGrams] = useState<number>(PROTEIN_POWDERS[0].scoop_g);
+  const [proteinMl, setProteinMl] = useState<number>(PROTEIN_POWDERS[0].scoop_ml);
   const [proteinSaving, setProteinSaving] = useState(false);
 
   const loadExisting = useCallback(async (forDate: string) => {
@@ -476,14 +477,14 @@ export default function LogMealPage() {
 
   async function saveProtein() {
     const powder = PROTEIN_POWDERS.find((p) => p.id === powderId) ?? PROTEIN_POWDERS[0];
-    const ratio = proteinGrams / powder.scoop_g;
+    const ratio = proteinMl / powder.scoop_ml;
     const calc = {
       calories: Math.round(ratio * powder.cal),
       protein_g: parseFloat((ratio * powder.protein).toFixed(1)),
       fat_g: parseFloat((ratio * powder.fat).toFixed(1)),
       carbs_g: parseFloat((ratio * powder.carbs).toFixed(1)),
     };
-    const description = `${powder.name} — ${proteinGrams}g`;
+    const description = `${powder.name} — ${proteinMl} מ״ל`;
 
     setProteinSaving(true);
     setErr(null);
@@ -500,14 +501,14 @@ export default function LogMealPage() {
             type: "protein_powder",
             brand_id: powder.id,
             name: powder.name,
-            portion: `${proteinGrams}g`,
+            portion: `${proteinMl} מ״ל`,
             ...calc,
           }],
         }),
       });
       await loadExisting(date);
       setProteinMode(false);
-      setProteinGrams(PROTEIN_POWDERS.find((p) => p.id === powderId)?.scoop_g ?? PROTEIN_POWDERS[0].scoop_g);
+      setProteinMl(PROTEIN_POWDERS.find((p) => p.id === powderId)?.scoop_ml ?? PROTEIN_POWDERS[0].scoop_ml);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -648,7 +649,7 @@ export default function LogMealPage() {
                 onChange={(e) => {
                   setPowderId(e.target.value);
                   const p = PROTEIN_POWDERS.find((p) => p.id === e.target.value);
-                  if (p) setProteinGrams(p.scoop_g);
+                  if (p) setProteinMl(p.scoop_ml);
                 }}
                 className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] text-white"
               >
@@ -664,25 +665,25 @@ export default function LogMealPage() {
               const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
               return (
                 <div>
-                  <label className="block text-xs font-medium text-white/60 mb-1.5">כמות (גרם)</label>
+                  <label className="block text-xs font-medium text-white/60 mb-1.5">כמות (מ״ל)</label>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setProteinGrams((g) => Math.max(p.scoop_g, g - p.scoop_g))}
+                      onClick={() => setProteinMl((m) => Math.max(p.scoop_ml, m - p.scoop_ml))}
                       className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
                     >−</button>
                     <input
                       inputMode="numeric"
-                      value={proteinGrams}
-                      onChange={(e) => setProteinGrams(Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1))}
+                      value={proteinMl}
+                      onChange={(e) => setProteinMl(Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1))}
                       className="flex-1 text-center text-xl font-semibold tabular-nums bg-bg-elev border border-border rounded-xl py-2"
                     />
                     <button
-                      onClick={() => setProteinGrams((g) => g + p.scoop_g)}
+                      onClick={() => setProteinMl((m) => m + p.scoop_ml)}
                       className="w-10 h-10 rounded-xl bg-bg-elev border border-border text-lg font-bold flex items-center justify-center"
                     >+</button>
                   </div>
                   <p className="text-[11px] text-white/40 text-center mt-1">
-                    סקופ אחד = {p.scoop_g}g · ≈ {(proteinGrams / p.scoop_g).toFixed(1)} סקופ
+                    סקופ אחד = {p.scoop_ml} מ״ל · ≈ {(proteinMl / p.scoop_ml).toFixed(1)} סקופ
                   </p>
                 </div>
               );
@@ -691,7 +692,7 @@ export default function LogMealPage() {
             {/* Calculated macros preview */}
             {(() => {
               const p = PROTEIN_POWDERS.find((pp) => pp.id === powderId) ?? PROTEIN_POWDERS[0];
-              const r = proteinGrams / p.scoop_g;
+              const r = proteinMl / p.scoop_ml;
               return (
                 <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
                   <div>
