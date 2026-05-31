@@ -224,7 +224,6 @@ export async function POST(req: NextRequest) {
     const resp = await anthropic().messages.create({
       model: CLAUDE_OPUS_MODEL,
       max_tokens: 600,
-      temperature: 0.7,
       system: COACH_SYSTEM,
       messages,
     });
