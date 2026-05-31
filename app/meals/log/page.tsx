@@ -59,6 +59,7 @@ type ProteinPowder = {
 };
 
 const PROTEIN_POWDERS: ProteinPowder[] = [
+  { id: "allin_whey",   name: "Allin Whey וניל",            scoop_g: 33, cal: 127, protein: 23,   fat: 1.2, carbs: 3.6, dairy: true },
   { id: "on_gold",       name: "ON Gold Standard Whey",     scoop_g: 30, cal: 120, protein: 24,   fat: 1,   carbs: 3, dairy: true  },
   { id: "myprotein",     name: "MyProtein Impact Whey",     scoop_g: 25, cal: 103, protein: 21,   fat: 2,   carbs: 1, dairy: true  },
   { id: "dymatize_iso",  name: "Dymatize ISO 100",          scoop_g: 29, cal: 110, protein: 25,   fat: 0.5, carbs: 1, dairy: true  },
