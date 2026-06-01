@@ -51,5 +51,24 @@
       "url": "/stats",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
+  ],
+  "widgets": [
+    {
+      "name": "Macros Today",
+      "short_name": "Macros",
+      "description": "Today's calorie and macro progress at a glance",
+      "tag": "macros-today",
+      "ms_ac_template": "/widget-templates/macros.json",
+      "data": "/api/widget/macros",
+      "type": "application/json",
+      "update": 3600,
+      "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ],
+      "screenshots": [],
+      "actions": [
+        { "action": "open-log", "title": "Log Meal" }
+      ]
+    }
   ]
 }

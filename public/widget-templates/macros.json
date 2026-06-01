@@ -1,0 +1,144 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Health · Today",
+      "weight": "Bolder",
+      "size": "Small",
+      "color": "Accent",
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${calories}",
+              "weight": "Bolder",
+              "size": "ExtraLarge",
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "verticalContentAlignment": "Bottom",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "/ ${target_calories} kcal",
+              "isSubtle": true,
+              "size": "Small",
+              "spacing": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Protein",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${protein_g}g",
+              "size": "Medium",
+              "weight": "Bolder",
+              "color": "Attention",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "/ ${target_protein_g}g",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Fat",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${fat_g}g",
+              "size": "Medium",
+              "weight": "Bolder",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "/ ${target_fat_g}g",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Carbs",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${carbs_g}g",
+              "size": "Medium",
+              "weight": "Bolder",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "/ ${target_carbs_g}g",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "None"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Log Meal",
+      "url": "/meals/log",
+      "style": "positive"
+    }
+  ]
+}

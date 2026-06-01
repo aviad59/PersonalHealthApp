@@ -15,7 +15,7 @@
 // next step (IndexedDB + Background Sync). This SW is the minimum to make the
 // app installable and feel native on Android.
 
-const VERSION = "health-v1";
+const VERSION = "health-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PHOTO_CACHE = `${VERSION}-photos`;
 
@@ -111,6 +111,48 @@ async function networkFirstWithCache(req, cacheName) {
     const hit = await cache.match(req);
     return hit || Response.error();
   }
+}
+
+// ---------------------------------------------------------------------------
+// PWA Widget support (Chrome 125+ Android, Edge/Windows stable)
+// The manifest declares "macros-today"; the browser calls these events when
+// the widget is installed/resumed/clicked so we can push fresh data to it.
+// ---------------------------------------------------------------------------
+async function updateMacrosWidget(widget) {
+  try {
+    const res = await fetch("/api/widget/macros");
+    if (!res.ok) return;
+    const data = await res.json();
+    await self.widgets.updateByTag(widget.definition.tag, {
+      data: JSON.stringify(data),
+    });
+  } catch {}
+}
+
+if ("widgets" in self) {
+  // Install and resume: push current macro data into the widget
+  self.addEventListener("widgetinstall", (event) => {
+    if (event.widget?.definition?.tag === "macros-today") {
+      event.waitUntil(updateMacrosWidget(event.widget));
+    }
+  });
+
+  self.addEventListener("widgetresume", (event) => {
+    if (event.widget?.definition?.tag === "macros-today") {
+      event.waitUntil(updateMacrosWidget(event.widget));
+    }
+  });
+
+  // Periodic background update (browser calls this based on manifest "update" interval)
+  self.addEventListener("widgetclick", (event) => {
+    if (event.action === "open-log") {
+      event.waitUntil(self.clients.openWindow("/meals/log"));
+    }
+  });
+
+  self.addEventListener("widgetuninstall", () => {
+    // Nothing to clean up
+  });
 }
 
 async function networkFirstHtml(req) {
