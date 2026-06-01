@@ -7,6 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { safeFetchJson } from "@/lib/fetch-json";
 
+const CACHE_KEY = "coach-messages";
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+function lsDel(key: string) { try { localStorage.removeItem(key); } catch {} }
+
 type Msg = {
   id: number;
   role: "user" | "assistant";
@@ -30,16 +37,24 @@ export default function CoachPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Initial load of persisted thread.
+  // Initial load — show cached thread instantly, refresh from server in background.
   useEffect(() => {
+    const cached = lsGet<Msg[]>(CACHE_KEY);
+    if (cached) {
+      setMessages(cached);
+      setLoading(false);
+    }
+
     (async () => {
       try {
         const j = await safeFetchJson<{ messages: Msg[] }>("/api/coach", {
           cache: "no-store",
         });
-        setMessages(j.messages || []);
+        const msgs = j.messages || [];
+        setMessages(msgs);
+        lsSet(CACHE_KEY, msgs);
       } catch (e: any) {
-        setErr(e.message);
+        if (!cached) setErr(e.message);
       } finally {
         setLoading(false);
       }
@@ -78,9 +93,11 @@ export default function CoachPage() {
       const r = await safeFetchJson<{ messages: Msg[] }>("/api/coach", {
         cache: "no-store",
       });
-      setMessages(r.messages || []);
+      const msgs = r.messages || [];
+      setMessages(msgs);
+      lsSet(CACHE_KEY, msgs);
       // If the reload somehow lost the assistant turn, fall back to the inline reply.
-      if (!(r.messages || []).some((m) => m.role === "assistant" && m.content === j.reply)) {
+      if (!msgs.some((m) => m.role === "assistant" && m.content === j.reply)) {
         setMessages((m) => [
           ...m,
           { id: Date.now() + 1, role: "assistant", content: j.reply },
@@ -99,6 +116,7 @@ export default function CoachPage() {
     try {
       await fetch("/api/coach", { method: "DELETE" });
       setMessages([]);
+      lsDel(CACHE_KEY);
     } catch {
       // non-fatal
     }

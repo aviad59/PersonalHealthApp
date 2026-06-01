@@ -29,6 +29,13 @@ type Stats = {
 
 const RANGES = [7, 14, 30] as const;
 
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
 export default function StatsPage() {
   const lang = useLang();
   const [days, setDays] = useState<number>(14);
@@ -39,25 +46,34 @@ export default function StatsPage() {
 
   useEffect(() => {
     let dead = false;
-    setLoading(true);
     setErr(null);
-    // Note: we intentionally keep the previous `data` so switching range
-    // doesn't blank the page. The new payload replaces it once it arrives.
+
+    // Show cached data immediately — no skeleton if we have something
+    const cached = lsGet<Stats>(`stats-${days}`);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     (async () => {
       try {
         const r = await fetch(`/api/stats?days=${days}`, { cache: "no-store" });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "stats failed");
-        if (!dead) setData(j);
+        if (!dead) {
+          setData(j);
+          lsSet(`stats-${days}`, j);
+        }
       } catch (e: any) {
-        if (!dead) setErr(e.message);
+        if (!dead && !cached) setErr(e.message);
       } finally {
         if (!dead) setLoading(false);
       }
     })();
-    return () => {
-      dead = true;
-    };
+
+    return () => { dead = true; };
   }, [days]);
 
   const target = data?.targets ? data.targets[metric] : null;
