@@ -4,7 +4,7 @@
 // chat bubbles. The conversation is server-backed (user_coach_messages) so
 // it survives refresh / app reinstall.
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { safeFetchJson } from "@/lib/fetch-json";
 
 const CACHE_KEY = "coach-messages";
@@ -195,18 +195,35 @@ export default function CoachPage() {
   );
 }
 
+function hasHebrew(text: string) {
+  return /[֐-׿יִ-ﭏ]/.test(text);
+}
+
+function renderContent(text: string): React.ReactNode {
+  // Split on **bold** markers and render <strong> for matched segments
+  const parts = text.split(/(\*\*[^*\n]+\*\*)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
 function Bubble({ msg }: { msg: Msg }) {
   const isUser = msg.role === "user";
+  const rtl = hasHebrew(msg.content);
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
+        dir={rtl ? "rtl" : "ltr"}
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap ${
           isUser
             ? "bg-accent-brand text-white rounded-br-md"
             : "bg-bg-elev border border-border text-white/90 rounded-bl-md"
         }`}
       >
-        {msg.content}
+        {renderContent(msg.content)}
       </div>
     </div>
   );
