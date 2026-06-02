@@ -126,7 +126,7 @@ export default function StatsPage() {
       {loading && !data && <StatsSkeleton />}
 
       {data && (
-        <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
+        <div className={loading ? "animate-pulse [animation-duration:2.5s]" : ""}>
           {/* Averages summary */}
           <section className="card p-4">
             <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
