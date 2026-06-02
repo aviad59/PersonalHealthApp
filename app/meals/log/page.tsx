@@ -126,13 +126,16 @@ export default function LogMealPage() {
   const [proteinSaving, setProteinSaving] = useState(false);
 
   const loadExisting = useCallback(async (forDate: string) => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10000);
     try {
-      const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store" });
+      const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store", signal: ac.signal });
       const j = await r.json();
       setExisting(j.meals || []);
     } catch {
       // non-fatal
     } finally {
+      clearTimeout(timer);
       setExistingLoading(false);
     }
   }, []);
@@ -146,17 +149,21 @@ export default function LogMealPage() {
 
   // Frequent meals are global; load once in parallel with existing.
   useEffect(() => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10000);
     (async () => {
       try {
-        const r = await fetch("/api/meals/frequent", { cache: "no-store" });
+        const r = await fetch("/api/meals/frequent", { cache: "no-store", signal: ac.signal });
         const j = await r.json();
         setFrequent(j.meals || []);
       } catch {
         // non-fatal
       } finally {
+        clearTimeout(timer);
         setFrequentLoading(false);
       }
     })();
+    return () => { ac.abort(); clearTimeout(timer); };
   }, []);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -292,6 +299,7 @@ export default function LogMealPage() {
       if (j.id) {
         setTip("__pending__");
         (async () => {
+          const guard = setTimeout(() => setTip(null), 20000);
           try {
             const t = await safeFetchJson<{ ai_tip: string | null }>(
               `/api/meals/${j.id}/tip`,
@@ -299,8 +307,9 @@ export default function LogMealPage() {
             );
             setTip(t.ai_tip || null);
           } catch {
-            // Tip is best-effort; meal is already saved.
             setTip(null);
+          } finally {
+            clearTimeout(guard);
           }
         })();
       }
@@ -377,6 +386,7 @@ export default function LogMealPage() {
       if (j.id) {
         setTip("__pending__");
         (async () => {
+          const guard = setTimeout(() => setTip(null), 20000);
           try {
             const t = await safeFetchJson<{ ai_tip: string | null }>(
               `/api/meals/${j.id}/tip`,
@@ -384,8 +394,9 @@ export default function LogMealPage() {
             );
             setTip(t.ai_tip || null);
           } catch {
-            // Best-effort.
             setTip(null);
+          } finally {
+            clearTimeout(guard);
           }
         })();
       }
@@ -432,6 +443,7 @@ export default function LogMealPage() {
       if (j.id) {
         setTip("__pending__");
         (async () => {
+          const guard = setTimeout(() => setTip(null), 20000);
           try {
             const t = await safeFetchJson<{ ai_tip: string | null }>(
               `/api/meals/${j.id}/tip`,
@@ -440,6 +452,8 @@ export default function LogMealPage() {
             setTip(t.ai_tip || null);
           } catch {
             setTip(null);
+          } finally {
+            clearTimeout(guard);
           }
         })();
       }
