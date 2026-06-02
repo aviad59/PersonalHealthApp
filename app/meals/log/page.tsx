@@ -521,9 +521,7 @@ export default function LogMealPage() {
 
   async function patchMeal(
     id: number,
-    fields: Partial<
-      Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g">
-    >,
+    fields: Partial<Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g"> & { date: string }>,
   ) {
     const r = await fetch(`/api/meals/${id}`, {
       method: "PATCH",
@@ -1051,7 +1049,7 @@ function ExistingMealRow({
   isEditing: boolean;
   onEditToggle: () => void;
   onDelete: () => void;
-  onSave: (fields: Partial<ExistingMeal>) => Promise<void>;
+  onSave: (fields: Partial<ExistingMeal & { date: string }>) => Promise<void>;
 }) {
   const lang = useLang();
   const [desc, setDesc] = useState(meal.description ?? "");
@@ -1059,6 +1057,7 @@ function ExistingMealRow({
   const [p, setP] = useState<number>(Math.round(meal.protein_g ?? 0));
   const [f, setF] = useState<number>(Math.round(meal.fat_g ?? 0));
   const [c, setC] = useState<number>(Math.round(meal.carbs_g ?? 0));
+  const [moveDate, setMoveDate] = useState<string>(meal.date);
   const [busy, setBusy] = useState(false);
 
   // Keep local state in sync if the meal changes underneath (e.g. after a save).
@@ -1068,7 +1067,10 @@ function ExistingMealRow({
     setP(Math.round(meal.protein_g ?? 0));
     setF(Math.round(meal.fat_g ?? 0));
     setC(Math.round(meal.carbs_g ?? 0));
-  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g]);
+    setMoveDate(meal.date);
+  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date]);
+
+  const isMoving = moveDate !== meal.date;
 
   async function handleSave() {
     setBusy(true);
@@ -1079,6 +1081,7 @@ function ExistingMealRow({
         protein_g: p,
         fat_g: f,
         carbs_g: c,
+        ...(isMoving && { date: moveDate }),
       });
     } finally {
       setBusy(false);
@@ -1161,12 +1164,27 @@ function ExistingMealRow({
             <NumField label={t(lang, "macro_fat")} unit="g" value={f} onChange={setF} />
             <NumField label={t(lang, "macro_carbs")} unit="g" value={c} onChange={setC} />
           </div>
+          <div className="flex items-center gap-2 rounded-lg bg-bg-elev border border-border px-3 py-2">
+            <span className="text-[11px] text-white/50 flex-1">Move to date</span>
+            <input
+              type="date"
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value || meal.date)}
+              className="bg-transparent text-[12px] text-white border-none outline-none"
+            />
+          </div>
           <button
             onClick={handleSave}
             disabled={busy}
-            className="w-full rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
+            className={`w-full rounded-lg py-2 text-xs font-semibold disabled:opacity-40 ${
+              isMoving ? "bg-white/10 border border-white/20 text-white" : "bg-accent-brand"
+            }`}
           >
-            {busy ? t(lang, "meal_saving_short") : t(lang, "meal_save_changes")}
+            {busy
+              ? t(lang, "meal_saving_short")
+              : isMoving
+                ? `Move to ${moveDate}`
+                : t(lang, "meal_save_changes")}
           </button>
         </div>
       )}
