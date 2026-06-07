@@ -630,6 +630,7 @@ export default function LogMealPage() {
             </label>
             <textarea
               value={text}
+              dir={/[֐-׿]/.test(text) ? "rtl" : "ltr"}
               onChange={(e) => setText(e.target.value)}
               placeholder={
                 photoPreview
