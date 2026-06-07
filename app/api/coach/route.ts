@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   getProfile,
   getMealsByDate,
+  getMealsByDateLite,
   getMealsSince,
   getWeightLogSince,
   getCachedWorkoutsSince,
@@ -39,6 +40,19 @@ const MAX_TOOL_ROUNDS = 4;
 // ---------------------------------------------------------------------------
 // Tool definitions — the coach can call these to fetch deeper history on demand
 // ---------------------------------------------------------------------------
+const DAY_MEALS_TOOL = {
+  name: "get_day_meals",
+  description:
+    "Fetch every meal logged on a specific date, with full macros, food items, and any meal photos. Use when the user asks about what they ate on a particular day, wants to review a specific meal, or needs meal-level detail beyond the weekly summary.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      date: { type: "string", description: "Date in YYYY-MM-DD format" },
+    },
+    required: ["date"],
+  },
+};
+
 const NUTRITION_TOOL = {
   name: "get_meal_history",
   description:
@@ -92,7 +106,7 @@ function rowsToHevy(rows: { raw_json: string }[]): HevyWorkout[] {
   return out;
 }
 
-function aggregateMealsByDay(meals: Meal[]): Record<string, { calories: number; protein_g: number; fat_g: number; carbs_g: number; meals: number }> {
+function aggregateMealsByDay(meals: Meal[]) {
   const out: Record<string, { calories: number; protein_g: number; fat_g: number; carbs_g: number; meals: number }> = {};
   for (const m of meals) {
     if (!out[m.date]) out[m.date] = { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0, meals: 0 };
@@ -106,36 +120,77 @@ function aggregateMealsByDay(meals: Meal[]): Record<string, { calories: number; 
 }
 
 // ---------------------------------------------------------------------------
-// Tool execution
+// Tool execution — returns string (JSON) for text-only tools,
+// or an array of content blocks for tools that include images.
 // ---------------------------------------------------------------------------
 async function executeTool(
   name: string,
-  input: { start_date: string; end_date: string },
+  input: Record<string, string>,
   userId: UserId,
   hasWorkouts: boolean,
-): Promise<unknown> {
-  const { start_date, end_date } = input;
+): Promise<string | any[]> {
+  if (name === "get_day_meals") {
+    const meals = await getMealsByDateLite(userId, input.date);
+
+    const mealData = meals.map((m) => {
+      let items: any[] | null = null;
+      if (m.items_json) { try { items = JSON.parse(m.items_json); } catch {} }
+      return {
+        description: m.description,
+        time: m.created_at,
+        calories: m.calories,
+        protein_g: m.protein_g,
+        fat_g: m.fat_g,
+        carbs_g: m.carbs_g,
+        has_photo: m.has_photo === 1,
+        ...(items && items.length > 0 && { items }),
+      };
+    });
+
+    // Build multimodal content: text summary + inline thumbnails
+    const content: any[] = [
+      {
+        type: "text",
+        text: JSON.stringify({ date: input.date, meal_count: meals.length, meals: mealData }, null, 2),
+      },
+    ];
+
+    for (const m of meals) {
+      if (m.photo_thumb && m.photo_thumb.startsWith("data:")) {
+        const commaIdx = m.photo_thumb.indexOf(",");
+        const meta = m.photo_thumb.slice(0, commaIdx);
+        const base64 = m.photo_thumb.slice(commaIdx + 1);
+        const mediaType = (meta.match(/data:([^;]+)/) ?? [])[1] ?? "image/jpeg";
+        content.push({
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data: base64 },
+        });
+      }
+    }
+
+    return content;
+  }
 
   if (name === "get_meal_history") {
-    const meals = await getMealsSince(userId, start_date);
-    const filtered = meals.filter((m) => m.date <= end_date);
+    const meals = await getMealsSince(userId, input.start_date);
+    const filtered = meals.filter((m) => m.date <= input.end_date);
     const byDay = aggregateMealsByDay(filtered);
-    return {
-      date_range: { start_date, end_date },
+    return JSON.stringify({
+      date_range: { start_date: input.start_date, end_date: input.end_date },
       days: Object.entries(byDay)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, v]) => ({ date, ...v })),
-    };
+    });
   }
 
   if (name === "get_workout_history") {
-    if (!hasWorkouts) return { note: "workout tracking not enabled" };
-    const rows = await getCachedWorkoutsSince(start_date);
+    if (!hasWorkouts) return JSON.stringify({ note: "workout tracking not enabled" });
+    const rows = await getCachedWorkoutsSince(input.start_date);
     const workouts = rowsToHevy(rows).filter(
-      (w) => dateKey(new Date(w.start_time || Date.now())) <= end_date,
+      (w) => dateKey(new Date(w.start_time || Date.now())) <= input.end_date,
     );
-    return {
-      date_range: { start_date, end_date },
+    return JSON.stringify({
+      date_range: { start_date: input.start_date, end_date: input.end_date },
       workouts: workouts.map((w) => ({
         title: w.title,
         date: dateKey(new Date(w.start_time || Date.now())),
@@ -152,24 +207,24 @@ async function executeTool(
           }))
           .filter((ex) => ex.sets.length > 0),
       })),
-    };
+    });
   }
 
   if (name === "get_weight_history") {
-    const entries = await getWeightLogSince(userId, start_date);
-    return {
-      date_range: { start_date, end_date },
+    const entries = await getWeightLogSince(userId, input.start_date);
+    return JSON.stringify({
+      date_range: { start_date: input.start_date, end_date: input.end_date },
       entries: entries
-        .filter((w) => w.date <= end_date)
+        .filter((w) => w.date <= input.end_date)
         .map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
-    };
+    });
   }
 
-  return { error: `unknown tool: ${name}` };
+  return JSON.stringify({ error: `unknown tool: ${name}` });
 }
 
 // ---------------------------------------------------------------------------
-// Context snapshot (same as before — last 7d meals, 14d weight/workouts)
+// Context snapshot — last 7d meals, 14d weight/workouts
 // ---------------------------------------------------------------------------
 async function buildContext(userId: UserId): Promise<any> {
   const cfg = getUserConfig(userId);
@@ -237,7 +292,7 @@ async function buildContext(userId: UserId): Promise<any> {
   return {
     now: { date: today, hour: new Date().getHours() },
     has_workouts: cfg.hasWorkouts,
-    note: "Use the provided tools to fetch data beyond these windows when the user asks about older history.",
+    note: "Call get_day_meals(date) to see individual meals with photos for any day. Call get_meal_history/get_workout_history/get_weight_history for longer date ranges.",
     profile: profile && {
       age: profile.age,
       sex: profile.sex,
@@ -260,9 +315,7 @@ async function buildContext(userId: UserId): Promise<any> {
       totals: totalsForMeals(todayMeals),
       meals: todayMeals.map((m) => {
         let items: any[] | null = null;
-        if (m.items_json) {
-          try { items = JSON.parse(m.items_json); } catch {}
-        }
+        if (m.items_json) { try { items = JSON.parse(m.items_json); } catch {} }
         return {
           description: m.description,
           time: m.created_at,
@@ -329,10 +382,9 @@ export async function POST(req: NextRequest) {
 
     const cfg = getUserConfig(userId);
     const tools = cfg.hasWorkouts
-      ? [NUTRITION_TOOL, WORKOUT_TOOL, WEIGHT_TOOL]
-      : [NUTRITION_TOOL, WEIGHT_TOOL];
+      ? [DAY_MEALS_TOOL, NUTRITION_TOOL, WORKOUT_TOOL, WEIGHT_TOOL]
+      : [DAY_MEALS_TOOL, NUTRITION_TOOL, WEIGHT_TOOL];
 
-    // Seed messages: data snapshot + persisted thread
     type MsgBlock = { role: "user" | "assistant"; content: string | any[] };
     const messages: MsgBlock[] = [
       {
@@ -344,7 +396,7 @@ export async function POST(req: NextRequest) {
       {
         role: "assistant",
         content:
-          "Got it — I have your latest profile, today's meals, weight log, and recent workouts. I can also fetch older history if you ask. What's on your mind?",
+          "Got it — I have your latest profile, today's meals, weight log, and recent workouts. I can also look up any past day's meals (including photos) or fetch longer history ranges. What's on your mind?",
       },
       ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     ];
@@ -374,22 +426,18 @@ export async function POST(req: NextRequest) {
       // Execute all requested tools in parallel
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (block: any) => {
-          let result: unknown;
+          let content: string | any[];
           try {
-            result = await executeTool(
+            content = await executeTool(
               block.name,
-              block.input as { start_date: string; end_date: string },
+              block.input as Record<string, string>,
               userId,
               cfg.hasWorkouts,
             );
           } catch (e: any) {
-            result = { error: e.message ?? "tool_error" };
+            content = JSON.stringify({ error: e.message ?? "tool_error" });
           }
-          return {
-            type: "tool_result" as const,
-            tool_use_id: block.id,
-            content: JSON.stringify(result),
-          };
+          return { type: "tool_result" as const, tool_use_id: block.id, content };
         }),
       );
 
