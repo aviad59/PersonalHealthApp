@@ -47,6 +47,22 @@ type ExistingMeal = {
   created_at: string;
 };
 
+type MealReview = {
+  meal_id: number;
+  description: string;
+  photo_thumb: string | null;
+  current: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+  suggested: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+  explanation: string;
+  confidence: "low" | "medium" | "high";
+  changed: boolean;
+};
+
+type ReviewResult = {
+  reviews: MealReview[];
+  summary: string;
+};
+
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
@@ -124,6 +140,11 @@ export default function LogMealPage() {
   const [proteinMode, setProteinMode] = useState(false);
   const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
   const [proteinSaving, setProteinSaving] = useState(false);
+
+  // Coach review state
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewData, setReviewData] = useState<ReviewResult | null>(null);
 
   const loadExisting = useCallback(async (forDate: string) => {
     const ac = new AbortController();
@@ -536,6 +557,53 @@ export default function LogMealPage() {
     setExistingEditId(null);
   }
 
+  async function startReview() {
+    setReviewOpen(true);
+    setReviewing(true);
+    setReviewData(null);
+    try {
+      const j = await safeFetchJson<ReviewResult>("/api/meals/review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      setReviewData(j);
+    } catch (e: any) {
+      setErr(e.message);
+      setReviewOpen(false);
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  async function acceptOneMeal(review: MealReview) {
+    await patchMeal(review.meal_id, {
+      calories: review.suggested.calories,
+      protein_g: review.suggested.protein_g,
+      fat_g: review.suggested.fat_g,
+      carbs_g: review.suggested.carbs_g,
+    });
+  }
+
+  async function askAboutMeal(mealId: number, question: string) {
+    const j = await safeFetchJson<ReviewResult>("/api/meals/review", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ date, meal_id: mealId, question }),
+    });
+    const updated = j.reviews[0];
+    if (!updated) return;
+    setReviewData((prev: ReviewResult | null) => {
+      if (!prev) return j;
+      return {
+        ...prev,
+        reviews: prev.reviews.map((r: MealReview) =>
+          r.meal_id === mealId ? { ...updated, photo_thumb: r.photo_thumb } : r,
+        ),
+      };
+    });
+  }
+
   return (
     <div className="px-5 pt-6 pb-10 space-y-5">
       <div>
@@ -915,9 +983,24 @@ export default function LogMealPage() {
       {/* --- EXISTING MEALS FOR THIS DATE --- */}
       {(existingLoading || existing.length > 0) && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-            {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+              {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
+            </h2>
+            {!existingLoading && existing.length > 0 && (
+              <button
+                onClick={startReview}
+                disabled={reviewing}
+                className="text-[11px] text-accent-brand disabled:opacity-40 flex items-center gap-1"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 12l2 2 4-4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                {reviewing ? "Checking…" : "Coach Check"}
+              </button>
+            )}
+          </div>
           {existingLoading ? (
             <div className="space-y-2">
               {[0, 1].map((i) => (
@@ -947,6 +1030,17 @@ export default function LogMealPage() {
             </div>
           )}
         </section>
+      )}
+
+      {/* --- COACH REVIEW MODAL --- */}
+      {reviewOpen && (
+        <CoachReviewModal
+          reviewData={reviewData}
+          reviewing={reviewing}
+          onClose={() => setReviewOpen(false)}
+          onAcceptOne={acceptOneMeal}
+          onAskAbout={askAboutMeal}
+        />
       )}
 
       {/* --- FREQUENT MEALS --- */}
@@ -1236,6 +1330,289 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
       <line x1="9" y1="10" x2="15" y2="10" />
       <line x1="9" y1="13.5" x2="13" y2="13.5" />
     </svg>
+  );
+}
+
+function CoachReviewModal({
+  reviewData,
+  reviewing,
+  onClose,
+  onAcceptOne,
+  onAskAbout,
+}: {
+  reviewData: ReviewResult | null;
+  reviewing: boolean;
+  onClose: () => void;
+  onAcceptOne: (r: MealReview) => Promise<void>;
+  onAskAbout: (mealId: number, question: string) => Promise<void>;
+}) {
+  const [accepted, setAccepted] = useState<Set<number>>(new Set());
+  const [askingId, setAskingId] = useState<number | null>(null);
+  const [askText, setAskText] = useState("");
+  const [askBusy, setAskBusy] = useState(false);
+  const [acceptBusy, setAcceptBusy] = useState<number | null>(null);
+  const [acceptAllBusy, setAcceptAllBusy] = useState(false);
+
+  const changedCount =
+    reviewData?.reviews.filter((r) => r.changed && !accepted.has(r.meal_id)).length ?? 0;
+
+  async function handleAcceptOne(review: MealReview) {
+    setAcceptBusy(review.meal_id);
+    try {
+      await onAcceptOne(review);
+      setAccepted((prev: Set<number>) => new Set([...prev, review.meal_id]));
+    } finally {
+      setAcceptBusy(null);
+    }
+  }
+
+  async function handleAcceptAll() {
+    if (!reviewData) return;
+    setAcceptAllBusy(true);
+    const toAccept = reviewData.reviews.filter((r) => r.changed && !accepted.has(r.meal_id));
+    const newAccepted = new Set(accepted);
+    for (const r of toAccept) {
+      try {
+        await onAcceptOne(r);
+        newAccepted.add(r.meal_id);
+      } catch {}
+    }
+    setAccepted(newAccepted);
+    setAcceptAllBusy(false);
+  }
+
+  async function handleAsk(mealId: number) {
+    if (!askText.trim()) return;
+    setAskBusy(true);
+    try {
+      await onAskAbout(mealId, askText.trim());
+      setAskingId(null);
+      setAskText("");
+    } finally {
+      setAskBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
+      {/* Header */}
+      <div className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-border shrink-0">
+        <div>
+          <div className="text-[10px] text-white/40 uppercase tracking-wider">AI Coach</div>
+          <h2 className="text-xl font-bold mt-0.5">Meal Review</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-bg-elev border border-border text-white/50 hover:text-white/90 text-lg leading-none"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+        {reviewing ? (
+          /* Loading skeletons */
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-white/40 text-center animate-pulse">
+              Coach is reviewing your meals…
+            </p>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="card p-4 space-y-3">
+                <div className="flex gap-3">
+                  <div className="w-14 h-14 rounded-lg bg-bg-elev animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3 w-3/4 rounded bg-bg-elev animate-pulse" />
+                    <div className="h-3 w-1/2 rounded bg-bg-elev animate-pulse" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[0, 1, 2, 3].map((j) => (
+                    <div key={j} className="h-16 rounded-lg bg-bg-elev animate-pulse" />
+                  ))}
+                </div>
+                <div className="h-3 w-full rounded bg-bg-elev animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : reviewData ? (
+          <>
+            {/* Summary */}
+            <div className="card p-4 border-accent-brand/25">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-accent-brand mb-1.5">
+                Summary
+              </div>
+              <p className="text-sm text-white/80 leading-snug">{reviewData.summary}</p>
+            </div>
+
+            {/* Per-meal cards */}
+            {reviewData.reviews.map((r) => {
+              const isAccepted = accepted.has(r.meal_id);
+              return (
+                <div
+                  key={r.meal_id}
+                  className={`card p-4 space-y-3 transition-opacity ${isAccepted ? "opacity-50" : ""}`}
+                >
+                  {/* Meal header */}
+                  <div className="flex gap-3 items-start">
+                    {r.photo_thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.photo_thumb}
+                        alt=""
+                        className="w-14 h-14 rounded-lg object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-bg-elev shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">
+                        {r.description || "(unnamed)"}
+                      </div>
+                      <div
+                        className={`text-[11px] mt-0.5 ${
+                          r.confidence === "high"
+                            ? "text-green-400/70"
+                            : r.confidence === "medium"
+                              ? "text-yellow-400/70"
+                              : "text-white/40"
+                        }`}
+                      >
+                        {r.confidence} confidence ·{" "}
+                        {r.changed ? "corrections suggested" : "looks accurate"}
+                      </div>
+                    </div>
+                    {isAccepted && (
+                      <span className="text-green-400 text-base shrink-0 mt-1">✓</span>
+                    )}
+                  </div>
+
+                  {/* Macro comparison: 4 cells, show old→new when changed */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(
+                      [
+                        { label: "Cal", cur: r.current.calories, sug: r.suggested.calories },
+                        { label: "Pro", cur: r.current.protein_g, sug: r.suggested.protein_g },
+                        { label: "Fat", cur: r.current.fat_g, sug: r.suggested.fat_g },
+                        { label: "Carbs", cur: r.current.carbs_g, sug: r.suggested.carbs_g },
+                      ] as const
+                    ).map(({ label, cur, sug }) => {
+                      const diff = sug - cur;
+                      const significant = Math.abs(diff) >= 5;
+                      return (
+                        <div
+                          key={label}
+                          className="rounded-lg bg-bg-elev border border-border px-1.5 py-2 text-center"
+                        >
+                          <div className="text-[9px] text-white/40 uppercase mb-1">{label}</div>
+                          {significant ? (
+                            <>
+                              <div className="text-[10px] text-white/25 line-through leading-tight">
+                                {Math.round(cur)}
+                              </div>
+                              <div
+                                className={`text-[13px] font-semibold leading-tight ${
+                                  diff > 0 ? "text-yellow-400" : "text-sky-400"
+                                }`}
+                              >
+                                {Math.round(sug)}
+                              </div>
+                              <div
+                                className={`text-[9px] leading-tight ${
+                                  diff > 0 ? "text-yellow-400/60" : "text-sky-400/60"
+                                }`}
+                              >
+                                {diff > 0 ? "+" : ""}
+                                {Math.round(diff)}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-[13px] font-semibold text-white/70">
+                              {Math.round(cur)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Explanation */}
+                  <p className="text-[13px] text-white/65 leading-snug">{r.explanation}</p>
+
+                  {/* Actions */}
+                  {!isAccepted && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setAskingId(askingId === r.meal_id ? null : r.meal_id);
+                          setAskText("");
+                        }}
+                        className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-white/60"
+                      >
+                        Ask about this
+                      </button>
+                      {r.changed && (
+                        <button
+                          onClick={() => handleAcceptOne(r)}
+                          disabled={acceptBusy === r.meal_id}
+                          className="flex-1 rounded-lg bg-accent-brand py-2 text-[12px] font-semibold disabled:opacity-40"
+                        >
+                          {acceptBusy === r.meal_id ? "Saving…" : "Accept"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Per-meal question input */}
+                  {askingId === r.meal_id && (
+                    <div className="flex gap-2">
+                      <input
+                        value={askText}
+                        onChange={(e) => setAskText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) handleAsk(r.meal_id);
+                        }}
+                        placeholder="Ask about this meal…"
+                        className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-white/30"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleAsk(r.meal_id)}
+                        disabled={askBusy || !askText.trim()}
+                        className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
+                      >
+                        {askBusy ? "…" : "Send"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        ) : null}
+      </div>
+
+      {/* Footer */}
+      {reviewData && (
+        <div className="shrink-0 px-4 py-4 border-t border-border bg-bg-card/80 backdrop-blur">
+          {changedCount > 0 ? (
+            <button
+              onClick={handleAcceptAll}
+              disabled={acceptAllBusy}
+              className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+            >
+              {acceptAllBusy
+                ? "Applying…"
+                : `Accept All ${changedCount} Change${changedCount !== 1 ? "s" : ""}`}
+            </button>
+          ) : (
+            <div className="text-center text-sm text-green-400/80 py-1">
+              All macros look accurate ✓
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
