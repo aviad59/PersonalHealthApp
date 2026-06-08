@@ -1159,7 +1159,7 @@ function ExistingMealRow({
             placeholder={t(lang, "meal_description_label")}
             className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-2">
             <NumField label={t(lang, "macro_calories")} unit={t(lang, "macro_kcal")} value={cal} onChange={setCal} />
             <NumField label={t(lang, "macro_protein")} unit="g" value={p} onChange={setP} />
             <NumField label={t(lang, "macro_fat")} unit="g" value={f} onChange={setF} />
@@ -1205,15 +1205,15 @@ function NumField({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wider text-white/50 w-12">{label}</span>
+    <label className="rounded-lg bg-bg-elev border border-border px-3 py-2 flex items-center gap-2">
+      <span className="text-[11px] text-white/50 flex-1">{label}</span>
       <input
         inputMode="numeric"
         value={value || ""}
         onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
-        className="flex-1 bg-transparent border-0 text-right text-[13px] focus:outline-none"
+        className="w-20 bg-transparent border-0 text-right text-[13px] focus:outline-none"
       />
-      <span className="text-[10px] text-white/40 w-8">{unit}</span>
+      <span className="text-[10px] text-white/40 w-6 text-right">{unit}</span>
     </label>
   );
 }
