@@ -146,6 +146,9 @@ export default function LogMealPage() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewData, setReviewData] = useState<ReviewResult | null>(null);
 
+  // Tap-to-zoom for the photo preview
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
   const loadExisting = useCallback(async (forDate: string) => {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 10000);
@@ -746,7 +749,12 @@ export default function LogMealPage() {
         <div className="space-y-3">
           <div className="relative rounded-2xl overflow-hidden border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoPreview} alt="meal" className="w-full object-cover max-h-80" />
+            <img
+              src={photoPreview}
+              alt="meal"
+              onClick={() => setLightboxSrc(photoPreview)}
+              className="w-full object-cover max-h-80 cursor-zoom-in"
+            />
           </div>
           <div className="flex gap-4 text-sm">
             <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
@@ -1129,6 +1137,10 @@ export default function LogMealPage() {
           )}
         </section>
       )}
+
+      {lightboxSrc && (
+        <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      )}
     </div>
   );
 }
@@ -1154,6 +1166,7 @@ function ExistingMealRow({
   const [c, setC] = useState<number>(Math.round(meal.carbs_g ?? 0));
   const [moveDate, setMoveDate] = useState<string>(meal.date);
   const [busy, setBusy] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // Keep local state in sync if the meal changes underneath (e.g. after a save).
   useEffect(() => {
@@ -1204,7 +1217,8 @@ function ExistingMealRow({
             width={48}
             height={48}
             decoding="async"
-            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
+            onClick={() => setLightboxOpen(true)}
+            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0 cursor-zoom-in"
           />
         ) : meal.photo_path ? (
           <Image
@@ -1283,6 +1297,10 @@ function ExistingMealRow({
           </button>
         </div>
       )}
+
+      {lightboxOpen && meal.photo_thumb && (
+        <ImageLightbox src={meal.photo_thumb} onClose={() => setLightboxOpen(false)} />
+      )}
     </div>
   );
 }
@@ -1330,6 +1348,29 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
       <line x1="9" y1="10" x2="15" y2="10" />
       <line x1="9" y1="13.5" x2="13" y2="13.5" />
     </svg>
+  );
+}
+
+function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none"
+      >
+        ×
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="max-w-full max-h-full object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
   );
 }
 

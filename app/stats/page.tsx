@@ -329,8 +329,26 @@ function BarChart({
 }) {
   // Render up to ~30 bars. Container height ~120px.
   const HEIGHT = 120;
+  const [selected, setSelected] = useState<string | null>(null);
+
+  // Clear the selection when the date range changes (new series).
+  useEffect(() => {
+    setSelected(null);
+  }, [series]);
+
+  const selectedDay = series.find((d) => d.date === selected) ?? null;
+
   return (
     <div>
+      {/* Tapped-day readout */}
+      <div className="h-6 mb-1 flex items-center justify-center">
+        {selectedDay && (
+          <span className="text-[11px] text-white bg-bg-elev border border-accent-brand/40 rounded-full px-2.5 py-0.5">
+            {formatDay(selectedDay.date, lang)} · {selectedDay[metric]} {unit}
+            {selectedDay.meals === 0 ? ` · ${t(lang, "stats_no_meals")}` : ""}
+          </span>
+        )}
+      </div>
       <div className="relative" style={{ height: HEIGHT + 16 }}>
         {target ? (
           <div
@@ -348,15 +366,18 @@ function BarChart({
             const h = Math.max(2, (v / max) * HEIGHT);
             const isToday = d.date === series[series.length - 1].date;
             const empty = d.meals === 0;
+            const isSelected = selected === d.date;
             return (
               <div
                 key={d.date}
-                className="flex-1 relative group"
-                title={`${d.date}: ${v} ${unit}${empty ? " (no meals)" : ""}`}
+                className="flex-1 h-full flex items-end cursor-pointer"
+                onClick={() => setSelected((prev: string | null) => (prev === d.date ? null : d.date))}
               >
                 <div
                   className={`w-full rounded-t-sm transition-colors ${
-                    empty
+                    isSelected
+                      ? "bg-white"
+                      : empty
                       ? "bg-white/10"
                       : isToday
                       ? "bg-accent-brand"
