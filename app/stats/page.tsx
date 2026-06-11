@@ -48,7 +48,7 @@ export default function StatsPage() {
     setErr(null);
 
     // Show cached data immediately — no skeleton if we have something
-    const cached = lsGet<Stats>(`stats-${days}`);
+    const cached = lsGet<Stats>(`stats-v2-${days}`);
     if (cached) {
       setData(cached);
       setLoading(false);
@@ -63,7 +63,7 @@ export default function StatsPage() {
         if (!r.ok) throw new Error(j.error || "stats failed");
         if (!dead) {
           setData(j);
-          lsSet(`stats-${days}`, j);
+          lsSet(`stats-v2-${days}`, j);
         }
       } catch (e: any) {
         if (!dead && !cached) setErr(e.message);
@@ -79,7 +79,7 @@ export default function StatsPage() {
   const max = useMemo(() => {
     if (!data) return 0;
     let m = 0;
-    for (const d of data.series) m = Math.max(m, d[metric], d.trend[metric]);
+    for (const d of data.series) m = Math.max(m, d[metric], d.trend?.[metric] ?? 0);
     if (target) m = Math.max(m, target);
     return m || 1;
   }, [data, metric, target]);
@@ -345,7 +345,7 @@ function BarChart({
           <span className="text-[11px] text-white bg-bg-elev border border-accent-brand/40 rounded-full px-2.5 py-0.5">
             {formatDay(selectedDay.date, lang)} · {selectedDay[metric]} {unit}
             {selectedDay.meals === 0 ? ` · ${t(lang, "stats_no_meals")}` : ""}
-            {` · ${t(lang, "stats_trend_avg")} ${selectedDay.trend[metric]}`}
+            {selectedDay.trend ? ` · ${t(lang, "stats_trend_avg")} ${selectedDay.trend[metric]}` : ""}
           </span>
         )}
       </div>
@@ -399,7 +399,7 @@ function BarChart({
             points={series
               .map((d, i) => {
                 const x = ((i + 0.5) / series.length) * 100;
-                const y = 100 - (d.trend[metric] / max) * 100;
+                const y = 100 - ((d.trend?.[metric] ?? 0) / max) * 100;
                 return `${x},${y}`;
               })
               .join(" ")}
