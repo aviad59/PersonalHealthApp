@@ -4,13 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/components/LangProvider";
 import { t, Lang } from "@/lib/i18n";
 
-type DayBucket = {
+type Macros = { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+
+type DayBucket = Macros & {
   date: string;
-  calories: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
   meals: number;
+  trend: Macros;
 };
 
 type Stats = {
@@ -80,7 +79,7 @@ export default function StatsPage() {
   const max = useMemo(() => {
     if (!data) return 0;
     let m = 0;
-    for (const d of data.series) m = Math.max(m, d[metric]);
+    for (const d of data.series) m = Math.max(m, d[metric], d.trend[metric]);
     if (target) m = Math.max(m, target);
     return m || 1;
   }, [data, metric, target]);
@@ -346,6 +345,7 @@ function BarChart({
           <span className="text-[11px] text-white bg-bg-elev border border-accent-brand/40 rounded-full px-2.5 py-0.5">
             {formatDay(selectedDay.date, lang)} · {selectedDay[metric]} {unit}
             {selectedDay.meals === 0 ? ` · ${t(lang, "stats_no_meals")}` : ""}
+            {` · ${t(lang, "stats_trend_avg")} ${selectedDay.trend[metric]}`}
           </span>
         )}
       </div>
@@ -389,10 +389,37 @@ function BarChart({
             );
           })}
         </div>
+        {/* 7-day rolling average trend line */}
+        <svg
+          className="absolute inset-x-0 bottom-4 w-full h-[120px] pointer-events-none"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          <polyline
+            points={series
+              .map((d, i) => {
+                const x = ((i + 0.5) / series.length) * 100;
+                const y = 100 - (d.trend[metric] / max) * 100;
+                return `${x},${y}`;
+              })
+              .join(" ")}
+            fill="none"
+            stroke="#f5a623"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
         <div className="absolute inset-x-0 bottom-0 flex justify-between text-[9px] text-white/40">
           <span>{formatDay(series[0]?.date, lang)}</span>
           <span>{formatDay(series[series.length - 1]?.date, lang)}</span>
         </div>
+      </div>
+      {/* Legend for the trend line */}
+      <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[9px] text-white/40">
+        <span className="inline-block w-3 h-[2px] rounded-full bg-[#f5a623]" />
+        {t(lang, "stats_trend_avg")}
       </div>
     </div>
   );

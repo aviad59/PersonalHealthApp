@@ -10,32 +10,39 @@ import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type DayBucket = {
+type Macros = { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+
+type DayBucket = Macros & {
   date: string;
-  calories: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
   meals: number;
+  trend: Macros;
 };
+
+// Trailing window (in days, inclusive of the day itself) used for the
+// rolling-average trend line shown alongside the bar chart.
+const TREND_WINDOW = 7;
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const daysParam = parseInt(url.searchParams.get("days") || "14", 10);
   const days = Math.max(1, Math.min(60, Number.isFinite(daysParam) ? daysParam : 14));
 
+  // Fetch extra lookback days so the trend line has a full window for every
+  // visible day, including the leftmost one.
+  const lookbackDays = days + (TREND_WINDOW - 1);
   const since = daysAgoStr(days - 1);
+  const lookbackSince = daysAgoStr(lookbackDays - 1);
   const today = todayStr();
 
   const userId = getCurrentUserIdOrDefault();
   const [dailyTotals, profile] = await Promise.all([
-    getMealDailyTotalsSince(userId, since),
+    getMealDailyTotalsSince(userId, lookbackSince),
     getProfile(userId),
   ]);
 
   const byDate = new Map<string, DayBucket>();
-  for (let i = 0; i < days; i++) {
-    const d = daysAgoStr(days - 1 - i);
+  for (let i = 0; i < lookbackDays; i++) {
+    const d = daysAgoStr(lookbackDays - 1 - i);
     byDate.set(d, {
       date: d,
       calories: 0,
@@ -43,6 +50,7 @@ export async function GET(req: NextRequest) {
       fat_g: 0,
       carbs_g: 0,
       meals: 0,
+      trend: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
     });
   }
 
@@ -56,7 +64,32 @@ export async function GET(req: NextRequest) {
     bucket.meals = t.meals ?? 0;
   }
 
-  const series = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const fullSeries = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  // Trailing rolling average for each day, over up to TREND_WINDOW days
+  // (including days before `since`, used only for this calculation).
+  for (let i = 0; i < fullSeries.length; i++) {
+    const start = Math.max(0, i - (TREND_WINDOW - 1));
+    const slice = fullSeries.slice(start, i + 1);
+    const sum = slice.reduce(
+      (acc, d) => {
+        acc.calories += d.calories;
+        acc.protein_g += d.protein_g;
+        acc.fat_g += d.fat_g;
+        acc.carbs_g += d.carbs_g;
+        return acc;
+      },
+      { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+    );
+    fullSeries[i].trend = {
+      calories: Math.round(sum.calories / slice.length),
+      protein_g: Math.round(sum.protein_g / slice.length),
+      fat_g: Math.round(sum.fat_g / slice.length),
+      carbs_g: Math.round(sum.carbs_g / slice.length),
+    };
+  }
+
+  const series = fullSeries.slice(-days);
 
   const logged = series.filter((d) => d.meals > 0);
   const sum = series.reduce(
