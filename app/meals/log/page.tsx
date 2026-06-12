@@ -74,6 +74,12 @@ function todayStr() {
   return `${y}-${m}-${day}`;
 }
 
+/** Refresh the cached "log again" list after a save. Fire-and-forget —
+ *  the save itself doesn't wait on this. */
+function refreshFrequentMeals() {
+  fetch("/api/meals/frequent/refresh", { method: "POST" }).catch(() => {});
+}
+
 export default function LogMealPage() {
   const lang = useLang();
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -315,6 +321,7 @@ export default function LogMealPage() {
       // Reload list, clear form. Redirect home only if logging for today.
       await loadExisting(date);
       resetNewMealForm();
+      refreshFrequentMeals();
 
       // 2) Background: kick off the tip endpoint and surface it when ready.
       // Doesn't block the redirect — fire-and-forget. We surface a spinner
@@ -405,6 +412,7 @@ export default function LogMealPage() {
       await loadExisting(date);
       setExpandedIdx(null);
       setModifier("");
+      refreshFrequentMeals();
 
       // Background tip — same pattern as the photo/text save flow.
       if (j.id) {
@@ -463,6 +471,7 @@ export default function LogMealPage() {
       setManualMacros({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
       setManualMode(false);
       setTip(j.ai_tip || null);
+      refreshFrequentMeals();
 
       if (j.id) {
         setTip("__pending__");
@@ -520,6 +529,7 @@ export default function LogMealPage() {
         }),
       });
       await loadExisting(date);
+      refreshFrequentMeals();
       setProteinMode(false);
       setProteinBase(PROTEIN_BASES[0]);
     } catch (e: any) {

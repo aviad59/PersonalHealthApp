@@ -198,6 +198,16 @@ const PER_USER_TABLES = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_coach_user_date ON user_coach_messages(user_id, created_at);
+
+  -- Precomputed "log again" list (frequently-logged meals). Recomputing this
+  -- is a GROUP BY scan over ~60 days of meals, so we cache the result and
+  -- refresh it asynchronously after a meal is saved instead of recomputing
+  -- on every page load.
+  CREATE TABLE IF NOT EXISTS user_frequent_meals_cache (
+    user_id TEXT PRIMARY KEY,
+    meals_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;
 
 // One-time copy of the legacy single-row / date-keyed tables into the new
@@ -798,4 +808,80 @@ export async function clearCoachMessages(userId: string): Promise<void> {
     sql: `DELETE FROM user_coach_messages WHERE user_id = ?`,
     args: [userId],
   });
+}
+
+// ---------------------------------------------------------------
+// Frequent meals ("log again") cache
+// ---------------------------------------------------------------
+
+export type FrequentMeal = {
+  description: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  count: number;
+  last_date: string;
+};
+
+/**
+ * Recompute the "log again" list (meals logged at least twice in the last
+ * 60 days, grouped by a normalized description) and persist it so future
+ * reads are a single-row lookup instead of a GROUP BY scan.
+ */
+export async function refreshFrequentMeals(userId: string): Promise<FrequentMeal[]> {
+  const db = await getDb();
+  const since = daysAgoStr(60);
+  const res = await db.execute({
+    sql: `SELECT
+            description AS description,
+            ROUND(AVG(calories)) AS calories,
+            ROUND(AVG(protein_g)) AS protein_g,
+            ROUND(AVG(fat_g))     AS fat_g,
+            ROUND(AVG(carbs_g))   AS carbs_g,
+            COUNT(*) AS count,
+            MAX(date) AS last_date
+          FROM meals
+          WHERE user_id = ?
+            AND description IS NOT NULL
+            AND TRIM(description) <> ''
+            AND date >= ?
+          GROUP BY TRIM(LOWER(description))
+          HAVING count >= 2
+          ORDER BY count DESC, last_date DESC
+          LIMIT 8`,
+    args: [userId, since],
+  });
+
+  const meals = res.rows as unknown as FrequentMeal[];
+  await db.execute({
+    sql: `INSERT INTO user_frequent_meals_cache (user_id, meals_json, updated_at)
+          VALUES (?, ?, datetime('now'))
+          ON CONFLICT(user_id) DO UPDATE SET
+            meals_json = excluded.meals_json,
+            updated_at = datetime('now')`,
+    args: [userId, JSON.stringify(meals)],
+  });
+  return meals;
+}
+
+/**
+ * Return the cached "log again" list, computing and caching it on first
+ * access if no cache row exists yet.
+ */
+export async function getFrequentMeals(userId: string): Promise<FrequentMeal[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT meals_json FROM user_frequent_meals_cache WHERE user_id = ?`,
+    args: [userId],
+  });
+  const row = res.rows[0] as any;
+  if (row) {
+    try {
+      return JSON.parse(row.meals_json as string) as FrequentMeal[];
+    } catch {
+      // fall through and recompute if the cached JSON is somehow malformed
+    }
+  }
+  return refreshFrequentMeals(userId);
 }

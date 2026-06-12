@@ -1,61 +1,18 @@
 import { NextResponse } from "next/server";
-import { getDb, daysAgoStr } from "@/lib/db";
+import { getFrequentMeals } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Row = {
-  description: string;
-  calories: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
-  count: number;
-  last_date: string;
-};
-
 /**
- * Return meals that have been logged at least twice in the last 60 days,
- * grouped by a normalized description, with average macros and a count.
+ * Return the cached "log again" list — meals logged at least twice in the
+ * last 60 days, with average macros and a count. The list is precomputed
+ * and refreshed by POST /api/meals/frequent/refresh after a meal is saved,
+ * so this is just a cache read.
  */
 export async function GET() {
   const userId = getCurrentUserIdOrDefault();
-  const db = await getDb();
-  const since = daysAgoStr(60);
-
-  const res = await db.execute({
-    sql: `SELECT
-            TRIM(LOWER(description)) AS key,
-            description AS description,
-            ROUND(AVG(calories)) AS calories,
-            ROUND(AVG(protein_g)) AS protein_g,
-            ROUND(AVG(fat_g))     AS fat_g,
-            ROUND(AVG(carbs_g))   AS carbs_g,
-            COUNT(*) AS count,
-            MAX(date) AS last_date
-          FROM meals
-          WHERE user_id = ?
-            AND description IS NOT NULL
-            AND TRIM(description) <> ''
-            AND date >= ?
-          GROUP BY key
-          HAVING count >= 2
-          ORDER BY count DESC, last_date DESC
-          LIMIT 8`,
-    args: [userId, since],
-  });
-
-  const rows = res.rows as unknown as (Row & { key: string })[];
-  const cleaned: Row[] = rows.map((r) => ({
-    description: r.description,
-    calories: r.calories,
-    protein_g: r.protein_g,
-    fat_g: r.fat_g,
-    carbs_g: r.carbs_g,
-    count: r.count,
-    last_date: r.last_date,
-  }));
-
-  return NextResponse.json({ meals: cleaned });
+  const meals = await getFrequentMeals(userId);
+  return NextResponse.json({ meals });
 }
