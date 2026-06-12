@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import BottomNav from "@/components/BottomNav";
+import AppNav from "@/components/AppNav";
 import LangProvider from "@/components/LangProvider";
 import PWARegister from "@/components/PWARegister";
 
@@ -50,9 +50,13 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className="bg-bg text-white">
         <LangProvider>
-          <div className="mx-auto w-full max-w-md sm:max-w-lg lg:max-w-xl min-h-dvh flex flex-col">
-            <main className="flex-1 pb-28 safe-top">{children}</main>
-            <BottomNav />
+          <div className="md:flex md:min-h-dvh">
+            <AppNav />
+            <div className="flex-1 md:flex md:justify-center">
+              <div className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-6xl min-h-dvh flex flex-col md:px-8 md:py-8">
+                <main className="flex-1 pb-28 md:pb-0 safe-top">{children}</main>
+              </div>
+            </div>
           </div>
         </LangProvider>
         {/* Registers the service worker on the client. Kept as a tiny

@@ -125,7 +125,7 @@ export default function StatsPage() {
       {loading && !data && <StatsSkeleton />}
 
       {data && (
-        <div className={loading ? "animate-pulse [animation-duration:2.5s]" : ""}>
+        <div className={`space-y-5 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
           {/* Averages summary */}
           <section className="card p-4">
             <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
@@ -195,42 +195,45 @@ export default function StatsPage() {
             />
           </section>
 
-          {/* Highlights */}
-          <section className="card p-4 space-y-3">
-            <div className="text-[10px] uppercase tracking-wider text-white/50">{t(lang, "stats_highlights")}</div>
-            {data.proteinHitRate !== null && (
-              <Row
-                k={t(lang, "stats_protein_hit")}
-                v={`${data.proteinHitRate}%`}
-              />
-            )}
-            {data.bestProtein && (
-              <Row
-                k={t(lang, "stats_top_protein")}
-                v={`${formatDay(data.bestProtein.date, lang)} · ${data.bestProtein.protein_g}g`}
-              />
-            )}
-            {data.highestCal && (
-              <Row
-                k={t(lang, "stats_highest_cal")}
-                v={`${formatDay(data.highestCal.date, lang)} · ${data.highestCal.calories} ${t(lang, "macro_kcal")}`}
-              />
-            )}
-            <Row k={t(lang, "stats_total_kcal")} v={`${data.totals.calories.toLocaleString()}`} />
-            <Row k={t(lang, "stats_total_protein")} v={`${data.totals.protein_g} g`} />
-          </section>
+          {/* Highlights + Daily breakdown */}
+          <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
+            {/* Highlights */}
+            <section className="card p-4 space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-white/50">{t(lang, "stats_highlights")}</div>
+              {data.proteinHitRate !== null && (
+                <Row
+                  k={t(lang, "stats_protein_hit")}
+                  v={`${data.proteinHitRate}%`}
+                />
+              )}
+              {data.bestProtein && (
+                <Row
+                  k={t(lang, "stats_top_protein")}
+                  v={`${formatDay(data.bestProtein.date, lang)} · ${data.bestProtein.protein_g}g`}
+                />
+              )}
+              {data.highestCal && (
+                <Row
+                  k={t(lang, "stats_highest_cal")}
+                  v={`${formatDay(data.highestCal.date, lang)} · ${data.highestCal.calories} ${t(lang, "macro_kcal")}`}
+                />
+              )}
+              <Row k={t(lang, "stats_total_kcal")} v={`${data.totals.calories.toLocaleString()}`} />
+              <Row k={t(lang, "stats_total_protein")} v={`${data.totals.protein_g} g`} />
+            </section>
 
-          {/* Daily breakdown */}
-          <section className="card p-4">
-            <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
-              {t(lang, "stats_breakdown")}
-            </div>
-            <div className="divide-y divide-border">
-              {[...data.series].reverse().map((d) => (
-                <DayRow key={d.date} day={d} targets={data.targets} lang={lang} />
-              ))}
-            </div>
-          </section>
+            {/* Daily breakdown */}
+            <section className="card p-4">
+              <div className="text-[10px] uppercase tracking-wider text-white/50 mb-3">
+                {t(lang, "stats_breakdown")}
+              </div>
+              <div className="divide-y divide-border">
+                {[...data.series].reverse().map((d) => (
+                  <DayRow key={d.date} day={d} targets={data.targets} lang={lang} />
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       )}
     </div>

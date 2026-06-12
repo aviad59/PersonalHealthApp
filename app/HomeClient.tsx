@@ -168,167 +168,173 @@ export default function HomeClient({
         </Link>
       </div>
 
-      <section className="card p-5">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_macros")}</h2>
-          <Link href="/meals/log" className="text-xs text-accent-brand font-medium">
-            {t(lang, "home_log_meal")}
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-y-4 place-items-center">
-          <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" />
-          <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" />
-          <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" />
-          <MacroRing label={t(lang, "macro_fat")} value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" />
-        </div>
-        {burn > 0 && (
-          <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
-            <span className="text-white/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
-            <span className="text-white/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
-          </div>
-        )}
-      </section>
-
-      <section className="card p-5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_next_meal")}</h2>
-          {suggestion?.updated_at && (
-            <span className="text-[10px] text-white/40">
-              {new Date(suggestion.updated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-            </span>
-          )}
-        </div>
-        {suggestion ? (
-          <p className="text-[13px] leading-relaxed text-white/80">{suggestion.body}</p>
-        ) : suggestionLoading ? (
-          <p className="text-[13px] text-white/40">{t(lang, "home_thinking")}</p>
-        ) : (
-          <p className="text-[13px] text-white/40">{t(lang, "home_no_suggestion")}</p>
-        )}
-      </section>
-
-      {!hasWorkouts ? null : !training ? (
-        <section className="card p-5 animate-pulse">
-          <div className="h-3 w-24 rounded bg-white/10 mb-4" />
-          <div className="flex items-end gap-4">
-            <div className="h-10 w-12 rounded bg-white/10" />
-            <div className="flex-1 space-y-2">
-              <div className="h-1.5 w-full rounded-full bg-white/10" />
-              <div className="h-3 w-5/6 rounded bg-white/10" />
+      <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
+        <div className="space-y-5">
+          <section className="card p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_macros")}</h2>
+              <Link href="/meals/log" className="text-xs text-accent-brand font-medium">
+                {t(lang, "home_log_meal")}
+              </Link>
             </div>
-          </div>
-        </section>
-      ) : recovery ? (
-        <section className="card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_recovery")}</h2>
-            <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(recovery.band)}`}>
-              {recovery.band}
-            </span>
-          </div>
-          <div className="flex items-end gap-4">
-            <div>
-              <div className="text-3xl font-bold leading-none">{recovery.score}</div>
-              <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">/ 100</div>
+            <div className="grid grid-cols-2 gap-y-4 place-items-center">
+              <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" />
+              <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" />
+              <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" />
+              <MacroRing label={t(lang, "macro_fat")} value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" />
             </div>
-            <div className="flex-1">
-              <ScoreBar score={recovery.score} band={recovery.band} />
-              <p className="text-[12px] text-white/60 mt-2 leading-snug">{recovery.rationale}</p>
-            </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {recovery.byMuscle.map((m) => (
-                <MusclePill key={m.muscle} status={m} todayLabel={t(lang, "home_today_label")} />
-              ))}
-            </div>
-          </div>
-          {!recovery.signalsUsed.workouts && (
-            <p className="text-[10px] text-white/30 mt-3">
-              {t(lang, "home_refresh_workouts")}
-            </p>
-          )}
-        </section>
-      ) : null}
-
-      {hasWorkouts && (
-        <section className="card p-5">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_todays_workout")}</h2>
-            <Link href="/workouts" className="text-xs text-accent-brand">{t(lang, "home_all_workouts")}</Link>
-          </div>
-          {!training ? (
-            <div className="animate-pulse space-y-2">
-              <div className="h-4 w-2/3 rounded bg-white/10" />
-              <div className="h-3 w-1/2 rounded bg-white/10" />
-            </div>
-          ) : todaysWorkout ? (
-            <div>
-              <div className="font-semibold">{todaysWorkout.title}</div>
-              <div className="text-xs text-white/50 mt-0.5">
-                {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{" "}
-                · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
+            {burn > 0 && (
+              <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
+                <span className="text-white/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
+                <span className="text-white/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
               </div>
-              <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
+            )}
+          </section>
+
+          <section className="card p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_next_meal")}</h2>
+              {suggestion?.updated_at && (
+                <span className="text-[10px] text-white/40">
+                  {new Date(suggestion.updated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                </span>
+              )}
             </div>
-          ) : (
-            <div className="text-sm text-white/50">{t(lang, "home_no_workout")}</div>
-          )}
-        </section>
-      )}
+            {suggestion ? (
+              <p className="text-[13px] leading-relaxed text-white/80">{suggestion.body}</p>
+            ) : suggestionLoading ? (
+              <p className="text-[13px] text-white/40">{t(lang, "home_thinking")}</p>
+            ) : (
+              <p className="text-[13px] text-white/40">{t(lang, "home_no_suggestion")}</p>
+            )}
+          </section>
 
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_latest_insight")}</h2>
-          <Link href="/insights" className="text-xs text-accent-brand">{t(lang, "home_all_insights")}</Link>
-        </div>
-        {latestInsight ? (
-          <InsightCard
-            headline={latestInsight.headline}
-            body={latestInsight.body}
-            type={latestInsight.type}
-            tags={latestInsight.tags}
-            date={new Date(latestInsight.created_at).toLocaleString()}
-          />
-        ) : (
-          <div className="card p-5 text-sm text-white/60">
-            {t(lang, "home_no_insights")}{" "}
-            <Link href="/insights" className="text-accent-brand underline underline-offset-2">
-              {t(lang, "home_generate_first")}
-            </Link>.
-          </div>
-        )}
-      </section>
+          {!hasWorkouts ? null : !training ? (
+            <section className="card p-5 animate-pulse">
+              <div className="h-3 w-24 rounded bg-white/10 mb-4" />
+              <div className="flex items-end gap-4">
+                <div className="h-10 w-12 rounded bg-white/10" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-1.5 w-full rounded-full bg-white/10" />
+                  <div className="h-3 w-5/6 rounded bg-white/10" />
+                </div>
+              </div>
+            </section>
+          ) : recovery ? (
+            <section className="card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_recovery")}</h2>
+                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(recovery.band)}`}>
+                  {recovery.band}
+                </span>
+              </div>
+              <div className="flex items-end gap-4">
+                <div>
+                  <div className="text-3xl font-bold leading-none">{recovery.score}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">/ 100</div>
+                </div>
+                <div className="flex-1">
+                  <ScoreBar score={recovery.score} band={recovery.band} />
+                  <p className="text-[12px] text-white/60 mt-2 leading-snug">{recovery.rationale}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {recovery.byMuscle.map((m) => (
+                    <MusclePill key={m.muscle} status={m} todayLabel={t(lang, "home_today_label")} />
+                  ))}
+                </div>
+              </div>
+              {!recovery.signalsUsed.workouts && (
+                <p className="text-[10px] text-white/30 mt-3">
+                  {t(lang, "home_refresh_workouts")}
+                </p>
+              )}
+            </section>
+          ) : null}
 
-      {meals.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">{t(lang, "home_todays_meals")}</h2>
-          <div className="space-y-2">
-            {meals.map((m) => (
-              <div key={m.id} className="card p-3 flex gap-3 items-center">
-                {m.photo_thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.photo_thumb} alt="" width={56} height={56} decoding="async" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
-                ) : m.photo_path ? (
-                  <Image src={m.photo_path} alt="" width={56} height={56} quality={55} sizes="56px" loading="lazy" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg bg-bg-elev" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{m.description || "Meal"}</div>
-                  <div className="text-[11px] text-white/50 mt-0.5">
-                    {Math.round(m.calories)} kcal · P{Math.round(m.protein_g)} C{Math.round(m.carbs_g)} F{Math.round(m.fat_g)}
+          {hasWorkouts && (
+            <section className="card p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_todays_workout")}</h2>
+                <Link href="/workouts" className="text-xs text-accent-brand">{t(lang, "home_all_workouts")}</Link>
+              </div>
+              {!training ? (
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 w-2/3 rounded bg-white/10" />
+                  <div className="h-3 w-1/2 rounded bg-white/10" />
+                </div>
+              ) : todaysWorkout ? (
+                <div>
+                  <div className="font-semibold">{todaysWorkout.title}</div>
+                  <div className="text-xs text-white/50 mt-0.5">
+                    {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{" "}
+                    · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
                   </div>
+                  <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
                 </div>
-                <div className="text-[11px] text-white/40">
-                  {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </div>
+              ) : (
+                <div className="text-sm text-white/50">{t(lang, "home_no_workout")}</div>
+              )}
+            </section>
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_latest_insight")}</h2>
+              <Link href="/insights" className="text-xs text-accent-brand">{t(lang, "home_all_insights")}</Link>
+            </div>
+            {latestInsight ? (
+              <InsightCard
+                headline={latestInsight.headline}
+                body={latestInsight.body}
+                type={latestInsight.type}
+                tags={latestInsight.tags}
+                date={new Date(latestInsight.created_at).toLocaleString()}
+              />
+            ) : (
+              <div className="card p-5 text-sm text-white/60">
+                {t(lang, "home_no_insights")}{" "}
+                <Link href="/insights" className="text-accent-brand underline underline-offset-2">
+                  {t(lang, "home_generate_first")}
+                </Link>.
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            )}
+          </section>
+
+          {meals.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">{t(lang, "home_todays_meals")}</h2>
+              <div className="space-y-2">
+                {meals.map((m) => (
+                  <div key={m.id} className="card p-3 flex gap-3 items-center">
+                    {m.photo_thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.photo_thumb} alt="" width={56} height={56} decoding="async" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
+                    ) : m.photo_path ? (
+                      <Image src={m.photo_path} alt="" width={56} height={56} quality={55} sizes="56px" loading="lazy" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-bg-elev" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{m.description || "Meal"}</div>
+                      <div className="text-[11px] text-white/50 mt-0.5">
+                        {Math.round(m.calories)} kcal · P{Math.round(m.protein_g)} C{Math.round(m.carbs_g)} F{Math.round(m.fat_g)}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-white/40">
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
