@@ -64,7 +64,7 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="px-5 pt-6 pb-10 space-y-5">
+    <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
       <div className="flex items-end justify-between">
         <h1 className="text-2xl font-bold">{t(lang, "insights_title")}</h1>
       </div>

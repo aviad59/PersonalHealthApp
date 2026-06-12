@@ -239,7 +239,7 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="px-5 pt-10">
+      <div className="px-5 pt-10 md:max-w-3xl md:mx-auto">
         <h1 className="text-2xl font-bold mb-2">{t(lang, "profile_title")}</h1>
         <p className="text-sm text-white/60 mb-6">{t(lang, "profile_no_profile")}</p>
         <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-4 py-2 text-sm font-semibold">
@@ -256,7 +256,7 @@ export default function ProfilePage() {
     conflicts.every((c) => !!resolutions[c.date]);
 
   return (
-    <div className="px-5 pt-6 pb-6 space-y-6">
+    <div className="px-5 pt-6 pb-6 space-y-6 md:max-w-3xl md:mx-auto">
       <h1 className="text-2xl font-bold">{t(lang, "profile_title")}</h1>
 
       <CurrentUserCard />

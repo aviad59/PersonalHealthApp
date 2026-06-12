@@ -138,7 +138,7 @@ export default function CoachPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-7rem)]">
+    <div className="flex flex-col h-[calc(100dvh-7rem)] md:max-w-3xl md:mx-auto md:w-full">
       {/* Header */}
       <div className="px-5 pt-6 pb-3 flex items-end justify-between">
         <div>
@@ -252,7 +252,7 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
           I can see your profile, today's meals, recent weight, and (if you track them) your workouts.
         </p>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-2">
         {STARTER_PROMPTS.map((q) => (
           <button
             key={q}

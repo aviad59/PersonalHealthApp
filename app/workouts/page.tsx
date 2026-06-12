@@ -62,7 +62,7 @@ export default function WorkoutsPage() {
 
   if (!data.haveKey && !data.fromCache) {
     return (
-      <div className="px-5 pt-6 space-y-3">
+      <div className="px-5 pt-6 space-y-3 md:max-w-3xl md:mx-auto">
         <h1 className="text-2xl font-bold">Workouts</h1>
         <div className="card p-5 text-sm text-white/70">
           Set <code className="text-accent-brand">HEVY_API_KEY</code> in your <code>.env.local</code> and restart to
@@ -73,7 +73,7 @@ export default function WorkoutsPage() {
   }
 
   return (
-    <div className="px-5 pt-6 pb-10 space-y-5">
+    <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold">Workouts</h1>

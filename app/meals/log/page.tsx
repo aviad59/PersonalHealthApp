@@ -618,7 +618,7 @@ export default function LogMealPage() {
   }
 
   return (
-    <div className="px-5 pt-6 pb-10 space-y-5">
+    <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
       <div>
         <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
         <p className="text-sm text-white/60 mt-1">
