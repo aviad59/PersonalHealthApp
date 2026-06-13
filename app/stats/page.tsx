@@ -137,6 +137,7 @@ export default function StatsPage() {
                 value={data.averages.calories}
                 target={data.targets?.calories}
                 ofTarget={t(lang, "stats_of_target")}
+                metric="calories"
               />
               <Stat
                 label={t(lang, "macro_protein")}
@@ -144,6 +145,7 @@ export default function StatsPage() {
                 unit="g"
                 target={data.targets?.protein_g}
                 ofTarget={t(lang, "stats_of_target")}
+                metric="protein_g"
               />
               <Stat
                 label={t(lang, "macro_fat")}
@@ -151,6 +153,7 @@ export default function StatsPage() {
                 unit="g"
                 target={data.targets?.fat_g}
                 ofTarget={t(lang, "stats_of_target")}
+                metric="fat_g"
               />
               <Stat
                 label={t(lang, "macro_carbs")}
@@ -158,6 +161,7 @@ export default function StatsPage() {
                 unit="g"
                 target={data.targets?.carbs_g}
                 ofTarget={t(lang, "stats_of_target")}
+                metric="carbs_g"
               />
             </div>
           </section>
@@ -280,18 +284,34 @@ function StatsSkeleton() {
   );
 }
 
+// Protein targets are a floor — hitting or exceeding it is good, and there's
+// no real downside to going over. Calories/fat/carbs are targets to stay
+// close to in either direction, so running well over isn't "good" either.
+function pctColor(pct: number, metric: "calories" | "protein_g" | "fat_g" | "carbs_g") {
+  if (metric === "protein_g") {
+    if (pct >= 95) return "text-green-400";
+    if (pct < 90) return "text-amber-400";
+    return "text-white/50";
+  }
+  if (pct >= 90 && pct <= 105) return "text-green-400";
+  if (pct < 85 || pct > 115) return "text-amber-400";
+  return "text-white/50";
+}
+
 function Stat({
   label,
   value,
   unit,
   target,
   ofTarget,
+  metric,
 }: {
   label: string;
   value: number;
   unit?: string;
   target?: number;
   ofTarget: string;
+  metric: "calories" | "protein_g" | "fat_g" | "carbs_g";
 }) {
   const pct = target ? Math.min(150, Math.round((value / target) * 100)) : null;
   return (
@@ -302,11 +322,7 @@ function Stat({
         {unit ? <span className="text-xs text-white/50 ml-0.5">{unit}</span> : null}
       </div>
       {pct !== null && (
-        <div
-          className={`text-[10px] mt-0.5 ${
-            pct >= 95 && pct <= 110 ? "text-green-400" : pct < 90 ? "text-amber-400" : "text-white/50"
-          }`}
-        >
+        <div className={`text-[10px] mt-0.5 ${pctColor(pct, metric)}`}>
           {pct}% {ofTarget}
         </div>
       )}
