@@ -34,8 +34,16 @@ export default function CoachPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Touch devices (phones/tablets) get a software keyboard with its own send
+  // affordance — let Enter insert a newline there and reserve the Send button
+  // for sending. Physical keyboards keep Enter-to-send.
+  useEffect(() => {
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
+  }, []);
 
   // Initial load — show cached thread instantly, refresh from server in background.
   useEffect(() => {
@@ -123,8 +131,9 @@ export default function CoachPage() {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter to send; Shift+Enter for newline (mobile keyboards send Enter).
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Enter to send on physical keyboards; Shift+Enter (or Enter on touch
+    // devices) inserts a newline instead.
+    if (e.key === "Enter" && !e.shiftKey && !isTouchDevice) {
       e.preventDefault();
       send(input);
     }
