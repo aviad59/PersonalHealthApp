@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // "Heavy" model — used for the daily/weekly insight pass where we want
 // stronger reasoning over a week of meals + workouts.
-export const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+export const CLAUDE_MODEL = "claude-sonnet-4-6";
 
 // "Best" model — used for the AI coach where response quality matters most.
 export const CLAUDE_OPUS_MODEL = "claude-opus-4-8";

@@ -7,7 +7,7 @@ A mobile-first, AI-powered personal health dashboard. Tracks nutrition (via Clau
 - Next.js 14 (App Router) + TypeScript
 - Tailwind CSS, dark mode
 - SQLite via `better-sqlite3`
-- Anthropic SDK (`claude-sonnet-4-20250514`) for vision + insights
+- Anthropic SDK (`claude-sonnet-4-6`) for vision + insights
 - Direct Hevy REST API client (the [`hevy-mcp`](https://github.com/chrisdoc/hevy-mcp) repo is included in `./hevy-mcp` for use with Claude Desktop)
 
 ## Quick start
