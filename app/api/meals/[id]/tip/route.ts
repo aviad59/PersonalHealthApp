@@ -85,7 +85,6 @@ export async function POST(
       max_tokens: 150,
       // Higher decoding spread for variety.
       temperature: 1,
-      top_p: 0.95,
       system: withLanguage(MEAL_TIP_SYSTEM, profile.language ?? "en"),
       messages: [{ role: "user", content: JSON.stringify(context) }],
     });

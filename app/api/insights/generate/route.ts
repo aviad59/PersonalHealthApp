@@ -211,7 +211,6 @@ export async function POST(req: NextRequest) {
       // Higher decoding spread so the lead/angle varies day to day even
       // when underlying numbers haven't shifted much.
       temperature: 1,
-      top_p: 0.95,
       system,
       messages: [{ role: "user", content: JSON.stringify(context, null, 2) }],
     });
