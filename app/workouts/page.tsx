@@ -8,14 +8,16 @@ type Workout = {
   start_time: string;
   end_time: string;
   volume_kg: number;
+  avg_rpe: number | null;
   exercise_count: number;
-  exercises: { title: string; sets: number; top_set: { weight_kg: number; reps: number } | null }[];
+  exercises: { title: string; sets: number; top_set: { weight_kg: number; reps: number; rpe: number | null } | null }[];
 };
 
 type Summary = {
   sessions: number;
   totalVolumeKg: number;
   totalMinutes: number;
+  avgRpe: number | null;
   byMuscle: Record<string, { sets: number; volumeKg: number }>;
   sessionsByDate: { date: string; title: string; volumeKg: number }[];
 };
@@ -32,6 +34,8 @@ export default function WorkoutsPage() {
   }>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   async function load(force = false) {
     setLoading(true);
@@ -50,6 +54,22 @@ export default function WorkoutsPage() {
       await load(false);
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function backfillHistory() {
+    if (!confirm("Pull your full Hevy workout history into the cache? This can take a minute.")) return;
+    setBackfilling(true);
+    setBackfillMsg(null);
+    try {
+      const r = await fetch("/api/workouts/refresh?full=1", { method: "POST" });
+      const j = await r.json();
+      setBackfillMsg(j.ok ? `Cached ${j.cachedTotal} workouts total.` : j.error || "Backfill failed.");
+      await load(false);
+    } catch (e: any) {
+      setBackfillMsg(e.message || "Backfill failed.");
+    } finally {
+      setBackfilling(false);
     }
   }
 
@@ -87,14 +107,27 @@ export default function WorkoutsPage() {
               : ""}
           </p>
         </div>
-        <button
-          onClick={hardRefresh}
-          disabled={refreshing}
-          className="text-xs text-accent-brand disabled:opacity-40"
-        >
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={hardRefresh}
+            disabled={refreshing}
+            className="text-xs text-accent-brand disabled:opacity-40"
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+          <button
+            onClick={backfillHistory}
+            disabled={backfilling}
+            className="text-[11px] text-white/40 hover:text-white/70 transition-colors disabled:opacity-40"
+          >
+            {backfilling ? "Backfilling…" : "Backfill full history"}
+          </button>
+        </div>
       </div>
+
+      {backfillMsg && (
+        <div className="text-xs text-white/60">{backfillMsg}</div>
+      )}
 
       {data.error && (
         <div className="card p-4 border-red-500/30 text-sm text-red-400">{data.error}</div>
@@ -103,10 +136,13 @@ export default function WorkoutsPage() {
       {data.summary && (
         <section className="card p-5 space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Last 7 days</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${data.summary.avgRpe !== null ? "grid-cols-4" : "grid-cols-3"}`}>
             <Stat label="Sessions" value={data.summary.sessions.toString()} />
             <Stat label="Volume" value={`${Math.round(data.summary.totalVolumeKg).toLocaleString()} kg`} />
             <Stat label="Minutes" value={data.summary.totalMinutes.toString()} />
+            {data.summary.avgRpe !== null && (
+              <Stat label="Avg RPE" value={data.summary.avgRpe.toString()} />
+            )}
           </div>
           {Object.keys(data.summary.byMuscle).length > 0 && (
             <div className="pt-2">
@@ -137,8 +173,13 @@ export default function WorkoutsPage() {
                   {new Date(w.start_time).toLocaleString()} · {w.exercise_count} exercises
                 </div>
               </div>
-              <div className="text-sm text-accent-brand font-medium">
-                {Math.round(w.volume_kg).toLocaleString()} kg
+              <div className="text-right">
+                <div className="text-sm text-accent-brand font-medium">
+                  {Math.round(w.volume_kg).toLocaleString()} kg
+                </div>
+                {w.avg_rpe !== null && (
+                  <div className="text-[11px] text-white/40">RPE {w.avg_rpe}</div>
+                )}
               </div>
             </div>
             <ul className="mt-3 space-y-1 text-[13px] text-white/70">
@@ -148,6 +189,7 @@ export default function WorkoutsPage() {
                   {ex.top_set && (
                     <span className="text-white/60">
                       {ex.top_set.weight_kg ?? 0}kg × {ex.top_set.reps ?? 0}
+                      {ex.top_set.rpe !== null ? ` @${ex.top_set.rpe}` : ""}
                     </span>
                   )}
                 </li>

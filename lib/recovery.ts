@@ -13,7 +13,7 @@
 //
 // Tuning is deliberately conservative so the score moves with real data, not noise.
 
-import { HevyWorkout, inferMuscleGroups } from "@/lib/hevy";
+import { HevyWorkout, inferMuscleGroups, avgRpeAcrossWorkouts } from "@/lib/hevy";
 import { dateKey, diffDaysKey, todayStr } from "@/lib/db";
 
 export type DailyTotals = {
@@ -42,6 +42,7 @@ export type RecoveryResult = {
   proteinAdherencePct: number; // 0..100
   calorieDeviationPct: number; // 0..100 (closer to 0 = closer to target)
   backToBackSessions: boolean;
+  avgRpeLast3Days: number | null;
   byMuscle: MuscleStatus[];
   rationale: string;
   signalsUsed: {
@@ -49,6 +50,7 @@ export type RecoveryResult = {
     calories: boolean;
     workouts: boolean;
     sleep: boolean;
+    rpe: boolean;
   };
 };
 
@@ -136,6 +138,23 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
     }
   }
 
+  // ---- Recent training strain (avg logged RPE over the last 3 days) ----
+  let avgRpe: number | null = null;
+  if (signals.workouts) {
+    const todayKey = todayStr();
+    const last3DaysWorkouts = input.recentWorkouts.filter((w) => {
+      const t = Date.parse(w.start_time || "");
+      if (!Number.isFinite(t)) return false;
+      return diffDaysKey(todayKey, dateKey(new Date(t))) <= 2;
+    });
+    avgRpe = avgRpeAcrossWorkouts(last3DaysWorkouts);
+    if (avgRpe !== null) {
+      if (avgRpe >= 9) score -= 15;
+      else if (avgRpe >= 8.5) score -= 8;
+    }
+  }
+  const signalsWithRpe = { ...signals, rpe: avgRpe !== null };
+
   // ---- Sleep (optional, future Zepp hook) ----
   if (signals.sleep && input.sleepHoursLast3) {
     const meanSleep = avg(input.sleepHoursLast3);
@@ -197,6 +216,9 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
     reasons.push(`calories ${calDevPct}% off target`);
   }
   if (backToBack) reasons.push("trained yesterday and today");
+  if (avgRpe !== null && avgRpe >= 8.5) {
+    reasons.push(`training has felt heavy lately (avg RPE ${avgRpe})`);
+  }
   if (!signals.protein && !signals.workouts) {
     reasons.push("not enough data yet — log a meal or workout");
   }
@@ -212,8 +234,9 @@ export function computeRecovery(input: RecoveryInput): RecoveryResult {
     proteinAdherencePct: proteinPct,
     calorieDeviationPct: calDevPct,
     backToBackSessions: backToBack,
+    avgRpeLast3Days: avgRpe,
     byMuscle,
     rationale,
-    signalsUsed: signals,
+    signalsUsed: signalsWithRpe,
   };
 }

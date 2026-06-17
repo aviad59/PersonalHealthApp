@@ -3,6 +3,7 @@ import {
   listWorkouts,
   summarizeWeek,
   workoutVolumeKg,
+  workoutAvgRpe,
   workoutDurationMin,
   hasHevyKey,
   HevyWorkout,
@@ -32,7 +33,7 @@ function topSet(sets: any[]) {
     if (!best) best = s;
     else if ((s.weight_kg ?? 0) > (best.weight_kg ?? 0)) best = s;
   }
-  return best ? { weight_kg: best.weight_kg, reps: best.reps } : null;
+  return best ? { weight_kg: best.weight_kg, reps: best.reps, rpe: best.rpe ?? null } : null;
 }
 
 async function refreshCache(userId: string): Promise<{
@@ -93,6 +94,7 @@ function buildResponse(workouts: HevyWorkout[]) {
       start_time: w.start_time,
       end_time: w.end_time,
       volume_kg: workoutVolumeKg(w),
+      avg_rpe: workoutAvgRpe(w),
       exercise_count: w.exercises.length,
       exercises: w.exercises.map((ex) => ({
         title: ex.title,

@@ -104,6 +104,34 @@ export function workoutVolumeKg(w: HevyWorkout): number {
   return Math.round(total);
 }
 
+/** Average logged RPE across a workout's working sets, or null if none logged. */
+export function workoutAvgRpe(w: HevyWorkout): number | null {
+  const rpes: number[] = [];
+  for (const ex of w.exercises) {
+    for (const s of ex.sets) {
+      if (s.type === "warmup") continue;
+      if (typeof s.rpe === "number") rpes.push(s.rpe);
+    }
+  }
+  if (rpes.length === 0) return null;
+  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
+}
+
+/** Average logged RPE across all working sets of several workouts, or null if none logged. */
+export function avgRpeAcrossWorkouts(workouts: HevyWorkout[]): number | null {
+  const rpes: number[] = [];
+  for (const w of workouts) {
+    for (const ex of w.exercises) {
+      for (const s of ex.sets) {
+        if (s.type === "warmup") continue;
+        if (typeof s.rpe === "number") rpes.push(s.rpe);
+      }
+    }
+  }
+  if (rpes.length === 0) return null;
+  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
+}
+
 /** Returns duration in minutes for a workout, floored. */
 export function workoutDurationMin(w: HevyWorkout): number {
   try {
@@ -141,6 +169,7 @@ export type WeeklySummary = {
   sessions: number;
   totalVolumeKg: number;
   totalMinutes: number;
+  avgRpe: number | null;
   byMuscle: Record<string, { sets: number; volumeKg: number }>;
   sessionsByDate: { date: string; title: string; volumeKg: number }[];
 };
@@ -184,6 +213,7 @@ export function summarizeWeek(workouts: HevyWorkout[]): WeeklySummary {
     sessions: workouts.length,
     totalVolumeKg: Math.round(totalVolumeKg),
     totalMinutes,
+    avgRpe: avgRpeAcrossWorkouts(workouts),
     byMuscle,
     sessionsByDate,
   };

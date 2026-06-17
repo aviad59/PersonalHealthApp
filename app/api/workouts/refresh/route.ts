@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { listWorkouts, workoutDurationMin, hasHevyKey, HevyWorkout } from "@/lib/hevy";
 import {
   CachedWorkout,
@@ -11,12 +11,13 @@ import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const HEVY_PAGE_SIZE = 10;
-const REFRESH_PAGES = 5;
+const REFRESH_PAGES = 5; // most-recent-only refresh (default)
+const BACKFILL_PAGES = 200; // ?full=1 — pages through the user's entire history
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const userId = getCurrentUserIdOrDefault();
   if (!hasHevyKey(userId)) {
     return NextResponse.json(
@@ -24,9 +25,11 @@ export async function POST() {
       { status: 400 },
     );
   }
+  const full = new URL(req.url).searchParams.get("full") === "1";
+  const maxPages = full ? BACKFILL_PAGES : REFRESH_PAGES;
   try {
     const collected: HevyWorkout[] = [];
-    for (let page = 1; page <= REFRESH_PAGES; page++) {
+    for (let page = 1; page <= maxPages; page++) {
       const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
       const ws = r.workouts ?? [];
       collected.push(...ws);

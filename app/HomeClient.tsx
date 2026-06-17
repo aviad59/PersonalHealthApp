@@ -20,6 +20,7 @@ type Recovery = {
   proteinAdherencePct: number;
   calorieDeviationPct: number;
   backToBackSessions: boolean;
+  avgRpeLast3Days: number | null;
   byMuscle: MuscleStatus[];
   rationale: string;
   signalsUsed: {
@@ -27,6 +28,7 @@ type Recovery = {
     calories: boolean;
     workouts: boolean;
     sleep: boolean;
+    rpe: boolean;
   };
 };
 
