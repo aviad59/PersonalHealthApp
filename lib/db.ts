@@ -331,6 +331,18 @@ export function daysAgoStr(n: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
+/** YYYY-MM-DD for the Sunday that starts the current calendar week (in APP_TZ). */
+export function startOfWeekStr(): string {
+  const today = todayStr();
+  const [y, m, d] = today.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay()); // getUTCDay(): 0 = Sunday
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 /** Difference in calendar days between two YYYY-MM-DD keys (a - b). */
 export function diffDaysKey(aKey: string, bKey: string): number {
   const [ay, am, ad] = aKey.split("-").map(Number);

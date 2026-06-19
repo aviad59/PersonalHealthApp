@@ -17,6 +17,8 @@ import {
   clearCoachMessages,
   todayStr,
   daysAgoStr,
+  startOfWeekStr,
+  diffDaysKey,
   dateKey,
   Meal,
 } from "@/lib/db";
@@ -56,7 +58,7 @@ const DAY_MEALS_TOOL = {
 const NUTRITION_TOOL = {
   name: "get_meal_history",
   description:
-    "Fetch daily nutrition summaries for a specific date range. Use when the user asks about eating patterns, calorie/protein trends, or any nutrition question covering a period beyond the last 7 days already in the snapshot.",
+    "Fetch daily nutrition summaries for a specific date range. Use when the user asks about eating patterns, calorie/protein trends, or any nutrition question covering a period beyond the current calendar week already in the snapshot.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -224,16 +226,18 @@ async function executeTool(
 }
 
 // ---------------------------------------------------------------------------
-// Context snapshot — last 7d meals, 14d weight/workouts
+// Context snapshot — this calendar week's meals (Sun–Sat), 14d weight/workouts
 // ---------------------------------------------------------------------------
 async function buildContext(userId: UserId): Promise<any> {
   const cfg = getUserConfig(userId);
   const today = todayStr();
+  const weekStart = startOfWeekStr();
+  const daysIntoWeek = diffDaysKey(today, weekStart); // 0 (Sun) .. 6 (Sat)
   const [profile, todayMeals, weekMeals, weightLog, workoutRows] =
     await Promise.all([
       getProfile(userId),
       getMealsByDate(userId, today),
-      getMealsSince(userId, daysAgoStr(6)),
+      getMealsSince(userId, weekStart),
       getWeightLogSince(userId, daysAgoStr(13)),
       cfg.hasWorkouts && hasHevyKey(userId)
         ? getCachedWorkoutsSince(daysAgoStr(13))
@@ -252,7 +256,7 @@ async function buildContext(userId: UserId): Promise<any> {
     );
 
   const byDate = new Map<string, ReturnType<typeof totalsForMeals> & { meals: number }>();
-  for (let i = 6; i >= 0; i--) {
+  for (let i = daysIntoWeek; i >= 0; i--) {
     const d = daysAgoStr(i);
     byDate.set(d, { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0, meals: 0 });
   }
@@ -334,7 +338,11 @@ async function buildContext(userId: UserId): Promise<any> {
         };
       }),
     },
-    week_by_day,
+    week: {
+      starts_on: weekStart,
+      note: "Calendar week (Sunday through Saturday), not a rolling 7-day window — may contain fewer than 7 days if it's still early in the week.",
+      by_day: week_by_day,
+    },
     weight_log_last_14d: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
     ...(cfg.hasWorkouts && { recent_workouts: recentWorkouts }),
     ...(cfg.hasWorkouts && {
