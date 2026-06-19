@@ -7,6 +7,8 @@ import {
   getInsights,
   todayStr,
   daysAgoStr,
+  startOfWeekStr,
+  diffDaysKey,
   dateKey,
   Meal,
 } from "@/lib/db";
@@ -90,8 +92,11 @@ export async function POST(req: NextRequest) {
     return Number.isFinite(t) ? dateKey(new Date(t)) : "";
   };
   const todayWorkouts = workouts.filter((w) => workoutKey(w) === today);
-  const weekStart = daysAgoStr(6);
-  const weekWorkouts = workouts.filter((w) => workoutKey(w) >= weekStart);
+  const sevenDaysAgo = daysAgoStr(6);
+  const weekWorkouts = workouts.filter((w) => workoutKey(w) >= sevenDaysAgo);
+  // The "weekly" insight is a calendar week (Sun–Sat), not a rolling 7 days.
+  const calendarWeekStart = startOfWeekStr();
+  const daysIntoWeek = diffDaysKey(today, calendarWeekStart); // 0 (Sun) .. 6 (Sat)
 
   const nowHour = new Date().getHours(); // server local hour (0-23)
 
@@ -149,7 +154,7 @@ export async function POST(req: NextRequest) {
 
   if (type === "weekly") {
     const dayByDay: any[] = [];
-    for (let i = 6; i >= 0; i--) {
+    for (let i = daysIntoWeek; i >= 0; i--) {
       const d = daysAgoStr(i);
       const ms = weekMeals.filter((m) => m.date === d);
       const ws = weekWorkouts.filter((w) => workoutKey(w) === d);
@@ -159,7 +164,8 @@ export async function POST(req: NextRequest) {
         workouts: ws.map((w) => ({ title: w.title, volume_kg: workoutVolumeKg(w) })),
       });
     }
-    const weekSummary = summarizeWeek(weekWorkouts);
+    const calendarWeekWorkouts = weekWorkouts.filter((w) => workoutKey(w) >= calendarWeekStart);
+    const weekSummary = summarizeWeek(calendarWeekWorkouts);
     const daysWithFood = dayByDay.filter((d) => d.totals.meals > 0);
     const avgCalories =
       daysWithFood.length > 0
@@ -176,6 +182,7 @@ export async function POST(req: NextRequest) {
           )
         : 0;
     context.week = {
+      starts_on: calendarWeekStart,
       days_logged: daysWithFood.length,
       avg_calories: avgCalories,
       avg_protein_g: avgProtein,
