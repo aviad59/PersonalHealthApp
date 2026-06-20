@@ -20,6 +20,7 @@ type Analysis = {
   total: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
   confidence: "low" | "medium" | "high";
   notes?: string;
+  clarifying_question?: string;
 };
 
 type FrequentMeal = {
@@ -123,6 +124,8 @@ export default function LogMealPage() {
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tip, setTip] = useState<string | null>(null);
+  const [clarifyAnswer, setClarifyAnswer] = useState("");
+  const [clarifying, setClarifying] = useState(false);
 
   // Existing meals state
   const [existing, setExisting] = useState<ExistingMeal[]>([]);
@@ -246,6 +249,7 @@ export default function LogMealPage() {
     setAnalysis(null);
     setEditing(null);
     setText("");
+    setClarifyAnswer("");
     clearPhoto();
   }
 
@@ -288,6 +292,49 @@ export default function LogMealPage() {
       setAnalyzing(false);
       setProgress(null);
     }
+  }
+
+  /** Re-runs the analysis with the user's answer folded into the context
+   *  (same photo/text, plus the question+answer), instead of a fresh modifier
+   *  flow — this lets the model reconcile the answer against the image. */
+  async function answerClarifyingQuestion() {
+    if (!analysis?.clarifying_question || !clarifyAnswer.trim()) return;
+    const f = pickedFile();
+    const qa = `${analysis.clarifying_question} Answer: ${clarifyAnswer.trim()}`;
+    setClarifying(true);
+    setErr(null);
+    setProgress(t(lang, "meal_clarify_updating"));
+    try {
+      const fd = new FormData();
+      if (f) {
+        fd.append("photo", f);
+        fd.append("hint", [text.trim(), qa].filter(Boolean).join(". "));
+      } else {
+        fd.append("text", [text.trim(), qa].filter(Boolean).join(". "));
+      }
+      const j = await safeFetchJson<{ analysis: Analysis }>(
+        "/api/meals/analyze",
+        { method: "POST", body: fd },
+      );
+      setAnalysis(j.analysis as Analysis);
+      setEditing({
+        calories: j.analysis.total.calories,
+        protein_g: j.analysis.total.protein_g,
+        fat_g: j.analysis.total.fat_g,
+        carbs_g: j.analysis.total.carbs_g,
+      });
+      setClarifyAnswer("");
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setClarifying(false);
+      setProgress(null);
+    }
+  }
+
+  function skipClarifyingQuestion() {
+    setAnalysis((prev) => (prev ? { ...prev, clarifying_question: "" } : prev));
+    setClarifyAnswer("");
   }
 
   async function save() {
@@ -931,6 +978,38 @@ export default function LogMealPage() {
             )}
           </div>
 
+          {analysis.clarifying_question && (
+            <div className="card p-4 space-y-2 border-accent-brand/30">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wider text-accent-brand font-semibold">
+                  {t(lang, "meal_clarify_label")}
+                </div>
+                <button onClick={skipClarifyingQuestion} className="text-[11px] text-white/40">
+                  {t(lang, "meal_clarify_skip")}
+                </button>
+              </div>
+              <p className="text-sm text-white/80">{analysis.clarifying_question}</p>
+              <div className="flex gap-2">
+                <input
+                  value={clarifyAnswer}
+                  onChange={(e) => setClarifyAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) answerClarifyingQuestion();
+                  }}
+                  placeholder={t(lang, "meal_clarify_placeholder")}
+                  className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-white/30"
+                />
+                <button
+                  onClick={answerClarifyingQuestion}
+                  disabled={clarifying || !clarifyAnswer.trim()}
+                  className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
+                >
+                  {clarifying ? "…" : t(lang, "meal_clarify_update")}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="card p-4 space-y-3">
             <h3 className="text-sm font-semibold">{t(lang, "meal_totals")}</h3>
             <MacroEdit
@@ -968,7 +1047,7 @@ export default function LogMealPage() {
             </button>
             <button
               onClick={save}
-              disabled={saving}
+              disabled={saving || clarifying}
               className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
               {saving

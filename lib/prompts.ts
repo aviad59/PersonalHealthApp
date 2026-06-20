@@ -11,6 +11,12 @@ Numeric values, "portion" units, and JSON keys stay in English/ASCII.
 "notes" in English; leave empty string if nothing notable.`;
 }
 
+const CLARIFYING_QUESTION_GUIDANCE = `CLARIFYING QUESTION (rare):
+- Set "clarifying_question" ONLY when one specific, answerable detail would meaningfully swing the macros — e.g. fat content (ground beef vs. lean steak), cooking method (fried vs. grilled/baked), or a hidden ingredient (oil, sauce, dressing) that isn't visible/stated.
+- Good: "Was that beef ground or a steak cut?" / "Cooked with oil or dry?"
+- Bad: generic portion-size confirmations, or anything when your estimate is already reasonable — don't ask just because confidence is "medium".
+- Leave it as an empty string in the large majority of cases.`;
+
 function mealJsonSchema(lang: string): string {
   if (lang === "he") {
     return `{
@@ -20,7 +26,8 @@ function mealJsonSchema(lang: string): string {
   ],
   "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
   "confidence": "low" | "medium" | "high",
-  "notes": "משפט קצר בעברית או מחרוזת ריקה"
+  "notes": "משפט קצר בעברית או מחרוזת ריקה",
+  "clarifying_question": "שאלת המשך קצרה בעברית או מחרוזת ריקה"
 }`;
   }
   return `{
@@ -30,7 +37,8 @@ function mealJsonSchema(lang: string): string {
   ],
   "total": { "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number },
   "confidence": "low" | "medium" | "high",
-  "notes": "one short sentence or empty string"
+  "notes": "one short sentence or empty string",
+  "clarifying_question": "short follow-up question or empty string"
 }`;
 }
 
@@ -62,6 +70,8 @@ RULES:
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
 - Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. Recheck if outside this range.
 - Set confidence "high" when portions are clearly visible or labeled, "medium" for visible food with estimated portions, "low" when food is obscured or ambiguous.
+
+${CLARIFYING_QUESTION_GUIDANCE}
 
 ${mealLangInstruction(lang)}
 
@@ -95,6 +105,8 @@ RULES:
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
 - Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. If your total is outside this, recheck portions.
 - Set confidence "low" if the description is vague (e.g. "some food"), "medium" for named dishes without portions, "high" for named items with stated portions.
+
+${CLARIFYING_QUESTION_GUIDANCE}
 
 ${mealLangInstruction(lang)}
 
