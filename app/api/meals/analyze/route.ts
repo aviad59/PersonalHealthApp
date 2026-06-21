@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
   const lang = req.cookies.get("lang")?.value || "en";
   const form = await req.formData();
   const file = form.get("photo");
+  const file2 = form.get("photo2");
   const hint = (form.get("hint") as string | null)?.trim() || "";
   const text = (form.get("text") as string | null)?.trim() || "";
   const baseRaw = (form.get("base") as string | null)?.trim() || "";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const hasPhoto = file instanceof File;
+  const hasPhoto = file instanceof File || file2 instanceof File;
   if (!hasPhoto && !text && !base) {
     return NextResponse.json(
       { error: "need one of: photo, text, base" },
@@ -44,18 +45,25 @@ export async function POST(req: NextRequest) {
   try {
     // --- PHOTO MODE (with optional hint or text context) ---
     if (hasPhoto) {
-      const buf = Buffer.from(await (file as File).arrayBuffer());
-      const mediaType = ((file as File).type || "image/jpeg") as
-        | "image/jpeg"
-        | "image/png"
-        | "image/gif"
-        | "image/webp";
-      const base64 = buf.toString("base64");
+      const images = await Promise.all(
+        [file as File, file2].filter((f): f is File => f instanceof File).map(async (f) => {
+          const buf = Buffer.from(await f.arrayBuffer());
+          const mediaType = (f.type || "image/jpeg") as
+            | "image/jpeg"
+            | "image/png"
+            | "image/gif"
+            | "image/webp";
+          return {
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: mediaType, data: buf.toString("base64") },
+          };
+        }),
+      );
 
       const contextText = [hint, text].filter(Boolean).join(". ");
       const userText = contextText
-        ? `User context: ${contextText}\n\nAnalyze this meal and return the JSON.`
-        : "Analyze this meal and return the JSON.";
+        ? `User context: ${contextText}\n\nAnalyze this meal and return the JSON.${images.length > 1 ? " (Two photos of the same meal are provided — e.g. both sides of a plate or package — use both to refine the estimate.)" : ""}`
+        : `Analyze this meal and return the JSON.${images.length > 1 ? " (Two photos of the same meal are provided — e.g. both sides of a plate or package — use both to refine the estimate.)" : ""}`;
 
       const resp = await anthropic().messages.create({
         model: CLAUDE_MODEL,
@@ -64,13 +72,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: mediaType, data: base64 },
-              },
-              { type: "text", text: userText },
-            ],
+            content: [...images, { type: "text", text: userText }],
           },
         ],
       });
