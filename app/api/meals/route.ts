@@ -25,7 +25,7 @@ const SaveSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const date = new URL(req.url).searchParams.get("date") ?? todayStr();
   const rows = await getMealsByDateLite(userId, date);
   const meals = rows.map((m) => ({
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const json = await req.json();
   const parsed = SaveSchema.safeParse(json);
   if (!parsed.success) {

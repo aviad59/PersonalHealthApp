@@ -68,7 +68,7 @@ export async function PATCH(
 
   // Scope all PATCH/DELETE writes to the current user — even if a row id
   // is guessed correctly, you can't modify another user's meal.
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
   args.push(id);
   args.push(userId);
@@ -94,7 +94,7 @@ export async function DELETE(
   const id = Number(ctx.params.id);
   if (!Number.isFinite(id) || id <= 0) return badId();
 
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
   const res = await db.execute({
     sql: "DELETE FROM meals WHERE id = ? AND user_id = ?",

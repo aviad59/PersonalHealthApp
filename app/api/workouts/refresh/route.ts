@@ -18,7 +18,7 @@ const REFRESH_PAGES = 5; // most-recent-only refresh (default)
 const BACKFILL_PAGES = 200; // ?full=1 — pages through the user's entire history
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   if (!hasHevyKey(userId)) {
     return NextResponse.json(
       { ok: false, error: "HEVY_API_KEY not set" },

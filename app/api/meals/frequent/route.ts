@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * so this is just a cache read.
  */
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const meals = await getFrequentMeals(userId);
   return NextResponse.json({ meals });
 }

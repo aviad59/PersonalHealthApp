@@ -95,7 +95,7 @@ function parseResolutions(raw: string | null): Record<string, Resolution> {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const form = await req.formData();
   const file = form.get("file");
   const dryRun =

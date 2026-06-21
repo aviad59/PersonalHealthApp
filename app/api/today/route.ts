@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // latest-insight card need. Excludes workout/recovery so it returns fast.
 // /api/today/training fills in those follow-up sections.
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const [profile, meals, latestInsight] = await Promise.all([
     getProfile(userId),
     getMealsByDateLite(userId, todayStr()),

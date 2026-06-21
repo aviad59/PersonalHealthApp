@@ -63,7 +63,7 @@ async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
 }
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const cfg = getUserConfig(userId);
   const body = await req.json().catch(() => ({}));
   const type: InsightType = body?.type === "weekly" ? "weekly" : "daily";

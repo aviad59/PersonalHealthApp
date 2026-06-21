@@ -47,7 +47,7 @@ function dailyTotalsFromMeals(
 }
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const cfg = getUserConfig(userId);
 
   // Users without a workouts setup (orly) don't have Hevy/recovery data.

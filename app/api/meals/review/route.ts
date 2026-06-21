@@ -52,7 +52,7 @@ Respond with ONLY a JSON object (no prose before/after):
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const body = await req.json().catch(() => ({}));
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * and the recompute happens in the background.
  */
 export async function POST() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const meals = await refreshFrequentMeals(userId);
   return NextResponse.json({ ok: true, meals });
 }

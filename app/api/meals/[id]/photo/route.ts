@@ -22,7 +22,7 @@ export async function GET(
   }
   // Photo bytes are scoped to the meal owner — even if someone guesses a
   // meal id, only the user it belongs to receives the photo.
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const dataUri = await getMealPhoto(userId, id);
   if (!dataUri) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });

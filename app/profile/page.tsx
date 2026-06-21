@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSession, signOut } from "next-auth/react";
 import { ACTIVITY_LABELS } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
 import { useLang } from "@/components/LangProvider";
@@ -696,25 +697,20 @@ function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean })
 }
 
 /**
- * Shows which user is currently signed in and offers a one-tap "Switch user"
- * button. Reads the cookie client-side so we don't need to thread the user
- * through props (this page is "use client" and consumes /api/profile, which
- * is already user-scoped server-side).
+ * Shows which Google account is currently signed in and offers sign-out.
+ * Reads the NextAuth session client-side (this page is "use client" and
+ * consumes /api/profile, which is already user-scoped server-side via
+ * the verified session, not anything passed through here).
  */
 function CurrentUserCard() {
   const lang = useLang();
-  const [name, setName] = useState<string>("");
-  useEffect(() => {
-    const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
-    const id = m ? decodeURIComponent(m[1]) : "";
-    // Friendly capitalized label.
-    setName(id ? id.charAt(0).toUpperCase() + id.slice(1) : "");
-  }, []);
+  const { data: session } = useSession();
+  const name = session?.user?.name || session?.user?.email || "";
 
   return (
     <section className="card p-4 flex items-center gap-3">
       <div className="w-10 h-10 rounded-full bg-bg-elev border border-border flex items-center justify-center text-sm font-semibold">
-        {name ? name[0] : "?"}
+        {name ? name[0].toUpperCase() : "?"}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-white/40">
@@ -722,12 +718,12 @@ function CurrentUserCard() {
         </div>
         <div className="text-sm font-semibold truncate">{name || "—"}</div>
       </div>
-      <Link
-        href="/select-user?next=/profile"
+      <button
+        onClick={() => signOut({ callbackUrl: "/signin" })}
         className="text-xs font-medium text-accent-brand"
       >
-        {t(lang, "profile_switch_user")}
-      </Link>
+        {t(lang, "profile_sign_out")}
+      </button>
     </section>
   );
 }

@@ -27,7 +27,7 @@ const ProfileSchema = z.object({
 });
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const profile = await getProfile(userId);
   return NextResponse.json({ profile });
 }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     weeklyWorkoutTarget: p.weekly_workout_target ?? null,
   });
 
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
   await db.execute({
     sql: `INSERT INTO user_profile (
@@ -121,7 +121,7 @@ export async function PATCH(req: NextRequest) {
   if (language !== "en" && language !== "he") {
     return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
   }
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
   await db.execute({
     sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",

@@ -357,7 +357,7 @@ async function buildContext(userId: UserId): Promise<any> {
 // ---------------------------------------------------------------------------
 export async function GET() {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const messages = await getCoachMessages(userId, HISTORY_LIMIT);
     return NextResponse.json({ messages });
   } catch (e: any) {
@@ -370,7 +370,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const body = await req.json().catch(() => ({}));
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
@@ -471,7 +471,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   await clearCoachMessages(userId);
   return NextResponse.json({ ok: true });
 }
