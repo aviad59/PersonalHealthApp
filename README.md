@@ -4,6 +4,12 @@ A mobile-first, AI-powered personal health dashboard for nutrition, training, an
 
 This doc is written for product planning: what exists today, what data backs it, and where the real gaps are — not a step-by-step dev setup guide (see [Development](#development) for that).
 
+## Recent updates
+
+- **Google sign-in** — replaced the old cookie-based user picker with real Google OAuth (NextAuth). Every route is gated behind a verified session; sign-in is restricted to emails mapped per user slot in `lib/user.ts`.
+- **Two-photo meal logging** — `/meals/log` now supports a second photo per meal (e.g. both sides of a plate, or front/back of a package). Both photos are sent to Claude Vision together for a more accurate macro estimate, and both are visible in the meal list/lightbox.
+- **Meal photos moved to Vercel Blob** — full-size photos were previously stored as base64 directly in the `meals` table, which bloated every row (even queries not selecting the photo column still pay for those page reads). They now live in private Vercel Blob storage, with only a short pathname kept in the DB; thumbnails stay inline since they're small. A one-off backfill script (`npm run backfill:photos`) migrates any pre-existing inline photos.
+
 ## Stack
 
 - Next.js 14 (App Router) + TypeScript
@@ -24,7 +30,7 @@ Today's macro totals vs. goals, today's meals (thumbnail list), latest insight h
 
 ### `/meals/log` — Meal Logger
 The core daily-use screen.
-- **Photo logging**: take/upload a photo → Claude Vision returns description, itemized breakdown, macros, and a confidence level.
+- **Photo logging**: take/upload a photo → Claude Vision returns description, itemized breakdown, macros, and a confidence level. A second photo can be added (e.g. the other side of a plate or package) for a more accurate read — both are sent to Claude together.
 - **Clarifying question**: rarely, when one specific detail would meaningfully change the macros (e.g. "ground beef or steak cut?"), the analysis includes a follow-up question. Answering it re-runs the analysis with that context folded in; the user can also skip it.
 - **Text-only logging**: describe a meal in words, no photo required.
 - **Frequent meals**: one-tap re-log of meals eaten 2+ times in the last 60 days, with an optional modifier ("same but double the rice").
