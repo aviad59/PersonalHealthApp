@@ -888,6 +888,7 @@ export default function LogMealPage() {
                 onClick={() => setLightboxSrc(photoPreview)}
                 className="w-full object-cover max-h-80 cursor-zoom-in"
               />
+              {analyzing && <AiScanOverlay />}
             </div>
             {photoPreview2 && (
               <div className="relative rounded-2xl overflow-hidden border border-border flex-1">
@@ -898,6 +899,7 @@ export default function LogMealPage() {
                   onClick={() => setLightboxSrc(photoPreview2)}
                   className="w-full h-full object-cover max-h-80 cursor-zoom-in"
                 />
+                {analyzing && <AiScanOverlay />}
                 <button
                   onClick={clearPhoto2}
                   className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-sm leading-none flex items-center justify-center"
@@ -991,15 +993,17 @@ export default function LogMealPage() {
             disabled={analyzing || !!progress}
             className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
-            {analyzing
-              ? progress || t(lang, "meal_analyzing")
-              : progress
-                ? progress
-                : photoPreview
-                  ? t(lang, "meal_analyze_photo")
-                  : text.trim()
-                    ? t(lang, "meal_analyze_text")
-                    : t(lang, "meal_analyze_empty")}
+            {analyzing ? (
+              <AiThinkingPill label={progress || t(lang, "meal_analyzing")} />
+            ) : progress ? (
+              progress
+            ) : photoPreview ? (
+              t(lang, "meal_analyze_photo")
+            ) : text.trim() ? (
+              t(lang, "meal_analyze_text")
+            ) : (
+              t(lang, "meal_analyze_empty")
+            )}
           </button>
           <button
             onClick={() => { setManualMode(true); clearPhoto(); setText(""); setErr(null); }}
@@ -1570,6 +1574,39 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
       <line x1="9" y1="10" x2="15" y2="10" />
       <line x1="9" y1="13.5" x2="13" y2="13.5" />
     </svg>
+  );
+}
+
+/** Sweeping light-beam overlay shown on top of a photo while Claude is
+ *  reading it — signals "AI is looking at this" rather than a generic
+ *  loading skeleton. */
+function AiScanOverlay() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none bg-black/10">
+      <div className="ai-scan-line" />
+    </div>
+  );
+}
+
+/** Sparkle icon + three breathing dots, used wherever we want to say
+ *  "the model is thinking" instead of a static "Loading…" label. */
+function AiThinkingPill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <svg viewBox="0 0 24 24" className="h-4 w-4 text-accent-brand ai-glow-pulse" fill="currentColor">
+        <path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6L12 2Z" />
+      </svg>
+      <span>{label}</span>
+      <span className="inline-flex gap-0.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="ai-think-dot inline-block w-1 h-1 rounded-full bg-current"
+            style={{ animationDelay: `${i * 0.18}s` }}
+          />
+        ))}
+      </span>
+    </span>
   );
 }
 
