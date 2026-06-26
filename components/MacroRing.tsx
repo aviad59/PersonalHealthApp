@@ -7,18 +7,26 @@ type Props = {
   unit: string;
   color: string; // hex or CSS color for the base ring
   size?: number; // px
+  /** Whether exceeding the target is a bad thing. Only true for macros that
+   *  are budgets you want to stay close to (calories, fat). Protein and
+   *  carbs are floors / not penalized for overshoot — the ring should just
+   *  read as "hit your goal" without a warning layer. Defaults to true so
+   *  callers that omit it stay conservative. */
+  warnOnOver?: boolean;
 };
 
-/** Macro ring with overage layer.
+/** Macro ring with optional overage layer.
  *
  *  - When `value <= target`, render a single ring filled to value/target in
  *    the macro's brand color.
- *  - When `value > target`, the base ring stays filled to 100% (so the user
- *    can still read it as "you hit your goal"), and we render a second,
- *    slightly thinner outer ring whose dash tracks how far past target the
- *    user went, drawn in an amber→red glow to flag the overshoot. The overage
- *    ring caps at one full revolution (200% of target) so a 3× day doesn't
- *    spin invisibly.
+ *  - When `value > target` AND `warnOnOver` is true, the base ring stays
+ *    filled to 100% and we render a second, slightly thinner outer ring
+ *    whose dash tracks how far past target the user went, drawn in an
+ *    amber→red glow to flag the overshoot. The overage ring caps at one
+ *    full revolution (200% of target) so a 3× day doesn't spin invisibly.
+ *  - When `warnOnOver` is false (protein/carbs), going past target just
+ *    keeps the base ring full — no warning treatment, since hitting more
+ *    protein or more carbs is fine.
  */
 export default function MacroRing({
   label,
@@ -27,11 +35,12 @@ export default function MacroRing({
   unit,
   color,
   size = 92,
+  warnOnOver = true,
 }: Props) {
   const safeTarget = target > 0 ? target : 0;
   const ratio = safeTarget > 0 ? value / safeTarget : 0;
   const basePct = Math.min(1, ratio);
-  const over = Math.max(0, ratio - 1);
+  const over = warnOnOver ? Math.max(0, ratio - 1) : 0;
   const overPct = Math.min(1, over); // visually cap at +100% past target
 
   const stroke = 9;
