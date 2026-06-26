@@ -78,34 +78,63 @@ export type Suggestion = {
   cached: boolean;
 };
 
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+const HOME_CACHE_KEY = "home-today-v1";
+const HOME_SUGGESTION_KEY = "home-suggestion-v1";
+const HOME_TRAINING_KEY = "home-training-v1";
+
 export default function HomeClient({
-  initial,
-  initialSuggestion,
   hasWorkouts,
   userDisplayName,
 }: {
-  initial: Today;
-  initialSuggestion: Suggestion | null;
   hasWorkouts: boolean;
   userDisplayName: string;
 }) {
   const lang = useLang();
-  const [data, setData] = useState<Today>(initial);
+  const [data, setData] = useState<Today | null>(null);
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(initialSuggestion);
-  const [suggestionLoading, setSuggestionLoading] = useState(!initialSuggestion);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Always re-fetch the core today data on mount so macros/meals are fresh
-    // even when Next.js serves a cached RSC payload from the router cache.
+    // Hydrate from the previous session's snapshot immediately so the
+    // page paints with real-looking content on click instead of a blank
+    // skeleton, then quietly refresh from the API in the background.
+    const cachedToday = lsGet<Today>(HOME_CACHE_KEY);
+    if (cachedToday) {
+      setData(cachedToday);
+      setLoading(false);
+    }
+    const cachedSuggestion = lsGet<Suggestion>(HOME_SUGGESTION_KEY);
+    if (cachedSuggestion) {
+      setSuggestion(cachedSuggestion);
+      setSuggestionLoading(false);
+    }
+    if (hasWorkouts) {
+      const cachedTraining = lsGet<Training>(HOME_TRAINING_KEY);
+      if (cachedTraining) setTraining(cachedTraining);
+    }
+
     (async () => {
       try {
         const r = await fetch("/api/today", { cache: "no-store" });
         const j = await r.json();
-        if (j && !j.error) setData(j);
+        if (j && !j.error) {
+          setData(j);
+          lsSet(HOME_CACHE_KEY, j);
+        }
       } catch {
-        // non-fatal — initial SSR data is still shown
+        // non-fatal — cached data (if any) stays on screen
+      } finally {
+        setLoading(false);
       }
     })();
 
@@ -115,6 +144,7 @@ export default function HomeClient({
           const r = await fetch("/api/today/training", { cache: "no-store" });
           const j = await r.json();
           setTraining(j);
+          lsSet(HOME_TRAINING_KEY, j);
         } catch {
           // non-fatal
         }
@@ -125,7 +155,10 @@ export default function HomeClient({
         setSuggestionLoading(true);
         const r = await fetch("/api/suggestion", { cache: "no-store" });
         const j = await r.json();
-        if (j?.suggestion) setSuggestion(j.suggestion);
+        if (j?.suggestion) {
+          setSuggestion(j.suggestion);
+          lsSet(HOME_SUGGESTION_KEY, j.suggestion);
+        }
       } catch {
         // non-fatal
       } finally {
@@ -135,6 +168,10 @@ export default function HomeClient({
   }, [hasWorkouts]);
 
   if (err) return <div className="p-6 text-red-400">{err}</div>;
+
+  // First-ever visit (or cleared storage): show a quick skeleton while
+  // /api/today resolves, instead of flashing the onboarding CTA.
+  if (!data) return <HomeSkeleton />;
 
   if (!data.profile) {
     return (
@@ -157,7 +194,7 @@ export default function HomeClient({
   const effectiveCal = baseCal + burn;
 
   return (
-    <div className="px-5 pt-6 pb-6 space-y-5">
+    <div className={`px-5 pt-6 pb-6 space-y-5 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
       <div className="flex items-end justify-between">
         <div>
           <div className="text-xs text-white/50 uppercase tracking-wider">
@@ -336,6 +373,29 @@ export default function HomeClient({
             </section>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="px-5 pt-6 pb-6 space-y-5 animate-pulse [animation-duration:1.6s]">
+      <div className="h-3 w-32 rounded bg-white/10" />
+      <div className="h-6 w-24 rounded bg-white/10" />
+      <div className="card p-5 space-y-4">
+        <div className="h-3 w-20 rounded bg-white/10" />
+        <div className="grid grid-cols-2 gap-y-4 place-items-center">
+          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
+        </div>
+      </div>
+      <div className="card p-5 space-y-2">
+        <div className="h-3 w-24 rounded bg-white/10" />
+        <div className="h-3 w-full rounded bg-white/10" />
+        <div className="h-3 w-4/5 rounded bg-white/10" />
       </div>
     </div>
   );
