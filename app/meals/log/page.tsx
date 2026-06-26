@@ -88,9 +88,9 @@ export default function LogMealPage() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   // Second (optional) photo — e.g. the back of a package or another
-  // angle of the plate — shares the camera/gallery file inputs above via
-  // a "which slot is this pick for" flag (pickTarget).
+  // angle of the plate.
   const camera2Ref = useRef<HTMLInputElement>(null);
+  const gallery2Ref = useRef<HTMLInputElement>(null);
 
   const [date, setDate] = useState<string>(todayStr());
   const isToday = date === todayStr();
@@ -212,27 +212,51 @@ export default function LogMealPage() {
     return () => { ac.abort(); clearTimeout(timer); };
   }, []);
 
+  async function loadPhotoIntoSlot1(f: File) {
+    const [compressed, thumb] = await Promise.all([
+      compressImageFile(f),
+      compressImageThumb(f),
+    ]);
+    const blob = await (await fetch(compressed.dataUri)).blob();
+    const compFile = new File([blob], "meal.jpg", { type: "image/jpeg" });
+    setCompressedFile(compFile);
+    setPhotoPreview(compressed.dataUri);
+    setPhotoBase64(compressed.base64);
+    setPhotoThumbBase64(thumb.base64);
+    setPhotoExt("jpg");
+  }
+
+  async function loadPhotoIntoSlot2(f: File) {
+    const [compressed, thumb] = await Promise.all([
+      compressImageFile(f),
+      compressImageThumb(f),
+    ]);
+    const blob = await (await fetch(compressed.dataUri)).blob();
+    const compFile = new File([blob], "meal2.jpg", { type: "image/jpeg" });
+    setCompressedFile2(compFile);
+    setPhotoPreview2(compressed.dataUri);
+    setPhotoBase64_2(compressed.base64);
+    setPhotoThumbBase64_2(thumb.base64);
+    setPhotoExt2("jpg");
+  }
+
+  // Gallery picks allow selecting 2 photos at once (e.g. the burger and the
+  // salad next to it) — the first fills slot 1, and if a second file was
+  // selected and slot 2 is still empty, it fills slot 2 too.
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
+    const files = e.target.files;
+    const f = files?.[0];
     if (!f) return;
+    const f2 = !photoPreview2 ? files?.[1] : undefined;
     setErr(null);
     setAnalysis(null);
     setEditing(null);
     setProgress(t(lang, "meal_compress"));
     try {
-      // Generate the full-size compressed JPEG and the inline thumbnail
-      // in parallel — both pull pixels from the same decoded source.
-      const [compressed, thumb] = await Promise.all([
-        compressImageFile(f),
-        compressImageThumb(f),
+      await Promise.all([
+        loadPhotoIntoSlot1(f),
+        f2 ? loadPhotoIntoSlot2(f2) : Promise.resolve(),
       ]);
-      const blob = await (await fetch(compressed.dataUri)).blob();
-      const compFile = new File([blob], "meal.jpg", { type: "image/jpeg" });
-      setCompressedFile(compFile);
-      setPhotoPreview(compressed.dataUri);
-      setPhotoBase64(compressed.base64);
-      setPhotoThumbBase64(thumb.base64);
-      setPhotoExt("jpg");
     } catch (err: any) {
       setErr(err?.message || "Could not read that photo");
     } finally {
@@ -246,17 +270,7 @@ export default function LogMealPage() {
     setErr(null);
     setProgress(t(lang, "meal_compress"));
     try {
-      const [compressed, thumb] = await Promise.all([
-        compressImageFile(f),
-        compressImageThumb(f),
-      ]);
-      const blob = await (await fetch(compressed.dataUri)).blob();
-      const compFile = new File([blob], "meal2.jpg", { type: "image/jpeg" });
-      setCompressedFile2(compFile);
-      setPhotoPreview2(compressed.dataUri);
-      setPhotoBase64_2(compressed.base64);
-      setPhotoThumbBase64_2(thumb.base64);
-      setPhotoExt2("jpg");
+      await loadPhotoIntoSlot2(f);
     } catch (err: any) {
       setErr(err?.message || "Could not read that photo");
     } finally {
@@ -275,7 +289,9 @@ export default function LogMealPage() {
 
   function pickedFile2(): File | null {
     if (compressedFile2) return compressedFile2;
-    return camera2Ref.current?.files?.[0] || null;
+    return (
+      camera2Ref.current?.files?.[0] || gallery2Ref.current?.files?.[0] || null
+    );
   }
 
   function clearPhoto2() {
@@ -284,6 +300,7 @@ export default function LogMealPage() {
     setPhotoThumbBase64_2(null);
     setCompressedFile2(null);
     if (camera2Ref.current) camera2Ref.current.value = "";
+    if (gallery2Ref.current) gallery2Ref.current.value = "";
   }
 
   function clearPhoto() {
@@ -902,6 +919,11 @@ export default function LogMealPage() {
                 {t(lang, "meal_add_second_photo")}
               </button>
             )}
+            {!photoPreview2 && (
+              <button onClick={() => gallery2Ref.current?.click()} className="text-accent-brand">
+                {t(lang, "meal_pick_gallery")}
+              </button>
+            )}
             <button onClick={clearPhoto} className="text-white/50 ml-auto">
               {t(lang, "meal_remove_photo")}
             </button>
@@ -924,6 +946,7 @@ export default function LogMealPage() {
         ref={galleryRef}
         type="file"
         accept="image/*"
+        multiple
         onChange={onPick}
         className="hidden"
       />
@@ -932,6 +955,13 @@ export default function LogMealPage() {
         type="file"
         accept="image/*"
         capture="environment"
+        onChange={onPick2}
+        className="hidden"
+      />
+      <input
+        ref={gallery2Ref}
+        type="file"
+        accept="image/*"
         onChange={onPick2}
         className="hidden"
       />
