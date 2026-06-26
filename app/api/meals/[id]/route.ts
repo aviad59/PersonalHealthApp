@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { deleteMealPhoto, isBlobPathname } from "@/lib/blob";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +97,12 @@ export async function DELETE(
 
   const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
+  const existing = await db.execute({
+    sql: "SELECT photo_path, photo_path_2 FROM meals WHERE id = ? AND user_id = ?",
+    args: [id, userId],
+  });
+  const row = existing.rows[0] as unknown as { photo_path: string | null; photo_path_2: string | null } | undefined;
+
   const res = await db.execute({
     sql: "DELETE FROM meals WHERE id = ? AND user_id = ?",
     args: [id, userId],
@@ -103,5 +110,12 @@ export async function DELETE(
   if (Number(res.rowsAffected ?? 0) === 0) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+
+  await Promise.all(
+    [row?.photo_path, row?.photo_path_2]
+      .filter((p): p is string => isBlobPathname(p))
+      .map((p) => deleteMealPhoto(p)),
+  );
+
   return NextResponse.json({ ok: true });
 }

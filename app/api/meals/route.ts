@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb, getMealsByDateLite, todayStr } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { uploadMealPhoto } from "@/lib/blob";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,17 +29,27 @@ const SaveSchema = z.object({
   date: z.string().optional(),
 });
 
-function photoDataUri(base64: string | undefined, ext: string | undefined): string | null {
-  if (!base64) return null;
+function mimeForExt(ext: string | undefined): string {
   const cleanExt = (ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
-  const mime =
-    cleanExt === "png" ? "image/png" :
+  return cleanExt === "png" ? "image/png" :
     cleanExt === "webp" ? "image/webp" :
     cleanExt === "gif" ? "image/gif" :
     "image/jpeg";
-  return `data:${mime};base64,${base64}`;
 }
 
+// Full-size photos go to Blob storage (private) — only a short pathname is
+// stored in the meals row, instead of a 150-350KB base64 blob that would
+// otherwise bloat every page read of that row.
+async function uploadPhoto(userId: string, base64: string | undefined, ext: string | undefined): Promise<string | null> {
+  if (!base64) return null;
+  const mime = mimeForExt(ext);
+  const buffer = Buffer.from(base64, "base64");
+  return uploadMealPhoto(buffer, mime, `meals/${userId}/${Date.now()}`);
+}
+
+// Thumbnails are tiny (~5-10KB) and shown inline for every meal in a list,
+// so they stay as base64 in the row — that's cheaper than N extra round
+// trips to Blob just to render a day's worth of thumbnails.
 function thumbDataUri(base64: string | undefined): string | null {
   return base64 ? `data:image/jpeg;base64,${base64}` : null;
 }
@@ -80,9 +91,11 @@ export async function POST(req: NextRequest) {
   const m = parsed.data;
   const date = m.date ?? todayStr();
 
-  const photo_path = photoDataUri(m.photo_base64, m.photo_ext);
+  const [photo_path, photo_path_2] = await Promise.all([
+    uploadPhoto(userId, m.photo_base64, m.photo_ext),
+    uploadPhoto(userId, m.photo_base64_2, m.photo_ext_2),
+  ]);
   const photo_thumb = thumbDataUri(m.photo_thumb_base64);
-  const photo_path_2 = photoDataUri(m.photo_base64_2, m.photo_ext_2);
   const photo_thumb_2 = thumbDataUri(m.photo_thumb_base64_2);
 
   const db = await getDb();

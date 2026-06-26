@@ -96,13 +96,13 @@ Stored in Turso/libSQL. Two generations of tables coexist — newer features use
 - `user_frequent_meals_cache` — cached frequent-meal list per user
 
 **Legacy / shared (still in active use)**
-- `meals` — every logged meal: date, description, macros, items, photo (base64) + thumbnail, confidence, AI tip, `user_id`
+- `meals` — every logged meal: date, description, macros, items, photo (Blob pathname) + thumbnail (base64), confidence, AI tip, `user_id`
 - `insights` — generated daily/weekly insights: type, for_date, headline, body, tags, `user_id`
 - `workouts_cache` — cached Hevy workouts (raw JSON + extracted fields)
 - `profile`, `suggestions`, `weight_log` — original single-row/shared versions, superseded by the per-user tables above for users created after the migration
 - `zepp_cache` — schema exists, never populated
 
-Photos are stored as base64 data URIs directly in the `meals` table — there is no external object storage. This is fine at current scale but would not hold up if photo volume or user count grew significantly.
+Full-size photos are stored in Vercel Blob (private — only readable through this app's own ownership-checked routes); the `meals` row keeps a short pathname instead of the image bytes. Thumbnails (~5-10KB) stay inline as base64, since they're shown for every meal in a list and aren't worth a separate round trip. Older rows created before this migration may still have the full photo as an inline base64 data URI — the photo route transparently handles both.
 
 ## External integrations
 
@@ -146,5 +146,6 @@ First visit redirects to `/signin`. Sign in with a Google account mapped in `lib
 | `NEXTAUTH_URL` | yes in prod | Canonical URL of the deployed app |
 | `TURSO_DATABASE_URL` | yes | Database connection (can be a local `file:` path or a remote Turso URL) |
 | `TURSO_AUTH_TOKEN` | only if remote | Turso auth |
+| `BLOB_READ_WRITE_TOKEN` | yes | Vercel Blob — stores meal photos (private, served only through this app's own auth-checked routes) |
 | `HEVY_API_KEY` (/ `HEVY_API_KEY_ERAN`) | no | Per-user Hevy workout sync; features degrade gracefully without it |
 | `ZEPP_API_KEY` | no | Checked but not yet wired to anything |

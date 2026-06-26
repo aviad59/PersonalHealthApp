@@ -435,9 +435,9 @@ export async function getMealsSince(userId: string, sinceDate: string): Promise<
 }
 
 // ---------------------------------------------------------------
-// Lite meal queries — exclude photo_path (a base64 data URI that can
-// be hundreds of KB per row). Use these whenever the photo isn't
-// going to be displayed (recovery calc, suggestion totals, etc).
+// Lite meal queries — exclude photo_path (a Blob pathname, or for legacy
+// rows a base64 data URI that can be hundreds of KB). Use these whenever
+// the photo isn't going to be displayed (recovery calc, suggestion totals, etc).
 // ---------------------------------------------------------------
 
 export type MealLite = Omit<Meal, "photo_path" | "photo_path_2"> & {
