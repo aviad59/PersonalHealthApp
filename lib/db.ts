@@ -638,20 +638,6 @@ export type DaySuggestion = {
   updated_at: string;
 };
 
-export async function getSuggestion(
-  userId: string,
-  date: string,
-): Promise<DaySuggestion | null> {
-  const db = await getDb();
-  const res = await db.execute({
-    sql: `SELECT date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at
-            FROM user_suggestions WHERE user_id = ? AND date = ?`,
-    args: [userId, date],
-  });
-  const row = res.rows[0];
-  return row ? (row as unknown as DaySuggestion) : null;
-}
-
 /** Return the last `limit` suggestion bodies for this user, newest first.
  *  Used as anti-repetition context so the model doesn't keep suggesting
  *  the same grilled-chicken-and-veg every day. */
@@ -669,32 +655,6 @@ export async function getRecentSuggestions(
     args: [userId, limit],
   });
   return res.rows as unknown as DaySuggestion[];
-}
-
-export async function upsertSuggestion(
-  userId: string,
-  s: Omit<DaySuggestion, "created_at" | "updated_at">,
-): Promise<void> {
-  const db = await getDb();
-  await db.execute({
-    sql: `INSERT INTO user_suggestions
-            (user_id, date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-          ON CONFLICT(user_id, date) DO UPDATE SET
-            body = excluded.body,
-            meals_count = excluded.meals_count,
-            totals_calories = excluded.totals_calories,
-            totals_protein_g = excluded.totals_protein_g,
-            updated_at = datetime('now')`,
-    args: [
-      userId,
-      s.date,
-      s.body,
-      s.meals_count,
-      s.totals_calories,
-      s.totals_protein_g,
-    ],
-  });
 }
 
 // ---------------------------------------------------------------

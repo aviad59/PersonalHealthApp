@@ -69,15 +69,6 @@ type Training = {
   recovery: Recovery | null;
 };
 
-export type Suggestion = {
-  body: string;
-  meals_count: number;
-  totals_calories: number;
-  totals_protein_g: number;
-  updated_at: string;
-  cached: boolean;
-};
-
 function lsGet<T>(key: string): T | null {
   try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
 }
@@ -86,7 +77,6 @@ function lsSet(key: string, val: unknown) {
 }
 
 const HOME_CACHE_KEY = "home-today-v1";
-const HOME_SUGGESTION_KEY = "home-suggestion-v1";
 const HOME_TRAINING_KEY = "home-training-v1";
 
 export default function HomeClient({
@@ -100,8 +90,6 @@ export default function HomeClient({
   const [data, setData] = useState<Today | null>(null);
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
-  const [suggestionLoading, setSuggestionLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -112,11 +100,6 @@ export default function HomeClient({
     if (cachedToday) {
       setData(cachedToday);
       setLoading(false);
-    }
-    const cachedSuggestion = lsGet<Suggestion>(HOME_SUGGESTION_KEY);
-    if (cachedSuggestion) {
-      setSuggestion(cachedSuggestion);
-      setSuggestionLoading(false);
     }
     if (hasWorkouts) {
       const cachedTraining = lsGet<Training>(HOME_TRAINING_KEY);
@@ -150,21 +133,6 @@ export default function HomeClient({
         }
       })();
     }
-    (async () => {
-      try {
-        setSuggestionLoading(true);
-        const r = await fetch("/api/suggestion", { cache: "no-store" });
-        const j = await r.json();
-        if (j?.suggestion) {
-          setSuggestion(j.suggestion);
-          lsSet(HOME_SUGGESTION_KEY, j.suggestion);
-        }
-      } catch {
-        // non-fatal
-      } finally {
-        setSuggestionLoading(false);
-      }
-    })();
   }, [hasWorkouts]);
 
   if (err) return <div className="p-6 text-red-400">{err}</div>;
@@ -227,24 +195,6 @@ export default function HomeClient({
                 <span className="text-white/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
                 <span className="text-white/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
               </div>
-            )}
-          </section>
-
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_next_meal")}</h2>
-              {suggestion?.updated_at && (
-                <span className="text-[10px] text-white/40">
-                  {new Date(suggestion.updated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </span>
-              )}
-            </div>
-            {suggestion ? (
-              <p className="text-[13px] leading-relaxed text-white/80">{suggestion.body}</p>
-            ) : suggestionLoading ? (
-              <p className="text-[13px] text-white/40">{t(lang, "home_thinking")}</p>
-            ) : (
-              <p className="text-[13px] text-white/40">{t(lang, "home_no_suggestion")}</p>
             )}
           </section>
 
@@ -391,11 +341,6 @@ function HomeSkeleton() {
           <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
           <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
         </div>
-      </div>
-      <div className="card p-5 space-y-2">
-        <div className="h-3 w-24 rounded bg-white/10" />
-        <div className="h-3 w-full rounded bg-white/10" />
-        <div className="h-3 w-4/5 rounded bg-white/10" />
       </div>
     </div>
   );
