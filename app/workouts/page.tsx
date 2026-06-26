@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
 type Workout = {
   id: string;
   title: string;
@@ -22,29 +29,33 @@ type Summary = {
   sessionsByDate: { date: string; title: string; volumeKg: number }[];
 };
 
+type WorkoutsData = {
+  haveKey: boolean;
+  workouts: Workout[];
+  summary: Summary | null;
+  fromCache?: boolean;
+  lastSyncedAt?: string | null;
+  pulled?: number;
+  error?: string;
+};
+
+const CACHE_KEY = "workouts-v1";
+
 export default function WorkoutsPage() {
-  const [data, setData] = useState<null | {
-    haveKey: boolean;
-    workouts: Workout[];
-    summary: Summary | null;
-    fromCache?: boolean;
-    lastSyncedAt?: string | null;
-    pulled?: number;
-    error?: string;
-  }>(null);
+  const [data, setData] = useState<WorkoutsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   async function load(force = false) {
-    setLoading(true);
     const r = await fetch(`/api/workouts${force ? "?force=1" : ""}`, {
       cache: "no-store",
     });
     const j = await r.json();
     setData(j);
     setLoading(false);
+    lsSet(CACHE_KEY, j);
   }
 
   async function hardRefresh() {
@@ -74,10 +85,16 @@ export default function WorkoutsPage() {
   }
 
   useEffect(() => {
+    // Show cached data immediately — no loading screen if we have something
+    // — then refresh from the server (cheap DB cache or, if stale, Hevy) in
+    // the background; `loading` stays true until that refresh lands so the
+    // stale view pulses rather than flashing a blank loading screen.
+    const cached = lsGet<WorkoutsData>(CACHE_KEY);
+    if (cached) setData(cached);
     load();
   }, []);
 
-  if (loading) return <div className="p-6 text-white/60">Loading…</div>;
+  if (loading && !data) return <div className="p-6 text-white/60">Loading…</div>;
   if (!data) return <div className="p-6 text-white/60">No data</div>;
 
   if (!data.haveKey && !data.fromCache) {
@@ -93,7 +110,11 @@ export default function WorkoutsPage() {
   }
 
   return (
-    <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
+    <div
+      className={`px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto ${
+        loading ? "animate-pulse [animation-duration:2.5s]" : ""
+      }`}
+    >
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold">Workouts</h1>
