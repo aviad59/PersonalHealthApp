@@ -69,44 +69,9 @@ type ReviewResult = {
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
-/** One-tap quick-add items shown above the photo picker. The protein-powder
- *  chip opens the existing customization sheet (it has a liquid-base step);
- *  the rest log themselves directly with fixed macros, since coffee/water/
- *  creatine don't really vary day-to-day. */
-type QuickAdd =
-  | { kind: "protein_powder"; label: string; icon: "shaker" }
-  | {
-      kind: "fixed";
-      label: string;
-      description: string;
-      icon: "coffee" | "creatine" | "water";
-      macros: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
-    };
-
-const QUICK_ADDS: QuickAdd[] = [
-  { kind: "protein_powder", label: "אבקת חלבון", icon: "shaker" },
-  {
-    kind: "fixed",
-    label: "קפה שחור",
-    description: "קפה שחור",
-    icon: "coffee",
-    macros: { calories: 2, protein_g: 0, fat_g: 0, carbs_g: 0 },
-  },
-  {
-    kind: "fixed",
-    label: "קריאטין",
-    description: "קריאטין מונוהידרט (5g)",
-    icon: "creatine",
-    macros: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-  },
-  {
-    kind: "fixed",
-    label: "מים 500מ״ל",
-    description: "מים 500 מ״ל",
-    icon: "water",
-    macros: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-  },
-];
+/** Cap on how many frequent-meal chips show in the quick-add carousel.
+ *  The full expandable list still lives further down on the page. */
+const FREQUENT_CHIP_LIMIT = 6;
 
 function todayStr() {
   const d = new Date();
@@ -190,6 +155,9 @@ export default function LogMealPage() {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [modifier, setModifier] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
+  // Description of the frequent-meal chip currently logging from the
+  // quick-add carousel, so just that chip shows a spinner.
+  const [chipBusy, setChipBusy] = useState<string | null>(null);
 
   // Manual entry state
   const [manualMode, setManualMode] = useState(false);
@@ -200,9 +168,6 @@ export default function LogMealPage() {
   // Protein powder state
   const [proteinMode, setProteinMode] = useState(false);
   const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
-
-  // Which quick-add chip is currently saving (so the others stay tappable).
-  const [quickAddBusy, setQuickAddBusy] = useState<string | null>(null);
   const [proteinSaving, setProteinSaving] = useState(false);
 
   // Coach review state
@@ -703,30 +668,6 @@ export default function LogMealPage() {
     }
   }
 
-  async function addQuickItem(item: Extract<QuickAdd, { kind: "fixed" }>) {
-    if (quickAddBusy) return;
-    setQuickAddBusy(item.description);
-    setErr(null);
-    try {
-      await safeFetchJson("/api/meals", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          date,
-          description: item.description,
-          ...item.macros,
-          confidence: "high",
-        }),
-      });
-      await loadExisting(date);
-      refreshFrequentMeals();
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setQuickAddBusy(null);
-    }
-  }
-
   async function deleteMeal(id: number) {
     if (!confirm(t(lang, "meal_delete_confirm"))) return;
     try {
@@ -874,31 +815,46 @@ export default function LogMealPage() {
             </button>
           </div>
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
-          {/* Quick-add carousel — one-tap entries for frequent zero-decision
-              items (protein powder, coffee, creatine, water). Horizontal
-              scroll keeps it tidy on phones and leaves room to grow without
-              redesigning the picker. */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {QUICK_ADDS.map((q) => {
-              const isProtein = q.kind === "protein_powder";
-              const isBusy = !isProtein && quickAddBusy === q.description;
+          {/* Quick-add carousel — protein-powder shortcut + the user's most
+              frequent meals as one-tap chips. Tapping a meal chip re-logs
+              it with the same remembered macros; the modifier flow lives
+              further down the page in the expandable list. */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+            <button
+              type="button"
+              onClick={() => { setProteinMode(true); setErr(null); }}
+              className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors"
+            >
+              <ShakerIcon className="h-4 w-4 text-white/55" />
+              <span className="whitespace-nowrap">אבקת חלבון</span>
+            </button>
+            {frequent.slice(0, FREQUENT_CHIP_LIMIT).map((m) => {
+              const isBusy = chipBusy === m.description;
               return (
                 <button
-                  key={q.label}
+                  key={m.description}
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    if (chipBusy) return;
+                    setChipBusy(m.description);
                     setErr(null);
-                    if (isProtein) {
-                      setProteinMode(true);
-                    } else {
-                      addQuickItem(q);
+                    try {
+                      await quickLog(m, "");
+                    } finally {
+                      setChipBusy(null);
                     }
                   }}
-                  disabled={isBusy || (!!quickAddBusy && !isProtein && quickAddBusy !== q.description)}
+                  disabled={!!chipBusy && !isBusy}
                   className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
                 >
-                  <QuickAddIcon icon={q.icon} className="h-4 w-4 text-white/55" />
-                  <span className="whitespace-nowrap">{q.label}</span>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white/55" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a9 9 0 1 1-3-6.7" />
+                    <polyline points="21 4 21 10 15 10" />
+                  </svg>
+                  <span className="truncate max-w-[14ch]">{m.description}</span>
+                  <span className="text-[10px] text-white/45 whitespace-nowrap">
+                    {Math.round(m.calories)} {t(lang, "macro_kcal")}
+                  </span>
                   {isBusy && (
                     <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
                   )}
@@ -1663,34 +1619,6 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function QuickAddIcon({ icon, className }: { icon: "shaker" | "coffee" | "creatine" | "water"; className?: string }) {
-  const stroke = { fill: "none" as const, stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  if (icon === "shaker") return <ShakerIcon className={className} />;
-  if (icon === "coffee") {
-    return (
-      <svg viewBox="0 0 24 24" className={className} {...stroke}>
-        <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9Z" />
-        <path d="M17 11h2a2 2 0 0 1 0 4h-2" />
-        <path d="M7 3v2M11 3v2" />
-      </svg>
-    );
-  }
-  if (icon === "water") {
-    return (
-      <svg viewBox="0 0 24 24" className={className} {...stroke}>
-        <path d="M12 3s6 7.5 6 12a6 6 0 0 1-12 0c0-4.5 6-12 6-12Z" />
-      </svg>
-    );
-  }
-  // creatine — supplement scoop
-  return (
-    <svg viewBox="0 0 24 24" className={className} {...stroke}>
-      <rect x="3" y="5" width="14" height="14" rx="2" />
-      <path d="M17 9l4-2v10l-4-2z" />
-      <line x1="7" y1="10" x2="13" y2="10" />
-    </svg>
-  );
-}
 
 /** Sweeping light-beam overlay shown on top of a photo while Claude is
  *  reading it — signals "AI is looking at this" rather than a generic

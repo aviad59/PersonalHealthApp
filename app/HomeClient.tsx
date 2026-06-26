@@ -76,6 +76,17 @@ function lsSet(key: string, val: unknown) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
+/** Local-time YYYY-MM-DD — matches lib/db.ts `todayStr()` for the wall-clock
+ *  day, used to invalidate the home snapshot when the user opens the app on
+ *  a new day. */
+function localToday(): string {
+  return new Date().toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 const HOME_CACHE_KEY = "home-today-v1";
 const HOME_TRAINING_KEY = "home-training-v1";
 
@@ -96,8 +107,12 @@ export default function HomeClient({
     // Hydrate from the previous session's snapshot immediately so the
     // page paints with real-looking content on click instead of a blank
     // skeleton, then quietly refresh from the API in the background.
+    // The snapshot is only reused when it was captured on the same
+    // calendar day — otherwise yesterday's macros/meals would flash on
+    // screen and make it look like today's totals were carried over.
+    const today = localToday();
     const cachedToday = lsGet<Today>(HOME_CACHE_KEY);
-    if (cachedToday) {
+    if (cachedToday && cachedToday.date === today) {
       setData(cachedToday);
       setLoading(false);
     }

@@ -46,6 +46,17 @@ function lsSet(key: string, val: unknown) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
+/** Local-time YYYY-MM-DD. Matches the server's `todayStr()` from
+ *  lib/db.ts for the user's wall-clock day, which is what the stats API
+ *  uses to bucket meals. */
+function localToday(): string {
+  return new Date().toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 export default function StatsPage() {
   const lang = useLang();
   const [days, setDays] = useState<number>(14);
@@ -58,9 +69,14 @@ export default function StatsPage() {
     let dead = false;
     setErr(null);
 
-    // Show cached data immediately — no skeleton if we have something
+    // Show cached data immediately — but only if it was captured TODAY.
+    // Without this guard, opening the page on a fresh day flashes
+    // yesterday's series (with yesterday's "today" bar still painted in
+    // the rightmost slot) for the duration of the refresh round-trip.
+    const today = localToday();
     const cached = lsGet<Stats>(`stats-v2-${days}`);
-    if (cached) {
+    const cachedIsToday = cached && cached.today === today;
+    if (cachedIsToday) {
       setData(cached);
       setLoading(false);
     } else {
@@ -77,7 +93,7 @@ export default function StatsPage() {
           lsSet(`stats-v2-${days}`, j);
         }
       } catch (e: any) {
-        if (!dead && !cached) setErr(e.message);
+        if (!dead && !cachedIsToday) setErr(e.message);
       } finally {
         if (!dead) setLoading(false);
       }
