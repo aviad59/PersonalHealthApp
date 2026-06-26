@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "migrate:turso": "node --env-file=.env.local scripts/migrate-to-turso.mjs"
+    "migrate:turso": "node --env-file=.env.local scripts/migrate-to-turso.mjs",
+    "backfill:photos": "node --env-file=.env.local scripts/backfill-photos-to-blob.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
