@@ -85,10 +85,12 @@ const SCHEMA = `
     title TEXT,
     duration_sec INTEGER,
     raw_json TEXT,
-    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+    user_id TEXT NOT NULL DEFAULT 'idan'
   );
 
   CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts_cache(date);
+  CREATE INDEX IF NOT EXISTS idx_workouts_user_date ON workouts_cache(user_id, date);
 
   CREATE TABLE IF NOT EXISTS suggestions (
     date TEXT PRIMARY KEY,
@@ -136,6 +138,9 @@ const COLUMN_ADDS: { sql: string }[] = [
   { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE insights ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE user_profile ADD COLUMN language TEXT NOT NULL DEFAULT 'en'" },
+  // Per-user scoping for the Hevy workout cache. Existing rows default to
+  // 'idan' since he was the only user with workouts pre-migration.
+  { sql: "ALTER TABLE workouts_cache ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
 ];
 
 // Per-user variants of the tables that previously had a `date` primary key
@@ -572,54 +577,65 @@ export type CachedWorkout = {
   synced_at: string;
 };
 
-export async function upsertWorkouts(rows: CachedWorkout[]): Promise<void> {
+export async function upsertWorkouts(
+  userId: string,
+  rows: CachedWorkout[],
+): Promise<void> {
   if (rows.length === 0) return;
   const db = await getDb();
   const stmts = rows.map((r) => ({
-    sql: `INSERT INTO workouts_cache (id, date, title, duration_sec, raw_json, synced_at)
-          VALUES (?, ?, ?, ?, ?, datetime('now'))
+    sql: `INSERT INTO workouts_cache (id, date, title, duration_sec, raw_json, synced_at, user_id)
+          VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
           ON CONFLICT(id) DO UPDATE SET
             date = excluded.date,
             title = excluded.title,
             duration_sec = excluded.duration_sec,
             raw_json = excluded.raw_json,
-            synced_at = datetime('now')`,
-    args: [r.id, r.date, r.title, r.duration_sec, r.raw_json] as any[],
+            synced_at = datetime('now'),
+            user_id = excluded.user_id`,
+    args: [r.id, r.date, r.title, r.duration_sec, r.raw_json, userId] as any[],
   }));
-  // batch runs the statements in a single transaction
   await db.batch(stmts, "write");
 }
 
-export async function getCachedWorkouts(limit = 50): Promise<CachedWorkout[]> {
+export async function getCachedWorkouts(
+  userId: string,
+  limit = 50,
+): Promise<CachedWorkout[]> {
   const db = await getDb();
   const res = await db.execute({
     sql: `SELECT id, date, title, duration_sec, raw_json, synced_at
             FROM workouts_cache
+           WHERE user_id = ?
            ORDER BY date DESC, id DESC
            LIMIT ?`,
-    args: [limit],
+    args: [userId, limit],
   });
   return res.rows as unknown as CachedWorkout[];
 }
 
 export async function getCachedWorkoutsSince(
+  userId: string,
   sinceDate: string,
 ): Promise<CachedWorkout[]> {
   const db = await getDb();
   const res = await db.execute({
     sql: `SELECT id, date, title, duration_sec, raw_json, synced_at
             FROM workouts_cache
-           WHERE date >= ?
+           WHERE user_id = ? AND date >= ?
            ORDER BY date DESC, id DESC`,
-    args: [sinceDate],
+    args: [userId, sinceDate],
   });
   return res.rows as unknown as CachedWorkout[];
 }
 
-/** Returns the most-recent synced_at across all cached workouts, or null if cache is empty. */
-export async function getCacheLastSyncedAt(): Promise<string | null> {
+/** Returns the most-recent synced_at across this user's cached workouts, or null if none. */
+export async function getCacheLastSyncedAt(userId: string): Promise<string | null> {
   const db = await getDb();
-  const res = await db.execute("SELECT MAX(synced_at) AS s FROM workouts_cache");
+  const res = await db.execute({
+    sql: "SELECT MAX(synced_at) AS s FROM workouts_cache WHERE user_id = ?",
+    args: [userId],
+  });
   const row = res.rows[0] as unknown as { s: string | null } | undefined;
   return row?.s ?? null;
 }

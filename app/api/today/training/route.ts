@@ -62,7 +62,7 @@ export async function GET() {
 
   const [profile, cachedRecent, last3] = await Promise.all([
     getProfile(userId),
-    getCachedWorkoutsSince(daysAgoStr(14)),
+    getCachedWorkoutsSince(userId, daysAgoStr(14)),
     getMealsSinceLite(userId, daysAgoStr(2)),
   ]);
   const today = todayStr();

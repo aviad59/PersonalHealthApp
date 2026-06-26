@@ -62,7 +62,7 @@ async function refreshCache(userId: string): Promise<{
         synced_at: "",
       };
     });
-    await upsertWorkouts(rows);
+    await upsertWorkouts(userId, rows);
     return { pulled: rows.length, workouts: collected };
   } catch (e: any) {
     return { pulled: 0, workouts: [], error: e?.message ?? "hevy_fetch_failed" };
@@ -114,8 +114,8 @@ export async function GET(req: NextRequest) {
   const limit = Number(url.searchParams.get("limit") ?? "20");
 
   const [cachedRows, lastSynced] = await Promise.all([
-    getCachedWorkouts(50),
-    getCacheLastSyncedAt(),
+    getCachedWorkouts(userId, 50),
+    getCacheLastSyncedAt(userId),
   ]);
   const lastSyncedMs = lastSynced ? Date.parse(lastSynced + "Z") : 0;
   const stale =
@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
   }
 
   const refresh = await refreshCache(userId);
-  const fresh = await getCachedWorkouts(50);
+  const fresh = await getCachedWorkouts(userId, 50);
   const useRows = fresh.length > 0 ? fresh : cachedRows;
   const built = buildResponse(cacheRowsToHevy(useRows).slice(0, limit));
 
@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
     haveKey: true,
     fromCache: refresh.error ? true : refresh.pulled === 0,
     stale: false,
-    lastSyncedAt: await getCacheLastSyncedAt(),
+    lastSyncedAt: await getCacheLastSyncedAt(userId),
     pulled: refresh.pulled,
     error: refresh.error,
     ...built,

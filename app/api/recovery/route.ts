@@ -52,7 +52,7 @@ export async function GET() {
   const [profile, last3, cachedRecent] = await Promise.all([
     getProfile(userId),
     getMealsSince(userId, daysAgoStr(2)),
-    getCachedWorkoutsSince(daysAgoStr(14)),
+    getCachedWorkoutsSince(userId, daysAgoStr(14)),
   ]);
 
   const dailies = dailyTotalsFromMeals(

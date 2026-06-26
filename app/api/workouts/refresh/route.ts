@@ -47,9 +47,9 @@ export async function POST(req: NextRequest) {
         synced_at: "",
       };
     });
-    await upsertWorkouts(rows);
-    const cachedTotal = (await getCachedWorkouts(9999)).length;
-    const lastSyncedAt = await getCacheLastSyncedAt();
+    await upsertWorkouts(userId, rows);
+    const cachedTotal = (await getCachedWorkouts(userId, 9999)).length;
+    const lastSyncedAt = await getCacheLastSyncedAt(userId);
     return NextResponse.json({
       ok: true,
       pulled: rows.length,

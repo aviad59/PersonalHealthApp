@@ -22,7 +22,7 @@ import {
   dateKey,
   Meal,
 } from "@/lib/db";
-import { anthropic, CLAUDE_OPUS_MODEL, imageBlockFromDataUri } from "@/lib/anthropic";
+import { anthropic, CLAUDE_MODEL, imageBlockFromDataUri } from "@/lib/anthropic";
 import { COACH_SYSTEM } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig, type UserId } from "@/lib/user";
@@ -181,7 +181,7 @@ async function executeTool(
 
   if (name === "get_workout_history") {
     if (!hasWorkouts) return JSON.stringify({ note: "workout tracking not enabled" });
-    const rows = await getCachedWorkoutsSince(input.start_date);
+    const rows = await getCachedWorkoutsSince(userId, input.start_date);
     const workouts = rowsToHevy(rows).filter(
       (w) => dateKey(new Date(w.start_time || Date.now())) <= input.end_date,
     );
@@ -234,7 +234,7 @@ async function buildContext(userId: UserId): Promise<any> {
       getMealsSince(userId, weekStart),
       getWeightLogSince(userId, daysAgoStr(13)),
       cfg.hasWorkouts && hasHevyKey(userId)
-        ? getCachedWorkoutsSince(daysAgoStr(13))
+        ? getCachedWorkoutsSince(userId, daysAgoStr(13))
         : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
     ]);
 
@@ -407,7 +407,7 @@ export async function POST(req: NextRequest) {
     let finalReply = "";
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const resp = await anthropic().messages.create({
-        model: CLAUDE_OPUS_MODEL,
+        model: CLAUDE_MODEL,
         max_tokens: 1200,
         system: COACH_SYSTEM,
         tools,
