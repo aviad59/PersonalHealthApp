@@ -21,11 +21,30 @@ const SaveSchema = z.object({
   // Tiny inlineable thumbnail (~5–10 KB JPEG) generated client-side.
   photo_thumb_base64: z.string().optional(),
   photo_ext: z.string().optional(),
+  // Optional second photo (e.g. the back of a package, or a second angle).
+  photo_base64_2: z.string().optional(),
+  photo_thumb_base64_2: z.string().optional(),
+  photo_ext_2: z.string().optional(),
   date: z.string().optional(),
 });
 
+function photoDataUri(base64: string | undefined, ext: string | undefined): string | null {
+  if (!base64) return null;
+  const cleanExt = (ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
+  const mime =
+    cleanExt === "png" ? "image/png" :
+    cleanExt === "webp" ? "image/webp" :
+    cleanExt === "gif" ? "image/gif" :
+    "image/jpeg";
+  return `data:${mime};base64,${base64}`;
+}
+
+function thumbDataUri(base64: string | undefined): string | null {
+  return base64 ? `data:image/jpeg;base64,${base64}` : null;
+}
+
 export async function GET(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const date = new URL(req.url).searchParams.get("date") ?? todayStr();
   const rows = await getMealsByDateLite(userId, date);
   const meals = rows.map((m) => ({
@@ -42,12 +61,14 @@ export async function GET(req: NextRequest) {
     created_at: m.created_at,
     photo_thumb: m.photo_thumb,
     photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,
+    photo_thumb_2: m.photo_thumb_2,
+    photo_path_2: m.has_photo_2 ? `/api/meals/${m.id}/photo?n=2` : null,
   }));
   return NextResponse.json({ date, meals });
 }
 
 export async function POST(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const json = await req.json();
   const parsed = SaveSchema.safeParse(json);
   if (!parsed.success) {
@@ -59,30 +80,23 @@ export async function POST(req: NextRequest) {
   const m = parsed.data;
   const date = m.date ?? todayStr();
 
-  let photo_path: string | null = null;
-  if (m.photo_base64) {
-    const ext = (m.photo_ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
-    const mime =
-      ext === "png" ? "image/png" :
-      ext === "webp" ? "image/webp" :
-      ext === "gif" ? "image/gif" :
-      "image/jpeg";
-    photo_path = `data:${mime};base64,${m.photo_base64}`;
-  }
-  const photo_thumb: string | null = m.photo_thumb_base64
-    ? `data:image/jpeg;base64,${m.photo_thumb_base64}`
-    : null;
+  const photo_path = photoDataUri(m.photo_base64, m.photo_ext);
+  const photo_thumb = thumbDataUri(m.photo_thumb_base64);
+  const photo_path_2 = photoDataUri(m.photo_base64_2, m.photo_ext_2);
+  const photo_thumb_2 = thumbDataUri(m.photo_thumb_base64_2);
 
   const db = await getDb();
   const ins = await db.execute({
     sql: `INSERT INTO meals (
-        user_id, date, photo_path, photo_thumb, description, calories, protein_g, fat_g, carbs_g, items_json, confidence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       userId,
       date,
       photo_path,
       photo_thumb,
+      photo_path_2,
+      photo_thumb_2,
       m.description ?? null,
       m.calories,
       m.protein_g,

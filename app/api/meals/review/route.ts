@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getMealsByDateLite } from "@/lib/db";
-import { anthropic, CLAUDE_OPUS_MODEL, extractJson } from "@/lib/anthropic";
+import { anthropic, CLAUDE_OPUS_MODEL, extractJson, imageBlockFromDataUri } from "@/lib/anthropic";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
@@ -52,7 +52,7 @@ Respond with ONLY a JSON object (no prose before/after):
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const body = await req.json().catch(() => ({}));
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
@@ -88,12 +88,10 @@ export async function POST(req: NextRequest) {
 
       content.push({ type: "text", text: lines });
 
-      if (meal.photo_thumb?.startsWith("data:")) {
-        const commaIdx = meal.photo_thumb.indexOf(",");
-        const base64 = meal.photo_thumb.slice(commaIdx + 1);
-        const mediaType = (meal.photo_thumb.slice(0, commaIdx).match(/data:([^;]+)/) ?? [])[1] ?? "image/jpeg";
-        content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } });
-      }
+      const img1 = imageBlockFromDataUri(meal.photo_thumb);
+      if (img1) content.push(img1);
+      const img2 = imageBlockFromDataUri(meal.photo_thumb_2);
+      if (img2) content.push(img2);
     }
 
     const resp = await anthropic().messages.create({
@@ -116,6 +114,7 @@ export async function POST(req: NextRequest) {
       ...r,
       description: mealById.get(r.meal_id)?.description ?? "(unnamed)",
       photo_thumb: mealById.get(r.meal_id)?.photo_thumb ?? null,
+      photo_thumb_2: mealById.get(r.meal_id)?.photo_thumb_2 ?? null,
     }));
 
     return NextResponse.json({ reviews, summary: result.summary });

@@ -17,7 +17,7 @@ This doc is written for product planning: what exists today, what data backs it,
 
 ## Product surface (by screen)
 
-All screens are gated behind a lightweight user picker (no passwords) — see [Multi-user model](#multi-user-model).
+All screens require Google sign-in — see [Multi-user model](#multi-user-model).
 
 ### `/` — Home
 Today's macro totals vs. goals, today's meals (thumbnail list), latest insight headline, cached next-meal suggestion, and (if the user tracks workouts) training burn + recovery readiness.
@@ -55,8 +55,8 @@ Placeholder only — "coming soon." No data is collected here yet.
 ### `/onboarding` — Setup Wizard
 5-step first-run flow (basics → body metrics → activity level → goal mode → review) that computes and saves initial goals.
 
-### `/select-user` — User Picker
-Switches between the 3 configured users; routes to onboarding if that user has no profile yet.
+### `/signin` — Sign In
+Google sign-in only. Rejects any Google account not mapped to a user slot in `lib/user.ts`.
 
 ### `/widget` — Macro Widget
 Minimal endpoint/page for a homescreen/PWA macro-summary widget.
@@ -112,7 +112,7 @@ Photos are stored as base64 data URIs directly in the `meals` table — there is
 
 ## Multi-user model
 
-Three users are hardcoded in `lib/user.ts`: **idan** (tracks workouts), **orly** and **eran** (nutrition-only). There's no password/account system — a long-lived cookie (`cowork_user`) just remembers which user is active, and every query is scoped with `WHERE user_id = ?`. This is appropriate for a household/personal-use app, not a public multi-tenant product as-is.
+Three user slots are hardcoded in `lib/user.ts`: **idan** (tracks workouts), **orly** and **eran** (nutrition-only). Identity is real Google sign-in (NextAuth + Google OAuth, `lib/auth.ts`) — a slot is only usable once its Google account email is set in `lib/user.ts`; sign-in attempts from any other email are rejected before a session is ever issued. `idan` is connected to `idanaviad10@gmail.com`; `orly`/`eran` have no email yet and can't sign in until one is added. Every DB query is scoped with `WHERE user_id = ?`, and `middleware.ts` requires a verified session for every route except the sign-in page itself.
 
 **Known data-model bug**: `workouts_cache` is not scoped by `user_id`. It works today because only `idan` has a Hevy key, but if a second user added their own key, workout data would collide between users.
 
@@ -131,16 +131,19 @@ Three users are hardcoded in `lib/user.ts`: **idan** (tracks workouts), **orly**
 
 ```bash
 npm install
-cp .env.local.example .env.local   # set ANTHROPIC_API_KEY, HEVY_API_KEY, TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN if remote)
+cp .env.local.example .env.local   # set ANTHROPIC_API_KEY, HEVY_API_KEY, TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN if remote), and the Google/NextAuth vars below
 npm run dev
 # → http://localhost:3000
 ```
 
-First visit goes to `/select-user`, then `/onboarding` if that user has no profile yet.
+First visit redirects to `/signin`. Sign in with a Google account mapped in `lib/user.ts`; first sign-in for a slot with no profile yet routes to `/onboarding`.
 
 | Variable | Required | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes | All Claude-powered features |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | yes | Google OAuth sign-in (NextAuth) |
+| `NEXTAUTH_SECRET` | yes | Signs/encrypts session tokens — generate with `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | yes in prod | Canonical URL of the deployed app |
 | `TURSO_DATABASE_URL` | yes | Database connection (can be a local `file:` path or a remote Turso URL) |
 | `TURSO_AUTH_TOKEN` | only if remote | Turso auth |
 | `HEVY_API_KEY` (/ `HEVY_API_KEY_ERAN`) | no | Per-user Hevy workout sync; features degrade gracefully without it |

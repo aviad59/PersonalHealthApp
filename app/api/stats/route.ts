@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const lookbackSince = daysAgoStr(lookbackDays - 1);
   const today = todayStr();
 
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const [dailyTotals, profile] = await Promise.all([
     getMealDailyTotalsSince(userId, lookbackSince),
     getProfile(userId),

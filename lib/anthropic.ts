@@ -28,6 +28,16 @@ export function anthropic(): Anthropic {
   return _client;
 }
 
+/** Build a Claude image content block from a `data:<mime>;base64,<...>` URI, or null if malformed. */
+export function imageBlockFromDataUri(dataUri: string | null | undefined) {
+  if (!dataUri?.startsWith("data:")) return null;
+  const commaIdx = dataUri.indexOf(",");
+  const meta = dataUri.slice(0, commaIdx);
+  const base64 = dataUri.slice(commaIdx + 1);
+  const mediaType = (meta.match(/data:([^;]+)/) ?? [])[1] ?? "image/jpeg";
+  return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType as any, data: base64 } };
+}
+
 /** Pull a top-level JSON object out of Claude's text reply. */
 export function extractJson<T = unknown>(text: string): T {
   // Try fenced block first

@@ -111,8 +111,8 @@ async function loadInitial(userId: string): Promise<{
 }
 
 export default async function HomePage() {
-  const userId = getCurrentUserId();
-  if (!userId) redirect("/select-user");
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/signin");
   const cfg = getUserConfig(userId);
 
   const { today, suggestion } = await loadInitial(userId);

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const filter = new URL(req.url).searchParams.get("type"); // daily | weekly | null
   const all = await getInsights(userId, 100);
   const insights = all.filter((i) => (filter ? i.type === filter : true));
@@ -24,7 +24,7 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
   await db.execute({
     sql: "DELETE FROM insights WHERE id = ? AND user_id = ?",

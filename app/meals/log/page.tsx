@@ -43,6 +43,8 @@ type ExistingMeal = {
   carbs_g: number | null;
   photo_path: string | null;
   photo_thumb: string | null;
+  photo_path_2: string | null;
+  photo_thumb_2: string | null;
   items_json: string | null;
   ai_tip: string | null;
   created_at: string;
@@ -85,6 +87,10 @@ export default function LogMealPage() {
   const lang = useLang();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  // Second (optional) photo — e.g. the back of a package or another
+  // angle of the plate — shares the camera/gallery file inputs above via
+  // a "which slot is this pick for" flag (pickTarget).
+  const camera2Ref = useRef<HTMLInputElement>(null);
 
   const [date, setDate] = useState<string>(todayStr());
   const isToday = date === todayStr();
@@ -108,6 +114,13 @@ export default function LogMealPage() {
   // Tiny ~5–10 KB thumbnail data URI saved alongside the meal so list views
   // can render it inline without going through the image optimizer.
   const [photoThumbBase64, setPhotoThumbBase64] = useState<string | null>(null);
+  // Optional second photo — same shape as the fields above, for the
+  // "other side" shot (e.g. nutrition label on the back of a package).
+  const [photoPreview2, setPhotoPreview2] = useState<string | null>(null);
+  const [photoBase64_2, setPhotoBase64_2] = useState<string | null>(null);
+  const [photoExt2, setPhotoExt2] = useState<string>("jpg");
+  const [compressedFile2, setCompressedFile2] = useState<File | null>(null);
+  const [photoThumbBase64_2, setPhotoThumbBase64_2] = useState<string | null>(null);
   const [text, setText] = useState(""); // description/hint/context
 
   const [analyzing, setAnalyzing] = useState(false);
@@ -227,6 +240,30 @@ export default function LogMealPage() {
     }
   }
 
+  async function onPick2(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setErr(null);
+    setProgress(t(lang, "meal_compress"));
+    try {
+      const [compressed, thumb] = await Promise.all([
+        compressImageFile(f),
+        compressImageThumb(f),
+      ]);
+      const blob = await (await fetch(compressed.dataUri)).blob();
+      const compFile = new File([blob], "meal2.jpg", { type: "image/jpeg" });
+      setCompressedFile2(compFile);
+      setPhotoPreview2(compressed.dataUri);
+      setPhotoBase64_2(compressed.base64);
+      setPhotoThumbBase64_2(thumb.base64);
+      setPhotoExt2("jpg");
+    } catch (err: any) {
+      setErr(err?.message || "Could not read that photo");
+    } finally {
+      setProgress(null);
+    }
+  }
+
   function pickedFile(): File | null {
     // Prefer the compressed JPEG; fall back to the raw input if compression
     // somehow didn't happen (shouldn't, but better safe than uploading 5 MB).
@@ -236,6 +273,19 @@ export default function LogMealPage() {
     );
   }
 
+  function pickedFile2(): File | null {
+    if (compressedFile2) return compressedFile2;
+    return camera2Ref.current?.files?.[0] || null;
+  }
+
+  function clearPhoto2() {
+    setPhotoPreview2(null);
+    setPhotoBase64_2(null);
+    setPhotoThumbBase64_2(null);
+    setCompressedFile2(null);
+    if (camera2Ref.current) camera2Ref.current.value = "";
+  }
+
   function clearPhoto() {
     setPhotoPreview(null);
     setPhotoBase64(null);
@@ -243,6 +293,7 @@ export default function LogMealPage() {
     setCompressedFile(null);
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
+    clearPhoto2();
   }
 
   function resetNewMealForm() {
@@ -266,6 +317,8 @@ export default function LogMealPage() {
     try {
       const fd = new FormData();
       if (f) fd.append("photo", f);
+      const f2 = pickedFile2();
+      if (f2) fd.append("photo2", f2);
       if (hasText) {
         // When a photo is present, text is context; otherwise text is the description.
         fd.append(hasPhoto ? "hint" : "text", text.trim());
@@ -308,6 +361,8 @@ export default function LogMealPage() {
       const fd = new FormData();
       if (f) {
         fd.append("photo", f);
+        const f2 = pickedFile2();
+        if (f2) fd.append("photo2", f2);
         fd.append("hint", [text.trim(), qa].filter(Boolean).join(". "));
       } else {
         fd.append("text", [text.trim(), qa].filter(Boolean).join(". "));
@@ -361,6 +416,9 @@ export default function LogMealPage() {
             photo_base64: photoBase64 ?? undefined,
             photo_thumb_base64: photoThumbBase64 ?? undefined,
             photo_ext: photoExt,
+            photo_base64_2: photoBase64_2 ?? undefined,
+            photo_thumb_base64_2: photoThumbBase64_2 ?? undefined,
+            photo_ext_2: photoExt2,
           }),
         },
       );
@@ -804,14 +862,33 @@ export default function LogMealPage() {
 
       {photoPreview && !manualMode && !proteinMode && (
         <div className="space-y-3">
-          <div className="relative rounded-2xl overflow-hidden border border-border">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photoPreview}
-              alt="meal"
-              onClick={() => setLightboxSrc(photoPreview)}
-              className="w-full object-cover max-h-80 cursor-zoom-in"
-            />
+          <div className={`flex gap-2 ${photoPreview2 ? "" : ""}`}>
+            <div className="relative rounded-2xl overflow-hidden border border-border flex-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoPreview}
+                alt="meal"
+                onClick={() => setLightboxSrc(photoPreview)}
+                className="w-full object-cover max-h-80 cursor-zoom-in"
+              />
+            </div>
+            {photoPreview2 && (
+              <div className="relative rounded-2xl overflow-hidden border border-border flex-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoPreview2}
+                  alt="meal, second angle"
+                  onClick={() => setLightboxSrc(photoPreview2)}
+                  className="w-full h-full object-cover max-h-80 cursor-zoom-in"
+                />
+                <button
+                  onClick={clearPhoto2}
+                  className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-sm leading-none flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex gap-4 text-sm">
             <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
@@ -820,10 +897,18 @@ export default function LogMealPage() {
             <button onClick={() => galleryRef.current?.click()} className="text-accent-brand">
               {t(lang, "meal_pick_gallery")}
             </button>
+            {!photoPreview2 && (
+              <button onClick={() => camera2Ref.current?.click()} className="text-accent-brand">
+                {t(lang, "meal_add_second_photo")}
+              </button>
+            )}
             <button onClick={clearPhoto} className="text-white/50 ml-auto">
               {t(lang, "meal_remove_photo")}
             </button>
           </div>
+          {!photoPreview2 && (
+            <p className="text-[11px] text-white/40">{t(lang, "meal_second_photo_hint")}</p>
+          )}
         </div>
       )}
 
@@ -840,6 +925,14 @@ export default function LogMealPage() {
         type="file"
         accept="image/*"
         onChange={onPick}
+        className="hidden"
+      />
+      <input
+        ref={camera2Ref}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onPick2}
         className="hidden"
       />
 
@@ -1299,16 +1392,23 @@ function ExistingMealRow({
             <ShakerIcon className="h-6 w-6 text-white/50" />
           </div>
         ) : meal.photo_thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={meal.photo_thumb}
-            alt=""
-            width={48}
-            height={48}
-            decoding="async"
-            onClick={() => setLightboxOpen(true)}
-            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0 cursor-zoom-in"
-          />
+          <div className="relative shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={meal.photo_thumb}
+              alt=""
+              width={48}
+              height={48}
+              decoding="async"
+              onClick={() => setLightboxOpen(true)}
+              className="w-12 h-12 rounded-lg object-cover bg-bg-elev cursor-zoom-in"
+            />
+            {meal.photo_thumb_2 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent-brand text-[9px] font-bold flex items-center justify-center text-white">
+                2
+              </span>
+            )}
+          </div>
         ) : meal.photo_path ? (
           <Image
             src={meal.photo_path}
@@ -1388,7 +1488,10 @@ function ExistingMealRow({
       )}
 
       {lightboxOpen && meal.photo_thumb && (
-        <ImageLightbox src={meal.photo_thumb} onClose={() => setLightboxOpen(false)} />
+        <ImageLightbox
+          src={[meal.photo_thumb, meal.photo_thumb_2].filter((s): s is string => !!s)}
+          onClose={() => setLightboxOpen(false)}
+        />
       )}
     </div>
   );
@@ -1440,7 +1543,8 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+function ImageLightbox({ src, onClose }: { src: string | string[]; onClose: () => void }) {
+  const srcs = Array.isArray(src) ? src : [src];
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
@@ -1452,13 +1556,20 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
       >
         ×
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        className="max-w-full max-h-full object-contain rounded-lg"
+      <div
+        className="flex gap-3 max-w-full max-h-full overflow-x-auto snap-x snap-mandatory"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        {srcs.map((s, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={i}
+            src={s}
+            alt=""
+            className="max-w-full max-h-full object-contain rounded-lg snap-center shrink-0"
+          />
+        ))}
+      </div>
     </div>
   );
 }

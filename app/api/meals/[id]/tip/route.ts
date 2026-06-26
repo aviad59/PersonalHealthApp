@@ -24,7 +24,7 @@ export async function POST(
     return NextResponse.json({ error: "bad id" }, { status: 400 });
   }
 
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
 
   const r = await db.execute({

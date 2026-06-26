@@ -126,6 +126,11 @@ const COLUMN_ADDS: { sql: string }[] = [
   // home/meals-list views can inline it directly in HTML and skip both the
   // image optimizer and a serverless DB read per row.
   { sql: "ALTER TABLE meals ADD COLUMN photo_thumb TEXT" },
+  // Optional second photo (e.g. the back of a packaged product, or a
+  // second angle of a plate) for meals where one photo isn't enough
+  // for an accurate read.
+  { sql: "ALTER TABLE meals ADD COLUMN photo_path_2 TEXT" },
+  { sql: "ALTER TABLE meals ADD COLUMN photo_thumb_2 TEXT" },
   // user_id: per-user data isolation. Existing rows default to 'idan' (the
   // legacy user) so all of his historical data continues to work unchanged.
   { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
@@ -399,6 +404,7 @@ export type Meal = {
   id: number;
   date: string;
   photo_path: string | null;
+  photo_path_2: string | null;
   description: string | null;
   calories: number | null;
   protein_g: number | null;
@@ -434,18 +440,21 @@ export async function getMealsSince(userId: string, sinceDate: string): Promise<
 // going to be displayed (recovery calc, suggestion totals, etc).
 // ---------------------------------------------------------------
 
-export type MealLite = Omit<Meal, "photo_path"> & {
+export type MealLite = Omit<Meal, "photo_path" | "photo_path_2"> & {
   has_photo: 0 | 1;
+  has_photo_2: 0 | 1;
   // Inline thumbnail data URI (~5–10 KB) when present; null for meals
   // saved before the thumbnail column existed. Lists ship this in the
   // payload so the browser renders without any extra requests.
   photo_thumb: string | null;
+  photo_thumb_2: string | null;
 };
 
 const MEAL_LITE_COLUMNS =
   "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at, " +
-  "photo_thumb, " +
-  "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo";
+  "photo_thumb, photo_thumb_2, " +
+  "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo, " +
+  "(CASE WHEN photo_path_2 IS NULL OR photo_path_2 = '' THEN 0 ELSE 1 END) AS has_photo_2";
 
 export async function getMealsByDateLite(userId: string, date: string): Promise<MealLite[]> {
   const db = await getDb();
@@ -465,12 +474,17 @@ export async function getMealsSinceLite(userId: string, sinceDate: string): Prom
   return res.rows as unknown as MealLite[];
 }
 
-export async function getMealPhoto(userId: string, id: number): Promise<string | null> {
+export async function getMealPhoto(
+  userId: string,
+  id: number,
+  which: 1 | 2 = 1,
+): Promise<string | null> {
   // Photos are scoped to the meal owner — even if someone hits the URL with
-  // another user's cookie, we won't leak the bytes.
+  // another user's session, we won't leak the bytes.
+  const column = which === 2 ? "photo_path_2" : "photo_path";
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT photo_path FROM meals WHERE id = ? AND user_id = ?",
+    sql: `SELECT ${column} AS photo_path FROM meals WHERE id = ? AND user_id = ?`,
     args: [id, userId],
   });
   const row = res.rows[0] as unknown as { photo_path: string | null } | undefined;

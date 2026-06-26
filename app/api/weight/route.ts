@@ -31,7 +31,7 @@ const DeleteSchema = z.object({
 });
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const [log, profile] = await Promise.all([
     getWeightLog(userId),
     getProfile(userId),
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const { date, weight_kg, note } = parsed.data;
   const useDate = date ?? todayStr();
   const sync = parsed.data.sync_profile !== false; // default true
@@ -79,7 +79,7 @@ export async function PATCH(req: NextRequest) {
       { status: 400 },
     );
   }
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const profile = await getProfile(userId);
   if (!profile || profile.goal_calories == null) {
     return NextResponse.json(
@@ -110,7 +110,7 @@ export async function DELETE(req: NextRequest) {
       { status: 400 },
     );
   }
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   await deleteWeight(userId, parsed.data.date);
   return NextResponse.json({ ok: true });
 }

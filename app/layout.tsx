@@ -3,6 +3,7 @@ import "./globals.css";
 import AppNav from "@/components/AppNav";
 import LangProvider from "@/components/LangProvider";
 import PWARegister from "@/components/PWARegister";
+import AuthProvider from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Health",
@@ -49,16 +50,18 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-bg text-white">
-        <LangProvider>
-          <div className="md:flex md:min-h-dvh">
-            <AppNav />
-            <div className="flex-1 md:flex md:justify-center">
-              <div className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-6xl min-h-dvh flex flex-col md:px-8 md:py-8">
-                <main className="flex-1 pb-28 md:pb-0 safe-top">{children}</main>
+        <AuthProvider>
+          <LangProvider>
+            <div className="md:flex md:min-h-dvh">
+              <AppNav />
+              <div className="flex-1 md:flex md:justify-center">
+                <div className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-6xl min-h-dvh flex flex-col md:px-8 md:py-8">
+                  <main className="flex-1 pb-28 md:pb-0 safe-top">{children}</main>
+                </div>
               </div>
             </div>
-          </div>
-        </LangProvider>
+          </LangProvider>
+        </AuthProvider>
         {/* Registers the service worker on the client. Kept as a tiny
             standalone client component so we don't have to turn this whole
             layout into a client component just for one effect. */}

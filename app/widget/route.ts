@@ -18,7 +18,7 @@ function bar(value: number, target: number) {
 }
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const today = todayStr();
 
   const [profile, meals] = await Promise.all([

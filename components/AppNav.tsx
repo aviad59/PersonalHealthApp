@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useLang } from "@/components/LangProvider";
 import { t } from "@/lib/i18n";
+import { isUserId, getUserConfig } from "@/lib/user";
 
 type NavItem = {
   href: string;
@@ -23,13 +24,6 @@ const items: NavItem[] = [
   { href: "/profile", labelKey: "nav_profile", icon: UserIcon },
 ];
 
-/** Read the cowork_user cookie on the client to decide which tabs to show. */
-function readUserCookie(): string | null {
-  if (typeof document === "undefined") return null;
-  const m = document.cookie.match(/(?:^|;\s*)cowork_user=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
 /**
  * App navigation. Renders as a bottom tab bar on mobile/tablet and as a
  * sticky left sidebar on desktop (md and up), sharing the same item list
@@ -38,14 +32,12 @@ function readUserCookie(): string | null {
 export default function AppNav() {
   const pathname = usePathname() || "/";
   const lang = useLang();
-  const [hideWorkouts, setHideWorkouts] = useState(false);
-  useEffect(() => {
-    const u = readUserCookie();
-    setHideWorkouts(u === "orly");
-  }, [pathname]);
+  const { data: session } = useSession();
+  const appUserId = (session as any)?.appUserId;
+  const hideWorkouts = isUserId(appUserId) ? !getUserConfig(appUserId).hasWorkouts : false;
 
   if (pathname.startsWith("/onboarding")) return null;
-  if (pathname.startsWith("/select-user")) return null;
+  if (pathname.startsWith("/signin")) return null;
   const visible = items.filter((it) => !(it.workoutsOnly && hideWorkouts));
 
   return (

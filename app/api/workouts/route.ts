@@ -107,7 +107,7 @@ function buildResponse(workouts: HevyWorkout[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const haveKey = hasHevyKey(userId);
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";

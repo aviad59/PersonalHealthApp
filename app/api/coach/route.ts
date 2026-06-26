@@ -22,7 +22,7 @@ import {
   dateKey,
   Meal,
 } from "@/lib/db";
-import { anthropic, CLAUDE_OPUS_MODEL } from "@/lib/anthropic";
+import { anthropic, CLAUDE_OPUS_MODEL, imageBlockFromDataUri } from "@/lib/anthropic";
 import { COACH_SYSTEM } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig, type UserId } from "@/lib/user";
@@ -158,16 +158,10 @@ async function executeTool(
     ];
 
     for (const m of meals) {
-      if (m.photo_thumb && m.photo_thumb.startsWith("data:")) {
-        const commaIdx = m.photo_thumb.indexOf(",");
-        const meta = m.photo_thumb.slice(0, commaIdx);
-        const base64 = m.photo_thumb.slice(commaIdx + 1);
-        const mediaType = (meta.match(/data:([^;]+)/) ?? [])[1] ?? "image/jpeg";
-        content.push({
-          type: "image",
-          source: { type: "base64", media_type: mediaType, data: base64 },
-        });
-      }
+      const img1 = imageBlockFromDataUri(m.photo_thumb);
+      if (img1) content.push(img1);
+      const img2 = imageBlockFromDataUri(m.photo_thumb_2);
+      if (img2) content.push(img2);
     }
 
     return content;
@@ -357,7 +351,7 @@ async function buildContext(userId: UserId): Promise<any> {
 // ---------------------------------------------------------------------------
 export async function GET() {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const messages = await getCoachMessages(userId, HISTORY_LIMIT);
     return NextResponse.json({ messages });
   } catch (e: any) {
@@ -370,7 +364,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getCurrentUserIdOrDefault();
+    const userId = await getCurrentUserIdOrDefault();
     const body = await req.json().catch(() => ({}));
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
@@ -471,7 +465,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   await clearCoachMessages(userId);
   return NextResponse.json({ ok: true });
 }

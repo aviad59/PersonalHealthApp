@@ -105,7 +105,7 @@ async function generate(args: {
 }
 
 export async function GET() {
-  const userId = getCurrentUserIdOrDefault();
+  const userId = await getCurrentUserIdOrDefault();
   const cfg = getUserConfig(userId);
   const date = todayStr();
 
