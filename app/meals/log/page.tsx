@@ -69,6 +69,45 @@ type ReviewResult = {
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
+/** One-tap quick-add items shown above the photo picker. The protein-powder
+ *  chip opens the existing customization sheet (it has a liquid-base step);
+ *  the rest log themselves directly with fixed macros, since coffee/water/
+ *  creatine don't really vary day-to-day. */
+type QuickAdd =
+  | { kind: "protein_powder"; label: string; icon: "shaker" }
+  | {
+      kind: "fixed";
+      label: string;
+      description: string;
+      icon: "coffee" | "creatine" | "water";
+      macros: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+    };
+
+const QUICK_ADDS: QuickAdd[] = [
+  { kind: "protein_powder", label: "אבקת חלבון", icon: "shaker" },
+  {
+    kind: "fixed",
+    label: "קפה שחור",
+    description: "קפה שחור",
+    icon: "coffee",
+    macros: { calories: 2, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  },
+  {
+    kind: "fixed",
+    label: "קריאטין",
+    description: "קריאטין מונוהידרט (5g)",
+    icon: "creatine",
+    macros: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  },
+  {
+    kind: "fixed",
+    label: "מים 500מ״ל",
+    description: "מים 500 מ״ל",
+    icon: "water",
+    macros: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  },
+];
+
 function todayStr() {
   const d = new Date();
   const y = d.getFullYear();
@@ -161,6 +200,9 @@ export default function LogMealPage() {
   // Protein powder state
   const [proteinMode, setProteinMode] = useState(false);
   const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
+
+  // Which quick-add chip is currently saving (so the others stay tappable).
+  const [quickAddBusy, setQuickAddBusy] = useState<string | null>(null);
   const [proteinSaving, setProteinSaving] = useState(false);
 
   // Coach review state
@@ -661,6 +703,30 @@ export default function LogMealPage() {
     }
   }
 
+  async function addQuickItem(item: Extract<QuickAdd, { kind: "fixed" }>) {
+    if (quickAddBusy) return;
+    setQuickAddBusy(item.description);
+    setErr(null);
+    try {
+      await safeFetchJson("/api/meals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date,
+          description: item.description,
+          ...item.macros,
+          confidence: "high",
+        }),
+      });
+      await loadExisting(date);
+      refreshFrequentMeals();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setQuickAddBusy(null);
+    }
+  }
+
   async function deleteMeal(id: number) {
     if (!confirm(t(lang, "meal_delete_confirm"))) return;
     try {
@@ -808,13 +874,38 @@ export default function LogMealPage() {
             </button>
           </div>
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
-          <button
-            onClick={() => { setProteinMode(true); setErr(null); }}
-            className="w-full rounded-2xl border border-border bg-bg-elev py-3 flex items-center justify-center gap-2.5 text-sm text-white/70 font-medium"
-          >
-            <ShakerIcon className="h-5 w-5 text-white/50" />
-            אבקת חלבון
-          </button>
+          {/* Quick-add carousel — one-tap entries for frequent zero-decision
+              items (protein powder, coffee, creatine, water). Horizontal
+              scroll keeps it tidy on phones and leaves room to grow without
+              redesigning the picker. */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
+            {QUICK_ADDS.map((q) => {
+              const isProtein = q.kind === "protein_powder";
+              const isBusy = !isProtein && quickAddBusy === q.description;
+              return (
+                <button
+                  key={q.label}
+                  type="button"
+                  onClick={() => {
+                    setErr(null);
+                    if (isProtein) {
+                      setProteinMode(true);
+                    } else {
+                      addQuickItem(q);
+                    }
+                  }}
+                  disabled={isBusy || (!!quickAddBusy && !isProtein && quickAddBusy !== q.description)}
+                  className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
+                >
+                  <QuickAddIcon icon={q.icon} className="h-4 w-4 text-white/55" />
+                  <span className="whitespace-nowrap">{q.label}</span>
+                  {isBusy && (
+                    <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -879,37 +970,40 @@ export default function LogMealPage() {
 
       {photoPreview && !manualMode && !proteinMode && (
         <div className="space-y-3">
-          <div className={`flex gap-2 ${photoPreview2 ? "" : ""}`}>
-            <div className="relative rounded-2xl overflow-hidden border border-border flex-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photoPreview}
-                alt="meal"
-                onClick={() => setLightboxSrc(photoPreview)}
-                className="w-full object-cover max-h-80 cursor-zoom-in"
+          {/* Horizontal thumbnail track — once a photo is picked, the big
+              upload buttons collapse into compact previews so the user can
+              see, swap, and add a second angle without losing screen space. */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            <PhotoThumb
+              src={photoPreview}
+              alt="meal"
+              analyzing={analyzing}
+              onZoom={() => setLightboxSrc(photoPreview)}
+              onRemove={clearPhoto}
+            />
+            {photoPreview2 ? (
+              <PhotoThumb
+                src={photoPreview2}
+                alt="meal, second angle"
+                analyzing={analyzing}
+                onZoom={() => setLightboxSrc(photoPreview2)}
+                onRemove={clearPhoto2}
               />
-              {analyzing && <AiScanOverlay />}
-            </div>
-            {photoPreview2 && (
-              <div className="relative rounded-2xl overflow-hidden border border-border flex-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoPreview2}
-                  alt="meal, second angle"
-                  onClick={() => setLightboxSrc(photoPreview2)}
-                  className="w-full h-full object-cover max-h-80 cursor-zoom-in"
-                />
-                {analyzing && <AiScanOverlay />}
-                <button
-                  onClick={clearPhoto2}
-                  className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-sm leading-none flex items-center justify-center"
-                >
-                  ×
-                </button>
-              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => camera2Ref.current?.click()}
+                className="shrink-0 w-28 h-28 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white/80 hover:border-accent-brand/50 transition-colors"
+                aria-label={t(lang, "meal_add_second_photo")}
+              >
+                <span className="text-2xl leading-none">+</span>
+                <span className="text-[10px] text-center px-1 leading-tight">
+                  {t(lang, "meal_add_second_photo")}
+                </span>
+              </button>
             )}
           </div>
-          <div className="flex gap-4 text-sm">
+          <div className="flex gap-4 text-sm flex-wrap">
             <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
               {t(lang, "meal_retake")}
             </button>
@@ -917,18 +1011,10 @@ export default function LogMealPage() {
               {t(lang, "meal_pick_gallery")}
             </button>
             {!photoPreview2 && (
-              <button onClick={() => camera2Ref.current?.click()} className="text-accent-brand">
-                {t(lang, "meal_add_second_photo")}
-              </button>
-            )}
-            {!photoPreview2 && (
               <button onClick={() => gallery2Ref.current?.click()} className="text-accent-brand">
-                {t(lang, "meal_pick_gallery")}
+                {t(lang, "meal_pick_gallery")} #2
               </button>
             )}
-            <button onClick={clearPhoto} className="text-white/50 ml-auto">
-              {t(lang, "meal_remove_photo")}
-            </button>
           </div>
           {!photoPreview2 && (
             <p className="text-[11px] text-white/40">{t(lang, "meal_second_photo_hint")}</p>
@@ -1577,6 +1663,35 @@ function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function QuickAddIcon({ icon, className }: { icon: "shaker" | "coffee" | "creatine" | "water"; className?: string }) {
+  const stroke = { fill: "none" as const, stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (icon === "shaker") return <ShakerIcon className={className} />;
+  if (icon === "coffee") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} {...stroke}>
+        <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9Z" />
+        <path d="M17 11h2a2 2 0 0 1 0 4h-2" />
+        <path d="M7 3v2M11 3v2" />
+      </svg>
+    );
+  }
+  if (icon === "water") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} {...stroke}>
+        <path d="M12 3s6 7.5 6 12a6 6 0 0 1-12 0c0-4.5 6-12 6-12Z" />
+      </svg>
+    );
+  }
+  // creatine — supplement scoop
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...stroke}>
+      <rect x="3" y="5" width="14" height="14" rx="2" />
+      <path d="M17 9l4-2v10l-4-2z" />
+      <line x1="7" y1="10" x2="13" y2="10" />
+    </svg>
+  );
+}
+
 /** Sweeping light-beam overlay shown on top of a photo while Claude is
  *  reading it — signals "AI is looking at this" rather than a generic
  *  loading skeleton. */
@@ -1584,6 +1699,43 @@ function AiScanOverlay() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none bg-black/10">
       <div className="ai-scan-line" />
+    </div>
+  );
+}
+
+/** Compact 112px thumbnail used in the horizontal photo track once at
+ *  least one photo has been picked. Shows the AI scan beam while the meal
+ *  is being analyzed, and a × overlay to remove the photo. */
+function PhotoThumb({
+  src,
+  alt,
+  analyzing,
+  onZoom,
+  onRemove,
+}: {
+  src: string;
+  alt: string;
+  analyzing: boolean;
+  onZoom: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="relative shrink-0 w-28 h-28 rounded-2xl overflow-hidden border border-border">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        onClick={onZoom}
+        className="w-full h-full object-cover cursor-zoom-in"
+      />
+      {analyzing && <AiScanOverlay />}
+      <button
+        onClick={onRemove}
+        aria-label="Remove photo"
+        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/65 text-white text-sm leading-none flex items-center justify-center hover:bg-black/85 transition-colors"
+      >
+        ×
+      </button>
     </div>
   );
 }

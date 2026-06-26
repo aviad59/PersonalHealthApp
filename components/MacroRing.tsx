@@ -5,10 +5,21 @@ type Props = {
   value: number;
   target: number;
   unit: string;
-  color: string; // hex or CSS color
+  color: string; // hex or CSS color for the base ring
   size?: number; // px
 };
 
+/** Macro ring with overage layer.
+ *
+ *  - When `value <= target`, render a single ring filled to value/target in
+ *    the macro's brand color.
+ *  - When `value > target`, the base ring stays filled to 100% (so the user
+ *    can still read it as "you hit your goal"), and we render a second,
+ *    slightly thinner outer ring whose dash tracks how far past target the
+ *    user went, drawn in an amber→red glow to flag the overshoot. The overage
+ *    ring caps at one full revolution (200% of target) so a 3× day doesn't
+ *    spin invisibly.
+ */
 export default function MacroRing({
   label,
   value,
@@ -17,39 +28,103 @@ export default function MacroRing({
   color,
   size = 92,
 }: Props) {
-  const pct = target > 0 ? Math.min(1, value / target) : 0;
+  const safeTarget = target > 0 ? target : 0;
+  const ratio = safeTarget > 0 ? value / safeTarget : 0;
+  const basePct = Math.min(1, ratio);
+  const over = Math.max(0, ratio - 1);
+  const overPct = Math.min(1, over); // visually cap at +100% past target
+
   const stroke = 9;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = c * pct;
+  const overStroke = 5;
+  const overGap = 4; // px between base ring and overage ring
+  const baseR = (size - stroke) / 2;
+  const baseC = 2 * Math.PI * baseR;
+  const baseDash = baseC * basePct;
+
+  const overR = baseR + stroke / 2 + overGap + overStroke / 2;
+  const overC = 2 * Math.PI * overR;
+  const overDash = overC * overPct;
+
+  // SVG must be large enough to contain the overage ring + glow.
+  const svgSize = size + (overGap + overStroke + 6) * 2;
+  const center = svgSize / 2;
+
+  const hasOver = over > 0;
+  const gradientId = `over-${label.replace(/\s+/g, "")}`;
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="-rotate-90">
+      <div className="relative" style={{ width: svgSize, height: svgSize }}>
+        <svg width={svgSize} height={svgSize} className="-rotate-90">
+          {hasOver && (
+            <defs>
+              <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f59e0b" />
+                <stop offset="100%" stopColor="#ef4444" />
+              </linearGradient>
+            </defs>
+          )}
+
+          {/* Base track */}
           <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
+            cx={center}
+            cy={center}
+            r={baseR}
             stroke="#26262b"
             strokeWidth={stroke}
             fill="none"
           />
+          {/* Base value ring */}
           <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
+            cx={center}
+            cy={center}
+            r={baseR}
             stroke={color}
             strokeWidth={stroke}
             fill="none"
-            strokeDasharray={`${dash} ${c}`}
+            strokeDasharray={`${baseDash} ${baseC}`}
             strokeLinecap="round"
             style={{ transition: "stroke-dasharray 300ms ease" }}
           />
+
+          {/* Overage layer */}
+          {hasOver && (
+            <>
+              {/* Faint outer track so the overage ring has something to sit on */}
+              <circle
+                cx={center}
+                cy={center}
+                r={overR}
+                stroke="#26262b"
+                strokeOpacity={0.7}
+                strokeWidth={overStroke}
+                fill="none"
+              />
+              <circle
+                cx={center}
+                cy={center}
+                r={overR}
+                stroke={`url(#${gradientId})`}
+                strokeWidth={overStroke}
+                fill="none"
+                strokeDasharray={`${overDash} ${overC}`}
+                strokeLinecap="round"
+                style={{
+                  filter: "drop-shadow(0 0 3px rgba(239, 68, 68, 0.6))",
+                  transition: "stroke-dasharray 300ms ease",
+                }}
+              />
+            </>
+          )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="text-sm font-semibold text-white">{Math.round(value)}</div>
-          <div className="text-[10px] text-white/50">/ {target}{unit}</div>
+          <div className={`text-sm font-semibold ${hasOver ? "text-amber-300" : "text-white"}`}>
+            {Math.round(value)}
+          </div>
+          <div className="text-[10px] text-white/50">
+            / {target}
+            {unit}
+          </div>
         </div>
       </div>
       <div className="text-[11px] uppercase tracking-wide text-white/60">{label}</div>

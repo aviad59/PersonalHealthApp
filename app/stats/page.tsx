@@ -28,6 +28,17 @@ type Stats = {
 
 const RANGES = [7, 14, 30] as const;
 
+/** Per-metric palette — matches the home dashboard macro rings so visual
+ *  identity stays consistent: kcal=green, protein=red, carbs=orange,
+ *  fat=blue. `base` is used for today's filled bar; `dim` for past days. */
+const METRIC_COLORS = {
+  calories: { base: "#10b981", dim: "rgba(16, 185, 129, 0.55)", ring: "rgba(16, 185, 129, 0.45)" },
+  protein_g: { base: "#ef4444", dim: "rgba(239, 68, 68, 0.55)", ring: "rgba(239, 68, 68, 0.45)" },
+  fat_g: { base: "#3b82f6", dim: "rgba(59, 130, 246, 0.55)", ring: "rgba(59, 130, 246, 0.45)" },
+  carbs_g: { base: "#f59e0b", dim: "rgba(245, 158, 11, 0.55)", ring: "rgba(245, 158, 11, 0.45)" },
+} as const;
+type MetricKey = keyof typeof METRIC_COLORS;
+
 function lsGet<T>(key: string): T | null {
   try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
 }
@@ -173,19 +184,30 @@ export default function StatsPage() {
                 {metricLabel[metric]} {t(lang, "stats_per_day")}
               </div>
               <div className="flex gap-1">
-                {(["calories", "protein_g", "fat_g", "carbs_g"] as const).map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => setMetric(k)}
-                    className={`text-[10px] rounded-full px-2.5 py-1 border ${
-                      metric === k
-                        ? "bg-accent-brand/20 text-accent-brand border-accent-brand/40"
-                        : "bg-bg-elev text-white/60 border-border"
-                    }`}
-                  >
-                    {k === "calories" ? t(lang, "macro_kcal") : k === "protein_g" ? "P" : k === "fat_g" ? "F" : "C"}
-                  </button>
-                ))}
+                {(["calories", "protein_g", "fat_g", "carbs_g"] as const).map((k) => {
+                  const c = METRIC_COLORS[k];
+                  const active = metric === k;
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setMetric(k)}
+                      className="text-[10px] rounded-full px-2.5 py-1 border transition-colors"
+                      style={
+                        active
+                          ? {
+                              backgroundColor: `${c.base}26`,
+                              color: c.base,
+                              borderColor: c.ring,
+                            }
+                          : undefined
+                      }
+                    >
+                      <span className={active ? "" : "text-white/60"}>
+                        {k === "calories" ? t(lang, "macro_kcal") : k === "protein_g" ? "P" : k === "fat_g" ? "F" : "C"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -386,6 +408,21 @@ function BarChart({
             const isToday = d.date === series[series.length - 1].date;
             const empty = d.meals === 0;
             const isSelected = selected === d.date;
+            const c = METRIC_COLORS[metric];
+            // Today's bar gets a diagonal-stripe overlay + a thin dashed
+            // ring so the still-unfolding day reads visually different from
+            // historical days, even when the macro tally is low.
+            const barStyle: React.CSSProperties = isSelected
+              ? { height: h, background: "#fff" }
+              : empty
+              ? { height: h, background: "rgba(255,255,255,0.1)" }
+              : isToday
+              ? {
+                  height: h,
+                  background: `repeating-linear-gradient(135deg, ${c.base} 0 4px, ${c.base}99 4px 8px)`,
+                  boxShadow: `inset 0 0 0 1px ${c.ring}`,
+                }
+              : { height: h, background: c.dim };
             return (
               <div
                 key={d.date}
@@ -393,16 +430,8 @@ function BarChart({
                 onClick={() => setSelected((prev: string | null) => (prev === d.date ? null : d.date))}
               >
                 <div
-                  className={`w-full rounded-t-sm transition-colors ${
-                    isSelected
-                      ? "bg-white"
-                      : empty
-                      ? "bg-white/10"
-                      : isToday
-                      ? "bg-accent-brand"
-                      : "bg-accent-brand/60"
-                  }`}
-                  style={{ height: h }}
+                  className="w-full rounded-t-sm transition-[height,background] duration-300"
+                  style={barStyle}
                 />
               </div>
             );

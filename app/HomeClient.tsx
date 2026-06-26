@@ -6,7 +6,7 @@ import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
 import { useLang } from "@/components/LangProvider";
-import { t } from "@/lib/i18n";
+import { t, Lang } from "@/lib/i18n";
 
 type MuscleStatus = {
   muscle: string;
@@ -224,7 +224,7 @@ export default function HomeClient({
                 </div>
                 <div className="flex-1">
                   <ScoreBar score={recovery.score} band={recovery.band} />
-                  <p className="text-[12px] text-white/60 mt-2 leading-snug">{recovery.rationale}</p>
+                  <RecoveryRationale recovery={recovery} lang={lang} />
                 </div>
               </div>
               <div className="mt-4">
@@ -346,6 +346,79 @@ function HomeSkeleton() {
   );
 }
 
+function RecoveryRationale({ recovery, lang }: { recovery: Recovery; lang: Lang }) {
+  const [open, setOpen] = useState(false);
+  // Turn the flat rationale into a tap-target that expands an inline
+  // breakdown of the signals that drove the score. No portal/modal — a
+  // disclosure feels lighter on the small home cards.
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="group flex items-start gap-1.5 text-left leading-snug hover:opacity-90 transition-opacity"
+      >
+        <span className="text-[12px] text-white/60">{recovery.rationale}</span>
+        <svg
+          viewBox="0 0 24 24"
+          className={`mt-[3px] h-3 w-3 shrink-0 text-accent-brand transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-2 rounded-lg border border-border bg-bg-elev p-3 space-y-1.5 text-[11px]">
+          <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1">
+            {t(lang, "home_recovery_breakdown")}
+          </div>
+          <RationaleRow
+            label={t(lang, "home_recovery_protein")}
+            value={`${recovery.proteinAdherencePct}%`}
+            highlight={recovery.proteinAdherencePct < 85}
+          />
+          <RationaleRow
+            label={t(lang, "home_recovery_calories")}
+            value={`${recovery.calorieDeviationPct}% ${t(lang, "home_recovery_off_target")}`}
+            highlight={recovery.calorieDeviationPct > 15}
+          />
+          {recovery.signalsUsed.workouts && (
+            <RationaleRow
+              label={t(lang, "home_recovery_back_to_back")}
+              value={recovery.backToBackSessions ? t(lang, "home_recovery_yes") : t(lang, "home_recovery_no")}
+              highlight={recovery.backToBackSessions}
+            />
+          )}
+          {recovery.avgRpeLast3Days !== null && (
+            <RationaleRow
+              label={t(lang, "home_recovery_rpe")}
+              value={recovery.avgRpeLast3Days.toFixed(1)}
+              highlight={recovery.avgRpeLast3Days >= 8.5}
+            />
+          )}
+          <p className="text-[10px] text-white/40 leading-snug pt-1.5 mt-1.5 border-t border-border">
+            {t(lang, "home_recovery_explainer")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RationaleRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-white/60">{label}</span>
+      <span className={highlight ? "text-amber-400 font-medium" : "text-white/85"}>{value}</span>
+    </div>
+  );
+}
+
 function bandClasses(band: Recovery["band"]) {
   if (band === "high") return "border-emerald-500/40 text-emerald-400 bg-emerald-500/10";
   if (band === "good") return "border-green-500/40 text-green-400 bg-green-500/10";
@@ -366,6 +439,18 @@ function ScoreBar({ score, band }: { score: number; band: Recovery["band"] }) {
   );
 }
 
+/** Long muscle names get a 6-or-fewer-char abbreviation so the recovery
+ *  pills don't ellipsize at narrow widths. Names ≤6 chars stay verbatim. */
+const MUSCLE_SHORT: Record<string, string> = {
+  shoulders: "SHLDR",
+  hamstrings: "HAMS",
+  triceps: "TRI",
+};
+
+function shortenMuscle(name: string): string {
+  return MUSCLE_SHORT[name.toLowerCase()] ?? name;
+}
+
 function MusclePill({ status, todayLabel }: { status: MuscleStatus; todayLabel: string }) {
   const colors = {
     rest: "border-red-500/40 text-red-400 bg-red-500/10",
@@ -373,8 +458,10 @@ function MusclePill({ status, todayLabel }: { status: MuscleStatus; todayLabel: 
     ready: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
   };
   return (
-    <div className={`rounded-lg border px-1.5 py-1 text-center ${colors[status.readiness]}`}>
-      <div className="text-[9px] font-semibold uppercase tracking-wide truncate">{status.muscle}</div>
+    <div className={`rounded-lg border px-1 py-1 text-center ${colors[status.readiness]}`}>
+      <div className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-tight whitespace-nowrap">
+        {shortenMuscle(status.muscle)}
+      </div>
       <div className="text-[9px] mt-0.5">
         {status.daysSince === 0 ? todayLabel : status.daysSince === null ? "—" : `${status.daysSince}d`}
       </div>
