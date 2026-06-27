@@ -90,7 +90,11 @@ const SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts_cache(date);
-  CREATE INDEX IF NOT EXISTS idx_workouts_user_date ON workouts_cache(user_id, date);
+  -- NOTE: the (user_id, date) index is intentionally NOT here. SCHEMA is
+  -- executed before COLUMN_ADDS, so on a long-running DB where the
+  -- user_id column hasn't been added yet, creating that index here would
+  -- fail with "no such column: user_id" and abort the whole init. The
+  -- index is added in POST_COLUMN_INDEXES below, after the column add.
 
   CREATE TABLE IF NOT EXISTS suggestions (
     date TEXT PRIMARY KEY,
@@ -141,6 +145,14 @@ const COLUMN_ADDS: { sql: string }[] = [
   // Per-user scoping for the Hevy workout cache. Existing rows default to
   // 'idan' since he was the only user with workouts pre-migration.
   { sql: "ALTER TABLE workouts_cache ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
+];
+
+// Indexes that reference columns added by COLUMN_ADDS — they MUST run after
+// the ALTERs above, otherwise on a pre-migration DB they'd fail with
+// "no such column" and abort init. Each is wrapped in IF NOT EXISTS so
+// re-running is harmless.
+const POST_COLUMN_INDEXES: { sql: string }[] = [
+  { sql: "CREATE INDEX IF NOT EXISTS idx_workouts_user_date ON workouts_cache(user_id, date)" },
 ];
 
 // Per-user variants of the tables that previously had a `date` primary key
@@ -272,6 +284,10 @@ async function ensureInit(): Promise<void> {
           const msg = String(err?.message || err);
           if (!/duplicate column/i.test(msg)) throw err;
         }
+      }
+      // Indexes that need columns added above to exist first.
+      for (const idx of POST_COLUMN_INDEXES) {
+        await c.execute(idx.sql);
       }
       // Backfill idan's data from legacy tables. Each statement is
       // INSERT OR IGNORE so it never overwrites or modifies existing rows.
