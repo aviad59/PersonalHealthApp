@@ -15,7 +15,7 @@
 // next step (IndexedDB + Background Sync). This SW is the minimum to make the
 // app installable and feel native on Android.
 
-const VERSION = "health-v2";
+const VERSION = "health-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PHOTO_CACHE = `${VERSION}-photos`;
 
@@ -177,3 +177,46 @@ async function networkFirstHtml(req) {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Web Push — show the daily-insight notification, and focus/open the app
+// when the user taps it.
+// ---------------------------------------------------------------------------
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: "Update", body: event.data ? event.data.text() : "" };
+  }
+  const title = payload.title || "Health";
+  const options = {
+    body: payload.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: payload.tag || "default",
+    renotify: true,
+    data: { url: payload.url || "/" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of all) {
+        // Reuse an existing tab if one is already on this origin.
+        const u = new URL(c.url);
+        if (u.origin === self.location.origin) {
+          await c.focus();
+          if (c.navigate) c.navigate(url);
+          return;
+        }
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});

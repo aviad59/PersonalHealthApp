@@ -10,6 +10,8 @@ import {
   todayStr,
   daysAgoStr,
   dateKey,
+  startOfWeekStr,
+  diffDaysKey,
 } from "@/lib/db";
 import { HevyWorkout, workoutVolumeKg, workoutDurationMin } from "@/lib/hevy";
 import { estimateWorkoutBurn } from "@/lib/burn";
@@ -57,6 +59,7 @@ export async function GET() {
       todaysWorkout: null,
       training_burn_kcal: 0,
       recovery: null,
+      week: null,
     });
   }
 
@@ -117,10 +120,40 @@ export async function GET() {
     recentWorkouts: recentHevy,
   });
 
+  // Weekly summary — count distinct workout dates Sunday→today, compare
+  // against the user's weekly_workout_target. We compute pace so the UI
+  // can flag "behind / on / ahead" without re-doing the math client-side.
+  const weekStart = startOfWeekStr();
+  const weekDates = new Set<string>();
+  for (const w of recentHevy) {
+    const t = Date.parse(w.start_time || "");
+    if (!Number.isFinite(t)) continue;
+    const key = dateKey(new Date(t));
+    if (key >= weekStart && key <= today) weekDates.add(key);
+  }
+  const completed = weekDates.size;
+  const target = profile?.weekly_workout_target ?? 0;
+  const daysIntoWeek = diffDaysKey(today, weekStart) + 1; // 1 on Sun .. 7 on Sat
+  // Linear pace: by day N of 7 you should have target * (N/7) done. We allow
+  // a 1-workout grace before flagging "behind", since a missed Monday gym
+  // is easy to catch up later in the week.
+  let pace: "behind" | "on" | "ahead" = "on";
+  if (target > 0) {
+    const expected = (target * daysIntoWeek) / 7;
+    if (completed + 1 < expected) pace = "behind";
+    else if (completed >= target) pace = "ahead";
+  }
+
   return NextResponse.json({
     date: today,
     todaysWorkout,
     training_burn_kcal: todaysWorkout?.burn_kcal ?? 0,
     recovery,
+    week: {
+      starts_on: weekStart,
+      completed,
+      target,
+      pace,
+    },
   });
 }

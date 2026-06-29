@@ -230,6 +230,20 @@ const PER_USER_TABLES = `
     meals_json TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Web Push subscriptions. One row per (user_id, browser endpoint) so a
+  -- user can have multiple devices. Used by the daily-insight cron to
+  -- notify everyone who opted in.
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    user_id TEXT NOT NULL,
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
 `;
 
 // One-time copy of the legacy single-row / date-keyed tables into the new
@@ -670,25 +684,6 @@ export type DaySuggestion = {
   updated_at: string;
 };
 
-/** Return the last `limit` suggestion bodies for this user, newest first.
- *  Used as anti-repetition context so the model doesn't keep suggesting
- *  the same grilled-chicken-and-veg every day. */
-export async function getRecentSuggestions(
-  userId: string,
-  limit = 5,
-): Promise<DaySuggestion[]> {
-  const db = await getDb();
-  const res = await db.execute({
-    sql: `SELECT date, body, meals_count, totals_calories, totals_protein_g, created_at, updated_at
-            FROM user_suggestions
-           WHERE user_id = ?
-           ORDER BY date DESC
-           LIMIT ?`,
-    args: [userId, limit],
-  });
-  return res.rows as unknown as DaySuggestion[];
-}
-
 // ---------------------------------------------------------------
 // Weight log
 // ---------------------------------------------------------------
@@ -902,4 +897,67 @@ export async function getFrequentMeals(userId: string): Promise<FrequentMeal[]> 
     }
   }
   return refreshFrequentMeals(userId);
+}
+
+// ---------------------------------------------------------------
+// Push subscriptions
+// ---------------------------------------------------------------
+
+export type PushSubscriptionRow = {
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+  last_used_at: string | null;
+};
+
+/** Idempotent insert — one row per (user_id, endpoint). */
+export async function upsertPushSubscription(
+  userId: string,
+  sub: { endpoint: string; keys: { p256dh: string; auth: string } },
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+          VALUES (?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(endpoint) DO UPDATE SET
+            user_id = excluded.user_id,
+            p256dh = excluded.p256dh,
+            auth = excluded.auth`,
+    args: [userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth],
+  });
+}
+
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM push_subscriptions WHERE endpoint = ?",
+    args: [endpoint],
+  });
+}
+
+export async function getPushSubscriptionsForUser(userId: string): Promise<PushSubscriptionRow[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT user_id, endpoint, p256dh, auth, created_at, last_used_at FROM push_subscriptions WHERE user_id = ?",
+    args: [userId],
+  });
+  return res.rows as unknown as PushSubscriptionRow[];
+}
+
+export async function getAllPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+  const db = await getDb();
+  const res = await db.execute(
+    "SELECT user_id, endpoint, p256dh, auth, created_at, last_used_at FROM push_subscriptions",
+  );
+  return res.rows as unknown as PushSubscriptionRow[];
+}
+
+export async function touchPushSubscription(endpoint: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "UPDATE push_subscriptions SET last_used_at = datetime('now') WHERE endpoint = ?",
+    args: [endpoint],
+  });
 }

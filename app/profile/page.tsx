@@ -288,6 +288,9 @@ export default function ProfilePage() {
         {langSaving && <p className="text-xs text-white/40">{t(lang, "profile_lang_saving")}</p>}
       </section>
 
+      {/* Daily-insight push notifications */}
+      <PushToggle lang={lang} />
+
       {/* Text size picker */}
       <section className="card p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_text_size")}</h2>
@@ -726,4 +729,155 @@ function CurrentUserCard() {
       </button>
     </section>
   );
+}
+
+/**
+ * Web Push opt-in. Asks the browser for notification permission, registers
+ * the SW push subscription, and stores it server-side keyed to the user.
+ * Once subscribed, the morning cron will send today's daily insight here.
+ */
+function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
+  const [supported, setSupported] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermission>("default");
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ok =
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window;
+    setSupported(ok);
+    if (!ok) return;
+    setPermission(Notification.permission);
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setSubscribed(!!sub))
+      .catch(() => {});
+  }, []);
+
+  async function enable() {
+    setBusy(true);
+    setError(null);
+    try {
+      // 1. Ask permission.
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      if (perm !== "granted") {
+        setError(t(lang, "profile_push_denied"));
+        return;
+      }
+      // 2. Fetch VAPID public key.
+      const keyRes = await fetch("/api/push/vapid-public-key").then((r) => r.json());
+      if (!keyRes?.key) {
+        setError(t(lang, "profile_push_no_server_key"));
+        return;
+      }
+      // 3. Subscribe via SW.
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        // Browser docs and web-push docs both pass Uint8Array here, but
+        // lib.dom.d.ts narrows the type to BufferSource over plain
+        // ArrayBuffer. Cast through any to match real runtime behavior.
+        applicationServerKey: urlBase64ToUint8Array(keyRes.key) as unknown as BufferSource,
+      });
+      // 4. Send to server.
+      const json = sub.toJSON();
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+        }),
+      });
+      setSubscribed(true);
+    } catch (e: any) {
+      setError(e?.message ?? "subscribe failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch("/api/push/subscribe", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+      setSubscribed(false);
+    } catch (e: any) {
+      setError(e?.message ?? "unsubscribe failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!supported) {
+    return (
+      <section className="card p-5 space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+          {t(lang, "profile_push_title")}
+        </h2>
+        <p className="text-xs text-white/50">{t(lang, "profile_push_not_supported")}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+            {t(lang, "profile_push_title")}
+          </h2>
+          <p className="text-xs text-white/55 mt-1.5 leading-snug">
+            {t(lang, "profile_push_desc")}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={subscribed ? disable : enable}
+          disabled={busy || permission === "denied"}
+          className={`shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
+            subscribed
+              ? "bg-bg-elev border border-border text-white/70 hover:text-white"
+              : "bg-accent-brand text-white"
+          }`}
+        >
+          {busy
+            ? "…"
+            : subscribed
+            ? t(lang, "profile_push_disable")
+            : t(lang, "profile_push_enable")}
+        </button>
+      </div>
+      {permission === "denied" && (
+        <p className="text-[11px] text-amber-400">{t(lang, "profile_push_denied")}</p>
+      )}
+      {error && <p className="text-[11px] text-red-400">{error}</p>}
+    </section>
+  );
+}
+
+/** Convert the VAPID base64url-encoded public key into the Uint8Array
+ *  shape PushManager.subscribe expects. */
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = typeof window !== "undefined" ? window.atob(base64) : "";
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
 }

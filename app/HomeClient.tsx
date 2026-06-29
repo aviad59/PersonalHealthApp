@@ -67,6 +67,12 @@ type Training = {
   } | null;
   training_burn_kcal: number;
   recovery: Recovery | null;
+  week: {
+    starts_on: string;
+    completed: number;
+    target: number;
+    pace: "behind" | "on" | "ahead";
+  } | null;
 };
 
 function lsGet<T>(key: string): T | null {
@@ -169,7 +175,6 @@ export default function HomeClient({
   }
 
   const { totals, profile, meals, latestInsight, targets } = data;
-  const todaysWorkout = training?.todaysWorkout ?? null;
   const recovery = training?.recovery ?? null;
   const today = new Date(data.date);
   const burn = training?.training_burn_kcal ?? 0;
@@ -260,24 +265,17 @@ export default function HomeClient({
 
           {hasWorkouts && (
             <section className="card p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_todays_workout")}</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_this_week")}</h2>
                 <Link href="/workouts" className="text-xs text-accent-brand">{t(lang, "home_all_workouts")}</Link>
               </div>
               {!training ? (
                 <div className="animate-pulse space-y-2">
-                  <div className="h-4 w-2/3 rounded bg-white/10" />
-                  <div className="h-3 w-1/2 rounded bg-white/10" />
+                  <div className="h-4 w-1/3 rounded bg-white/10" />
+                  <div className="h-1.5 w-full rounded-full bg-white/10" />
                 </div>
-              ) : todaysWorkout ? (
-                <div>
-                  <div className="font-semibold">{todaysWorkout.title}</div>
-                  <div className="text-xs text-white/50 mt-0.5">
-                    {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{" "}
-                    · {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg volume
-                  </div>
-                  <div className="text-[11px] text-white/40 mt-1">≈ {todaysWorkout.burn_kcal} kcal burned ({todaysWorkout.burn_reason})</div>
-                </div>
+              ) : training.week ? (
+                <WeekWorkoutsBar week={training.week} lang={lang} todaysWorkout={training.todaysWorkout} />
               ) : (
                 <div className="text-sm text-white/50">{t(lang, "home_no_workout")}</div>
               )}
@@ -357,6 +355,67 @@ function HomeSkeleton() {
           <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
         </div>
       </div>
+    </div>
+  );
+}
+
+function WeekWorkoutsBar({
+  week,
+  lang,
+  todaysWorkout,
+}: {
+  week: NonNullable<Training["week"]>;
+  lang: Lang;
+  todaysWorkout: Training["todaysWorkout"];
+}) {
+  const { completed, target, pace } = week;
+  const ratio = target > 0 ? Math.min(1, completed / target) : 0;
+  const accent =
+    pace === "behind"
+      ? { text: "text-amber-400", bar: "bg-amber-400" }
+      : pace === "ahead"
+      ? { text: "text-emerald-400", bar: "bg-emerald-500" }
+      : { text: "text-accent-brand", bar: "bg-accent-brand" };
+  const remaining = Math.max(0, target - completed);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-3xl font-bold leading-none">{completed}</span>
+          <span className="text-sm text-white/40">
+            / {target || "—"} {t(lang, "home_workouts_short")}
+          </span>
+        </div>
+        <span className={`text-[11px] uppercase tracking-wider font-medium ${accent.text}`}>
+          {pace === "behind"
+            ? t(lang, "home_pace_behind")
+            : pace === "ahead"
+            ? t(lang, "home_pace_ahead")
+            : t(lang, "home_pace_on_track")}
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+        <div className={`h-full rounded-full ${accent.bar} transition-all`} style={{ width: `${ratio * 100}%` }} />
+      </div>
+      {target > 0 && remaining > 0 && (
+        <p className="text-[11px] text-white/50 mt-2">
+          {remaining} {t(lang, "home_workouts_left_this_week")}
+        </p>
+      )}
+      {todaysWorkout && (
+        <div className="mt-3 pt-3 border-t border-border text-[12px]">
+          <div className="text-white/85">
+            <span className="text-accent-brand mr-1.5">●</span>
+            {todaysWorkout.title}
+          </div>
+          <div className="text-[11px] text-white/40 mt-0.5">
+            {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            {" · "}
+            {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg
+            {" · ≈"}{todaysWorkout.burn_kcal} kcal
+          </div>
+        </div>
+      )}
     </div>
   );
 }
