@@ -824,6 +824,38 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
     }
   }
 
+  async function sendTest() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/push/test", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) {
+        setError(j.reason || j.error || `test failed (${r.status})`);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "test failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fireMorning() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/insights/morning", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) {
+        setError(j.error || `morning failed (${r.status})`);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "morning failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!supported) {
     return (
       <section className="card p-5 space-y-2">
@@ -867,6 +899,26 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
         <p className="text-[11px] text-amber-400">{t(lang, "profile_push_denied")}</p>
       )}
       {error && <p className="text-[11px] text-red-400">{error}</p>}
+      {subscribed && (
+        <div className="flex gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            onClick={sendTest}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-white/70 hover:text-white disabled:opacity-50"
+          >
+            {t(lang, "profile_push_test")}
+          </button>
+          <button
+            type="button"
+            onClick={fireMorning}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-white/70 hover:text-white disabled:opacity-50"
+          >
+            {t(lang, "profile_push_morning_now")}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

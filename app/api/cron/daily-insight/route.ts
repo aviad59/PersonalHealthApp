@@ -35,16 +35,34 @@ type PerUserResult =
     };
 
 function isAuthorized(req: NextRequest): boolean {
+  // Vercel cron always attaches this header when invoking a cron-tagged
+  // route, even without a CRON_SECRET — accept it as a valid source.
+  if (req.headers.get("x-vercel-cron") === "1") return true;
+  // Bearer-secret path, used by manual curl or by Vercel cron when
+  // CRON_SECRET is set in the project env.
   const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = req.headers.get("authorization") || "";
-  return header === `Bearer ${secret}`;
+  if (secret) {
+    const header = req.headers.get("authorization") || "";
+    if (header === `Bearer ${secret}`) return true;
+  }
+  return false;
 }
 
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  // Surface config gaps in the response so a failed run is easy to
+  // diagnose from the Vercel cron log instead of looking like a generic
+  // 200 with empty effects.
+  const env = {
+    have_vapid_public: !!process.env.VAPID_PUBLIC_KEY,
+    have_vapid_private: !!process.env.VAPID_PRIVATE_KEY,
+    have_vapid_subject: !!process.env.VAPID_SUBJECT,
+    have_anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+    have_cron_secret: !!process.env.CRON_SECRET,
+  };
 
   const results: PerUserResult[] = [];
 
@@ -93,7 +111,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, results });
+  return NextResponse.json({ ok: true, env, results });
 }
 
 async function loadTodaysHeadline(userId: string): Promise<string | null> {
