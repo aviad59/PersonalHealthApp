@@ -147,7 +147,17 @@ export default function CoachPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-7rem)] md:max-w-3xl md:mx-auto md:w-full">
+    <div
+      className="flex flex-col md:max-w-3xl md:mx-auto md:w-full"
+      // Fill the viewport minus the fixed bottom nav (7rem) AND minus the
+      // safe-area insets — otherwise the composer overshoots the nav on
+      // phones with a notch/gesture bar and its second placeholder line
+      // gets clipped.
+      style={{
+        height:
+          "calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
+      }}
+    >
       {/* Header */}
       <div className="px-5 pt-6 pb-3 flex items-end justify-between">
         <div>
@@ -187,7 +197,7 @@ export default function CoachPage() {
             value={input}
             onChange={autoGrow}
             onKeyDown={onKeyDown}
-            placeholder="Ask anything about your training or nutrition…"
+            placeholder="Ask about training or nutrition…"
             rows={1}
             className="flex-1 resize-none rounded-2xl bg-bg-elev border border-border px-4 py-3 text-[15px] leading-snug focus:outline-none focus:border-white/30"
           />
