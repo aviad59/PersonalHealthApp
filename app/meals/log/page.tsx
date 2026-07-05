@@ -66,12 +66,40 @@ type ReviewResult = {
   summary: string;
 };
 
+// Instant-paint cache, same pattern as Home/Stats/Workouts: hydrate from
+// the last snapshot immediately, refresh from the API in the background.
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
 /** Cap on how many frequent-meal chips show in the quick-add carousel.
  *  The full expandable list still lives further down on the page. */
 const FREQUENT_CHIP_LIMIT = 6;
+
+/** One entry in batch-logging mode, where each selected photo becomes its
+ *  own meal. Carries the compressed image, the user's optional note, and
+ *  the full per-item analysis lifecycle (including a clarifying-question
+ *  round, same as the single-meal flow). */
+type BatchItem = {
+  id: number;
+  preview: string; // compressed data URI for display
+  base64: string;
+  thumbBase64: string;
+  file: File;
+  hint: string;
+  status: "ready" | "analyzing" | "done" | "error" | "saved";
+  analysis: Analysis | null;
+  editing: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
+  clarifyAnswer: string;
+  clarifying: boolean;
+  error: string | null;
+};
 
 function todayStr() {
   const d = new Date();
@@ -95,6 +123,8 @@ export default function LogMealPage() {
   // angle of the plate.
   const camera2Ref = useRef<HTMLInputElement>(null);
   const gallery2Ref = useRef<HTMLInputElement>(null);
+  // Batch mode: each selected photo becomes its own meal.
+  const batchRef = useRef<HTMLInputElement>(null);
 
   const [date, setDate] = useState<string>(todayStr());
   const isToday = date === todayStr();
@@ -175,6 +205,10 @@ export default function LogMealPage() {
   const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
   const [proteinSaving, setProteinSaving] = useState(false);
 
+  // Batch-logging state — null means not in batch mode.
+  const [batch, setBatch] = useState<BatchItem[] | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+
   // Coach review state
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -190,6 +224,7 @@ export default function LogMealPage() {
       const r = await fetch(`/api/meals?date=${forDate}`, { cache: "no-store", signal: ac.signal });
       const j = await r.json();
       setExisting(j.meals || []);
+      lsSet(`log-existing-${forDate}`, j.meals || []);
     } catch {
       // non-fatal
     } finally {
@@ -198,15 +233,28 @@ export default function LogMealPage() {
     }
   }, []);
 
-  // Reload existing meals whenever the date changes.
+  // Reload existing meals whenever the date changes — painting the cached
+  // snapshot for that date first so the list doesn't blank out.
   useEffect(() => {
     setExistingEditId(null);
-    setExistingLoading(true);
+    const cached = lsGet<ExistingMeal[]>(`log-existing-${date}`);
+    if (cached) {
+      setExisting(cached);
+      setExistingLoading(false);
+    } else {
+      setExistingLoading(true);
+    }
     loadExisting(date);
   }, [date, loadExisting]);
 
-  // Frequent meals are global; load once in parallel with existing.
+  // Frequent meals are global; paint the cached list instantly, then
+  // refresh in the background.
   useEffect(() => {
+    const cached = lsGet<FrequentMeal[]>("log-frequent-v1");
+    if (cached) {
+      setFrequent(cached);
+      setFrequentLoading(false);
+    }
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 10000);
     (async () => {
@@ -214,6 +262,7 @@ export default function LogMealPage() {
         const r = await fetch("/api/meals/frequent", { cache: "no-store", signal: ac.signal });
         const j = await r.json();
         setFrequent(j.meals || []);
+        lsSet("log-frequent-v1", j.meals || []);
       } catch {
         // non-fatal
       } finally {
@@ -224,18 +273,22 @@ export default function LogMealPage() {
     return () => { ac.abort(); clearTimeout(timer); };
   }, []);
 
-  // Targets for the post-save "day so far" summary — one fetch, cached
-  // for the life of the page.
+  // Targets for the post-save "day so far" summary — hydrate from cache,
+  // refresh once per page load.
   useEffect(() => {
+    const cached = lsGet<{ calories: number; protein_g: number }>("log-goals-v1");
+    if (cached) setGoals(cached);
     (async () => {
       try {
         const r = await fetch("/api/profile", { cache: "no-store" });
         const j = await r.json();
         if (j?.profile?.goal_calories) {
-          setGoals({
+          const g = {
             calories: j.profile.goal_calories,
             protein_g: j.profile.goal_protein_g ?? 0,
-          });
+          };
+          setGoals(g);
+          lsSet("log-goals-v1", g);
         }
       } catch {
         // non-fatal — summary just shows totals without targets
@@ -347,6 +400,142 @@ export default function LogMealPage() {
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
     clearPhoto2();
+  }
+
+  // ---- Batch mode: N photos -> N meals ----
+
+  async function onPickBatch(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setErr(null);
+    setProgress(t(lang, "meal_compress"));
+    try {
+      const items = await Promise.all(
+        files.map(async (f, i): Promise<BatchItem> => {
+          const [compressed, thumb] = await Promise.all([
+            compressImageFile(f),
+            compressImageThumb(f),
+          ]);
+          const blob = await (await fetch(compressed.dataUri)).blob();
+          const compFile = new File([blob], `meal-batch-${i}.jpg`, { type: "image/jpeg" });
+          return {
+            id: Date.now() + i,
+            preview: compressed.dataUri,
+            base64: compressed.base64,
+            thumbBase64: thumb.base64,
+            file: compFile,
+            hint: "",
+            status: "ready",
+            analysis: null,
+            editing: null,
+            clarifyAnswer: "",
+            clarifying: false,
+            error: null,
+          };
+        }),
+      );
+      setBatch((prev) => [...(prev ?? []), ...items]);
+    } catch (err: any) {
+      setErr(err?.message || "Could not read those photos");
+    } finally {
+      setProgress(null);
+      if (batchRef.current) batchRef.current.value = "";
+    }
+  }
+
+  function patchBatchItem(id: number, patch: Partial<BatchItem>) {
+    setBatch((prev) =>
+      prev ? prev.map((it) => (it.id === id ? { ...it, ...patch } : it)) : prev,
+    );
+  }
+
+  async function analyzeBatchItem(item: BatchItem, extraHint?: string) {
+    patchBatchItem(item.id, { status: "analyzing", error: null, clarifying: !!extraHint });
+    try {
+      const fd = new FormData();
+      fd.append("photo", item.file);
+      const hint = [item.hint.trim(), extraHint].filter(Boolean).join(". ");
+      if (hint) fd.append("hint", hint);
+      const j = await safeFetchJson<{ analysis: Analysis }>(
+        "/api/meals/analyze",
+        { method: "POST", body: fd },
+      );
+      patchBatchItem(item.id, {
+        status: "done",
+        clarifying: false,
+        clarifyAnswer: "",
+        analysis: j.analysis,
+        editing: {
+          calories: j.analysis.total.calories,
+          protein_g: j.analysis.total.protein_g,
+          fat_g: j.analysis.total.fat_g,
+          carbs_g: j.analysis.total.carbs_g,
+        },
+      });
+    } catch (e: any) {
+      patchBatchItem(item.id, {
+        status: "error",
+        clarifying: false,
+        error: e?.message ?? "analyze failed",
+      });
+    }
+  }
+
+  async function analyzeAllBatch() {
+    if (!batch) return;
+    setBatchBusy(true);
+    try {
+      // All items in parallel — each is an independent /api/meals/analyze
+      // call, so a 6-meal backlog costs roughly one analysis wait, not six.
+      await Promise.all(
+        batch
+          .filter((it) => it.status === "ready" || it.status === "error")
+          .map((it) => analyzeBatchItem(it)),
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function saveAllBatch() {
+    if (!batch) return;
+    setBatchBusy(true);
+    setErr(null);
+    try {
+      // Sequential saves: keeps insert order stable and avoids a burst of
+      // concurrent writes for what is at most ~a dozen rows.
+      for (const it of batch) {
+        if (it.status !== "done" || !it.analysis || !it.editing) continue;
+        await safeFetchJson<{ ok: true; id: number }>("/api/meals", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            date,
+            description: it.analysis.description,
+            calories: it.editing.calories,
+            protein_g: it.editing.protein_g,
+            fat_g: it.editing.fat_g,
+            carbs_g: it.editing.carbs_g,
+            items: it.analysis.items,
+            confidence: it.analysis.confidence,
+            photo_base64: it.base64,
+            photo_thumb_base64: it.thumbBase64,
+            photo_ext: "jpg",
+          }),
+        });
+        patchBatchItem(it.id, { status: "saved" });
+      }
+      await loadExisting(date);
+      refreshFrequentMeals();
+      setBatch(null);
+      setShowDaySummary(true);
+    } catch (e: any) {
+      // Saved items are already flagged "saved", so a retry only re-sends
+      // the ones that didn't make it.
+      setErr(e?.message ?? "save failed");
+    } finally {
+      setBatchBusy(false);
+    }
   }
 
   function resetNewMealForm() {
@@ -755,7 +944,7 @@ export default function LogMealPage() {
       </div>
 
       {/* --- PHOTO PICKER (NEW MEAL) --- */}
-      {!photoPreview && !analysis && !manualMode && !proteinMode && (
+      {!photoPreview && !analysis && !manualMode && !proteinMode && !batch && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -784,6 +973,18 @@ export default function LogMealPage() {
               <div className="text-xs text-white/70">{t(lang, "meal_from_gallery")}</div>
             </button>
           </div>
+          <button
+            onClick={() => batchRef.current?.click()}
+            className="w-full rounded-2xl border-2 border-dashed border-border bg-bg-elev py-3.5 flex items-center justify-center gap-2.5 text-[13px] text-white/70 font-medium hover:border-accent-brand/50 hover:text-white transition-colors"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white/60" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="7" y="7" width="14" height="14" rx="2" />
+              <path d="M3 17V5a2 2 0 0 1 2-2h12" />
+              <circle cx="12" cy="12" r="1.5" />
+              <path d="m21 16-4-4-7 9" />
+            </svg>
+            {t(lang, "meal_batch_button")}
+          </button>
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
           {/* Quick-add carousel — protein-powder shortcut + the user's most
               frequent meals as one-tap chips. Tapping a meal chip re-logs
@@ -836,7 +1037,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- PROTEIN POWDER QUICK-LOG --- */}
-      {proteinMode && !analysis && (
+      {proteinMode && !analysis && !batch && (
         <div className="card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -894,7 +1095,7 @@ export default function LogMealPage() {
         </div>
       )}
 
-      {photoPreview && !manualMode && !proteinMode && (
+      {photoPreview && !manualMode && !proteinMode && !batch && (
         <div className="space-y-3">
           {/* Horizontal thumbnail track — once a photo is picked, the big
               upload buttons collapse into compact previews so the user can
@@ -979,9 +1180,104 @@ export default function LogMealPage() {
         onChange={onPick2}
         className="hidden"
       />
+      <input
+        ref={batchRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onPickBatch}
+        className="hidden"
+      />
+
+      {/* --- BATCH MODE: each photo is its own meal --- */}
+      {batch && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+              {t(lang, "meal_batch_title")} ({batch.length})
+            </h2>
+            <button
+              onClick={() => setBatch(null)}
+              disabled={batchBusy}
+              className="text-xs text-white/40 disabled:opacity-40"
+            >
+              {t(lang, "meal_cancel")}
+            </button>
+          </div>
+          {batch.map((it) => (
+            <BatchMealCard
+              key={it.id}
+              item={it}
+              lang={lang}
+              disabled={batchBusy}
+              onHint={(v) => patchBatchItem(it.id, { hint: v })}
+              onMacro={(k, v) =>
+                patchBatchItem(it.id, {
+                  editing: it.editing ? { ...it.editing, [k]: v } : it.editing,
+                })
+              }
+              onClarifyAnswer={(v) => patchBatchItem(it.id, { clarifyAnswer: v })}
+              onClarifySubmit={() => {
+                if (!it.analysis?.clarifying_question || !it.clarifyAnswer.trim()) return;
+                analyzeBatchItem(it, `${it.analysis.clarifying_question} Answer: ${it.clarifyAnswer.trim()}`);
+              }}
+              onClarifySkip={() =>
+                patchBatchItem(it.id, {
+                  analysis: it.analysis ? { ...it.analysis, clarifying_question: undefined } : it.analysis,
+                })
+              }
+              onRetry={() => analyzeBatchItem(it)}
+              onRemove={() => {
+                setBatch((prev) => {
+                  const next = prev?.filter((x) => x.id !== it.id) ?? null;
+                  return next && next.length > 0 ? next : null;
+                });
+              }}
+              onZoom={() => setLightboxSrc(it.preview)}
+            />
+          ))}
+          <div className="flex gap-2">
+            <button
+              onClick={() => batchRef.current?.click()}
+              disabled={batchBusy}
+              className="rounded-xl border border-border bg-bg-elev px-4 py-3 text-sm text-white/70 disabled:opacity-40"
+            >
+              +
+            </button>
+            {batch.some((it) => it.status === "ready" || it.status === "error") ? (
+              <button
+                onClick={analyzeAllBatch}
+                disabled={batchBusy}
+                className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              >
+                {batchBusy ? (
+                  <AiThinkingPill label={t(lang, "meal_analyzing")} />
+                ) : (
+                  `${t(lang, "meal_batch_analyze_all")} (${batch.filter((it) => it.status === "ready" || it.status === "error").length})`
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={saveAllBatch}
+                disabled={batchBusy || !batch.some((it) => it.status === "done")}
+                className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              >
+                {batchBusy
+                  ? t(lang, "meal_saving_short")
+                  : `${t(lang, "meal_batch_save_all")} (${batch.filter((it) => it.status === "done").length})`}
+              </button>
+            )}
+          </div>
+          {batch.some((it) => it.status === "done" && it.analysis?.clarifying_question) && (
+            <p className="text-[11px] text-amber-400/80">
+              {t(lang, "meal_batch_clarify_hint")}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* --- TEXT INPUT (always visible until an analysis exists) --- */}
-      {!analysis && !manualMode && !proteinMode && (
+      {!analysis && !manualMode && !proteinMode && !batch && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/60 mb-1.5">
@@ -1027,7 +1323,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- MANUAL ENTRY FORM --- */}
-      {manualMode && !analysis && !proteinMode && (
+      {manualMode && !analysis && !proteinMode && !batch && (
         <div className="card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">{t(lang, "meal_manual_title")}</h3>
@@ -1091,7 +1387,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- ANALYSIS REVIEW --- */}
-      {analysis && editing && (
+      {analysis && editing && !batch && (
         <div className="space-y-4">
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -1274,7 +1570,7 @@ export default function LogMealPage() {
       )}
 
       {/* --- FREQUENT MEALS --- */}
-      {!analysis && (frequentLoading || frequent.length > 0) && (
+      {!analysis && !batch && (frequentLoading || frequent.length > 0) && (
         <section className="space-y-3 pt-2">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
@@ -1678,6 +1974,170 @@ function DaySummaryCard({
       <button onClick={onDismiss} className="text-white/40 leading-none" aria-label="Dismiss">
         ×
       </button>
+    </div>
+  );
+}
+
+/** One meal in batch mode: photo thumbnail + per-photo note, then the
+ *  analysis result with editable macros and the same clarifying-question
+ *  round the single-meal flow gets. */
+function BatchMealCard({
+  item,
+  lang,
+  disabled,
+  onHint,
+  onMacro,
+  onClarifyAnswer,
+  onClarifySubmit,
+  onClarifySkip,
+  onRetry,
+  onRemove,
+  onZoom,
+}: {
+  item: BatchItem;
+  lang: Lang;
+  disabled: boolean;
+  onHint: (v: string) => void;
+  onMacro: (k: "calories" | "protein_g" | "fat_g" | "carbs_g", v: number) => void;
+  onClarifyAnswer: (v: string) => void;
+  onClarifySubmit: () => void;
+  onClarifySkip: () => void;
+  onRetry: () => void;
+  onRemove: () => void;
+  onZoom: () => void;
+}) {
+  const a = item.analysis;
+  return (
+    <div className={`card p-3 ${item.status === "saved" ? "opacity-50" : ""}`}>
+      <div className="flex gap-3">
+        <div className="relative shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.preview}
+            alt="meal"
+            onClick={onZoom}
+            className="w-full h-full object-cover cursor-zoom-in"
+          />
+          {item.status === "analyzing" && <AiScanOverlay />}
+        </div>
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {item.status === "ready" && (
+            <input
+              type="text"
+              value={item.hint}
+              onChange={(e) => onHint(e.target.value)}
+              dir={/[֐-׿]/.test(item.hint) ? "rtl" : "ltr"}
+              placeholder={t(lang, "meal_batch_hint_placeholder")}
+              disabled={disabled}
+              className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
+            />
+          )}
+          {item.status === "analyzing" && (
+            <div className="text-[13px] text-white/50 pt-1.5">
+              <AiThinkingPill label={t(lang, "meal_analyzing")} />
+            </div>
+          )}
+          {item.status === "error" && (
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[12px] text-red-400">{item.error}</div>
+              <button
+                onClick={onRetry}
+                disabled={disabled}
+                className="text-[12px] text-accent-brand disabled:opacity-40"
+              >
+                {t(lang, "meal_batch_retry")}
+              </button>
+            </div>
+          )}
+          {(item.status === "done" || item.status === "saved") && a && item.editing && (
+            <>
+              <div
+                className="text-[13px] font-medium leading-snug"
+                dir={/[֐-׿]/.test(a.description) ? "rtl" : "ltr"}
+              >
+                {a.description}
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(
+                  [
+                    ["calories", t(lang, "macro_kcal")],
+                    ["protein_g", "P"],
+                    ["fat_g", "F"],
+                    ["carbs_g", "C"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <label key={k} className="block">
+                    <span className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">{label}</span>
+                    <input
+                      type="number"
+                      value={item.editing![k]}
+                      onChange={(e) => onMacro(k, Number(e.target.value) || 0)}
+                      disabled={disabled || item.status === "saved"}
+                      className="w-full rounded-lg bg-bg-elev border border-border px-1.5 py-1.5 text-[12px] nums text-center"
+                    />
+                  </label>
+                ))}
+              </div>
+              {item.hint && (
+                <div className="text-[10px] text-white/35 truncate">“{item.hint}”</div>
+              )}
+            </>
+          )}
+        </div>
+        {item.status !== "saved" && (
+          <button
+            onClick={onRemove}
+            disabled={disabled}
+            aria-label="Remove"
+            className="shrink-0 self-start w-6 h-6 rounded-full bg-black/40 text-white/70 text-sm leading-none flex items-center justify-center disabled:opacity-40"
+          >
+            ×
+          </button>
+        )}
+        {item.status === "saved" && (
+          <span className="shrink-0 self-start text-emerald-400 text-sm">✓</span>
+        )}
+      </div>
+
+      {/* Clarifying question — same flow as the single-meal analysis */}
+      {item.status === "done" && a?.clarifying_question && (
+        <div className="mt-2.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2.5 space-y-1.5">
+          <div className="text-[11px] font-medium text-amber-300">
+            {t(lang, "meal_clarify_label")}
+          </div>
+          <div
+            className="text-[12px] text-white/80"
+            dir={/[֐-׿]/.test(a.clarifying_question) ? "rtl" : "ltr"}
+          >
+            {a.clarifying_question}
+          </div>
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={item.clarifyAnswer}
+              onChange={(e) => onClarifyAnswer(e.target.value)}
+              dir={/[֐-׿]/.test(item.clarifyAnswer) ? "rtl" : "ltr"}
+              placeholder={t(lang, "meal_clarify_placeholder")}
+              disabled={disabled}
+              className="flex-1 min-w-0 rounded-lg bg-bg-elev border border-border px-2.5 py-1.5 text-[12px]"
+            />
+            <button
+              onClick={onClarifySubmit}
+              disabled={disabled || !item.clarifyAnswer.trim()}
+              className="rounded-lg bg-accent-brand px-3 py-1.5 text-[12px] font-semibold disabled:opacity-40"
+            >
+              {t(lang, "meal_clarify_update")}
+            </button>
+            <button
+              onClick={onClarifySkip}
+              disabled={disabled}
+              className="rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-white/60 disabled:opacity-40"
+            >
+              {t(lang, "meal_clarify_skip")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
