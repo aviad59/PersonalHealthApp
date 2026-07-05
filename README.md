@@ -20,8 +20,8 @@ This doc is written for product planning: what exists today, what data backs it,
 - Tailwind CSS, dark mode
 - Turso/libSQL (`@libsql/client`) — not local SQLite; works against a remote or local-file DB
 - Anthropic SDK, two model tiers in active use (`lib/anthropic.ts`):
-  - `CLAUDE_MODEL` (Sonnet 4.6) — meal vision/text analysis, clarifying-question follow-up, daily/weekly insights, AI Coach chat, CSV AI-fill
-  - `CLAUDE_OPUS_MODEL` (Opus 4.8) — meal review ("Coach Check")
+  - `CLAUDE_MODEL` (Sonnet 4.6) — meal vision/text analysis, clarifying-question follow-up, daily/weekly insights, CSV AI-fill
+  - `CLAUDE_OPUS_MODEL` (Opus 4.8) — AI Coach chat, meal review ("Coach Check")
 - Web Push (`web-push` + VAPID) for the morning-insight notification, scheduled by a Vercel cron (`vercel.json`)
 - Direct Hevy REST API client (read-only workout sync)
 
@@ -82,7 +82,7 @@ Minimal endpoint/page for a homescreen/PWA macro-summary widget.
 | Meal review ("Coach Check") | Opus | A day's meals + photos + current macros | Per-meal corrected macros (if needed) + explanation |
 | Daily insight (on-demand + morning cron) | Sonnet | Profile, goals, today + rolling 7-day history, today's workouts | Headline + short body + tags (headline also pushed as the morning notification) |
 | Weekly insight | Sonnet | Profile, goals, current calendar week's meals/workouts | Headline + short body + tags |
-| AI Coach chat | Sonnet | Profile, precomputed day/week aggregates (the model is forbidden from doing its own arithmetic), today's meals, recent weight/workouts, chat thread, on-demand history tools | Free-form coaching reply |
+| AI Coach chat | Opus | Profile, precomputed day/week aggregates (the model is forbidden from doing its own arithmetic), today's meals, recent weight/workouts, chat thread, on-demand history tools | Free-form coaching reply |
 | CSV backfill AI-fill | Sonnet | Imported rows with partial/missing macros | Estimated missing macros + confidence |
 
 All meal/insight/coach prompts are bilingual (English/Hebrew) and apply standing dietary rules (kosher: no pork/shellfish, no dairy+meat together).

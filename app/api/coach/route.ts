@@ -22,7 +22,7 @@ import {
   dateKey,
   Meal,
 } from "@/lib/db";
-import { anthropic, CLAUDE_MODEL, imageBlockFromDataUri } from "@/lib/anthropic";
+import { anthropic, CLAUDE_OPUS_MODEL, imageBlockFromDataUri } from "@/lib/anthropic";
 import { COACH_SYSTEM } from "@/lib/prompts";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig, type UserId } from "@/lib/user";
@@ -464,7 +464,7 @@ export async function POST(req: NextRequest) {
     let finalReply = "";
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const resp = await anthropic().messages.create({
-        model: CLAUDE_MODEL,
+        model: CLAUDE_OPUS_MODEL,
         max_tokens: 1200,
         system: COACH_SYSTEM,
         tools,
