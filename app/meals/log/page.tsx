@@ -140,7 +140,12 @@ export default function LogMealPage() {
     carbs_g: number;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tip, setTip] = useState<string | null>(null);
+  // Shown after a successful save: deterministic "day so far" summary
+  // computed from the reloaded meal list + profile targets. Replaces the
+  // old LLM-written tip, which kept getting the arithmetic wrong (it
+  // double-counted the just-saved meal).
+  const [showDaySummary, setShowDaySummary] = useState(false);
+  const [goals, setGoals] = useState<{ calories: number; protein_g: number } | null>(null);
   const [clarifyAnswer, setClarifyAnswer] = useState("");
   const [clarifying, setClarifying] = useState(false);
 
@@ -218,6 +223,30 @@ export default function LogMealPage() {
     })();
     return () => { ac.abort(); clearTimeout(timer); };
   }, []);
+
+  // Targets for the post-save "day so far" summary — one fetch, cached
+  // for the life of the page.
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/profile", { cache: "no-store" });
+        const j = await r.json();
+        if (j?.profile?.goal_calories) {
+          setGoals({
+            calories: j.profile.goal_calories,
+            protein_g: j.profile.goal_protein_g ?? 0,
+          });
+        }
+      } catch {
+        // non-fatal — summary just shows totals without targets
+      }
+    })();
+  }, []);
+
+  // A new date means a different day's ledger — stale summary would lie.
+  useEffect(() => {
+    setShowDaySummary(false);
+  }, [date]);
 
   async function loadPhotoIntoSlot1(f: File) {
     const [compressed, thumb] = await Promise.all([
@@ -423,7 +452,7 @@ export default function LogMealPage() {
     setProgress(t(lang, "meal_saving"));
     try {
       // 1) Fast DB insert. /api/meals no longer waits on Claude.
-      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+      const j = await safeFetchJson<{ ok: true; id: number }>(
         "/api/meals",
         {
           method: "POST",
@@ -446,33 +475,11 @@ export default function LogMealPage() {
           }),
         },
       );
-      setTip(j.ai_tip || null);
-      // Reload list, clear form. Redirect home only if logging for today.
+      // Reload list, clear form, surface the deterministic day summary.
       await loadExisting(date);
       resetNewMealForm();
       refreshFrequentMeals();
-
-      // 2) Background: kick off the tip endpoint and surface it when ready.
-      // Doesn't block the redirect — fire-and-forget. We surface a spinner
-      // string ("Generating next-meal tip…") on the tip card itself so the
-      // user knows something is still happening.
-      if (j.id) {
-        setTip("__pending__");
-        (async () => {
-          const guard = setTimeout(() => setTip(null), 20000);
-          try {
-            const t = await safeFetchJson<{ ai_tip: string | null }>(
-              `/api/meals/${j.id}/tip`,
-              { method: "POST" },
-            );
-            setTip(t.ai_tip || null);
-          } catch {
-            setTip(null);
-          } finally {
-            clearTimeout(guard);
-          }
-        })();
-      }
+      setShowDaySummary(true);
 
     } catch (e: any) {
       setErr(e.message);
@@ -529,7 +536,7 @@ export default function LogMealPage() {
       }
 
       setProgress(t(lang, "meal_saving"));
-      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+      const j = await safeFetchJson<{ ok: true; id: number }>(
         "/api/meals",
         {
           method: "POST",
@@ -537,30 +544,11 @@ export default function LogMealPage() {
           body: JSON.stringify({ ...toSave, date }),
         },
       );
-      setTip(j.ai_tip || null);
       await loadExisting(date);
       setExpandedIdx(null);
       setModifier("");
       refreshFrequentMeals();
-
-      // Background tip — same pattern as the photo/text save flow.
-      if (j.id) {
-        setTip("__pending__");
-        (async () => {
-          const guard = setTimeout(() => setTip(null), 20000);
-          try {
-            const t = await safeFetchJson<{ ai_tip: string | null }>(
-              `/api/meals/${j.id}/tip`,
-              { method: "POST" },
-            );
-            setTip(t.ai_tip || null);
-          } catch {
-            setTip(null);
-          } finally {
-            clearTimeout(guard);
-          }
-        })();
-      }
+      setShowDaySummary(true);
 
     } catch (e: any) {
       setErr(e.message);
@@ -579,7 +567,7 @@ export default function LogMealPage() {
     setErr(null);
     setProgress("Saving meal…");
     try {
-      const j = await safeFetchJson<{ ok: true; id: number; ai_tip: string | null }>(
+      const j = await safeFetchJson<{ ok: true; id: number }>(
         "/api/meals",
         {
           method: "POST",
@@ -599,26 +587,8 @@ export default function LogMealPage() {
       setManualDesc("");
       setManualMacros({ calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
       setManualMode(false);
-      setTip(j.ai_tip || null);
       refreshFrequentMeals();
-
-      if (j.id) {
-        setTip("__pending__");
-        (async () => {
-          const guard = setTimeout(() => setTip(null), 20000);
-          try {
-            const t = await safeFetchJson<{ ai_tip: string | null }>(
-              `/api/meals/${j.id}/tip`,
-              { method: "POST" },
-            );
-            setTip(t.ai_tip || null);
-          } catch {
-            setTip(null);
-          } finally {
-            clearTimeout(guard);
-          }
-        })();
-      }
+      setShowDaySummary(true);
 
     } catch (e: any) {
       setErr(e.message);
@@ -1229,19 +1199,13 @@ export default function LogMealPage() {
         </div>
       )}
 
-      {tip && (
-        <div className="card p-4 border-accent-cal/40">
-          <div className="text-xs uppercase tracking-wider text-accent-cal font-semibold mb-1">
-            {t(lang, "meal_next_tip")}
-          </div>
-          {tip === "__pending__" ? (
-            <p className="text-sm text-white/50 animate-pulse">
-              {t(lang, "meal_generating_tip")}
-            </p>
-          ) : (
-            <p className="text-sm text-white/80">{tip}</p>
-          )}
-        </div>
+      {showDaySummary && existing.length > 0 && (
+        <DaySummaryCard
+          meals={existing}
+          goals={goals}
+          lang={lang}
+          onDismiss={() => setShowDaySummary(false)}
+        />
       )}
 
       {err && <div className="text-sm text-red-400">{err}</div>}
@@ -1664,6 +1628,102 @@ function PhotoThumb({
       >
         ×
       </button>
+    </div>
+  );
+}
+
+/** Post-save "day so far" card. Pure arithmetic over the reloaded meal
+ *  list + profile targets — replaces the old LLM tip, which had a habit
+ *  of double-counting the meal it was commenting on. */
+function DaySummaryCard({
+  meals,
+  goals,
+  lang,
+  onDismiss,
+}: {
+  meals: ExistingMeal[];
+  goals: { calories: number; protein_g: number } | null;
+  lang: Lang;
+  onDismiss: () => void;
+}) {
+  const totals = meals.reduce(
+    (acc, m) => {
+      acc.calories += m.calories ?? 0;
+      acc.protein_g += m.protein_g ?? 0;
+      return acc;
+    },
+    { calories: 0, protein_g: 0 },
+  );
+  const rows: {
+    label: string;
+    value: number;
+    target: number | null;
+    color: string;
+    unit: string;
+  }[] = [
+    {
+      label: t(lang, "macro_protein"),
+      value: Math.round(totals.protein_g),
+      target: goals?.protein_g || null,
+      color: "#ef4444",
+      unit: "g",
+    },
+    {
+      label: t(lang, "macro_calories"),
+      value: Math.round(totals.calories),
+      target: goals?.calories || null,
+      color: "#10b981",
+      unit: "",
+    },
+  ];
+  return (
+    <div className="card p-4 border-accent-brand/30">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="text-xs uppercase tracking-wider text-accent-brand font-semibold">
+          {t(lang, "meal_day_so_far")}
+        </div>
+        <button onClick={onDismiss} className="text-white/40 text-sm leading-none px-1" aria-label="Dismiss">
+          ×
+        </button>
+      </div>
+      <div className="space-y-2.5">
+        {rows.map((r) => {
+          const pct = r.target ? Math.min(1, r.value / r.target) : 0;
+          const left = r.target ? Math.max(0, r.target - r.value) : null;
+          const over = r.target ? Math.max(0, r.value - r.target) : 0;
+          return (
+            <div key={r.label}>
+              <div className="flex items-baseline justify-between text-[12px] mb-1">
+                <span className="text-white/60">{r.label}</span>
+                <span className="text-white/85 nums">
+                  {r.value}
+                  {r.unit}
+                  {r.target ? (
+                    <span className="text-white/40"> / {r.target}{r.unit}</span>
+                  ) : null}
+                </span>
+              </div>
+              {r.target && (
+                <>
+                  <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct * 100}%`, background: r.color }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-white/40 mt-0.5">
+                    {over > 0
+                      ? `${over}${r.unit} ${t(lang, "meal_over_target")}`
+                      : left !== null && left > 0
+                        ? `${left}${r.unit} ${t(lang, "meal_left_today")}`
+                        : t(lang, "meal_target_hit")}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
