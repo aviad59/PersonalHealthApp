@@ -291,6 +291,30 @@ export default function ProfilePage() {
       {/* Daily-insight push notifications */}
       <PushToggle lang={lang} />
 
+      {/* Data export */}
+      <section className="card p-5 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+          {t(lang, "profile_export_title")}
+        </h2>
+        <p className="text-xs text-white/55">{t(lang, "profile_export_desc")}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href="/api/export?type=meals"
+            download
+            className="rounded-xl bg-bg-elev border border-border py-3 text-center text-sm font-medium text-white/80 hover:text-white"
+          >
+            {t(lang, "profile_export_meals")}
+          </a>
+          <a
+            href="/api/export?type=weight"
+            download
+            className="rounded-xl bg-bg-elev border border-border py-3 text-center text-sm font-medium text-white/80 hover:text-white"
+          >
+            {t(lang, "profile_export_weight")}
+          </a>
+        </div>
+      </section>
+
       {/* Text size picker */}
       <section className="card p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_text_size")}</h2>

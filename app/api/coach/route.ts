@@ -287,10 +287,67 @@ async function buildContext(userId: UserId): Promise<any> {
       .filter((ex) => ex.sets.length > 0),
   }));
 
+  // Authoritative aggregates — the system prompt forbids the model from
+  // doing its own arithmetic, so everything it might want to state as a
+  // derived number is precomputed here.
+  const todayTotals = totalsForMeals(todayMeals);
+  const loggedDays = week_by_day.filter((d) => d.meals > 0);
+  const round = (n: number) => Math.round(n);
+  const avg = (f: (d: (typeof loggedDays)[number]) => number) =>
+    loggedDays.length > 0
+      ? round(loggedDays.reduce((a, d) => a + f(d), 0) / loggedDays.length)
+      : 0;
+  const proteinTarget = profile?.goal_protein_g ?? 0;
+  const calorieTarget = profile?.goal_calories ?? 0;
+  // getWeightLogSince returns ASC by date — first entry is the oldest.
+  const firstWeight = weightLog[0];
+  const lastWeight = weightLog[weightLog.length - 1];
+  const computed = {
+    note: "Pre-calculated. Quote these numbers verbatim — do not derive new ones.",
+    today: {
+      calories: round(todayTotals.calories),
+      protein_g: round(todayTotals.protein_g),
+      fat_g: round(todayTotals.fat_g),
+      carbs_g: round(todayTotals.carbs_g),
+      meals_logged: todayMeals.length,
+      protein_left_to_target_g: proteinTarget ? Math.max(0, round(proteinTarget - todayTotals.protein_g)) : null,
+      calories_left_to_target: calorieTarget ? round(calorieTarget - todayTotals.calories) : null,
+    },
+    this_week: {
+      days_with_logged_meals: loggedDays.length,
+      days_elapsed_including_today: week_by_day.length,
+      avg_calories_per_logged_day: avg((d) => d.calories),
+      avg_protein_g_per_logged_day: avg((d) => d.protein_g),
+      days_protein_target_hit:
+        proteinTarget > 0
+          ? loggedDays.filter((d) => d.protein_g >= proteinTarget * 0.9).length
+          : null,
+      workout_sessions: cfg.hasWorkouts
+        ? new Set(
+            workouts
+              .map((w) => {
+                const t = Date.parse(w.start_time || "");
+                return Number.isFinite(t) ? dateKey(new Date(t)) : "";
+              })
+              .filter((d) => d >= weekStart && d <= today),
+          ).size
+        : null,
+    },
+    weight_14d:
+      firstWeight && lastWeight && firstWeight.date !== lastWeight.date
+        ? {
+            from: { date: firstWeight.date, kg: firstWeight.weight_kg },
+            to: { date: lastWeight.date, kg: lastWeight.weight_kg },
+            change_kg: Math.round((lastWeight.weight_kg - firstWeight.weight_kg) * 10) / 10,
+          }
+        : null,
+  };
+
   return {
     now: { date: today, hour: new Date().getHours() },
     has_workouts: cfg.hasWorkouts,
     note: "Call get_day_meals(date) to see individual meals with photos for any day. Call get_meal_history/get_workout_history/get_weight_history for longer date ranges.",
+    computed,
     profile: profile && {
       age: profile.age,
       sex: profile.sex,
