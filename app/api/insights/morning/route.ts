@@ -23,24 +23,28 @@ export async function POST() {
 
   try {
     let headline: string;
+    let body: string;
     let generated = false;
     if (await hasDailyInsightForToday(userId)) {
       const db = await getDb();
       const res = await db.execute({
-        sql: "SELECT headline FROM insights WHERE user_id = ? AND type = 'daily' AND for_date = ? ORDER BY id DESC LIMIT 1",
+        sql: "SELECT headline, body FROM insights WHERE user_id = ? AND type = 'daily' AND for_date = ? ORDER BY id DESC LIMIT 1",
         args: [userId, todayStr()],
       });
-      headline = (res.rows[0] as any)?.headline ?? "";
+      const row = res.rows[0] as any;
+      headline = row?.headline ?? "";
+      body = row?.body ?? "";
     } else {
-      const ins = await generateDailyInsightForUser(userId);
+      const ins = await generateDailyInsightForUser(userId, { morning: true });
       headline = ins.headline;
+      body = ins.body;
       generated = true;
     }
 
     const subs = await getPushSubscriptionsForUser(userId);
     const results = await sendPushToAll(subs, {
-      title: "Your morning insight",
-      body: headline,
+      title: headline,
+      body: body.length > 600 ? body.slice(0, 597) + "…" : body,
       url: "/insights",
       tag: "daily-insight",
     });

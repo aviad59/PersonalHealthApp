@@ -15,7 +15,7 @@ import {
   Meal,
 } from "@/lib/db";
 import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
-import { DAILY_INSIGHT_SYSTEM, withLanguage } from "@/lib/prompts";
+import { DAILY_INSIGHT_SYSTEM, MORNING_INSIGHT_ADDENDUM, withLanguage } from "@/lib/prompts";
 import {
   listWorkouts,
   workoutVolumeKg,
@@ -68,10 +68,17 @@ async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
 }
 
 /** Generate (and persist) today's daily insight for the given user.
- *  Throws if the profile isn't set up. */
+ *  Throws if the profile isn't set up.
+ *
+ *  `morning: true` (the cron/push path) switches the prompt to a
+ *  retrospective over recent days — at 8 AM "today" is always empty, and
+ *  the user batch-uploads with up to a day of delay, so an empty
+ *  yesterday usually means "not uploaded yet", not "didn't log". */
 export async function generateDailyInsightForUser(
   userId: UserId,
+  opts?: { morning?: boolean },
 ): Promise<GeneratedInsight> {
+  const morning = opts?.morning ?? false;
   const cfg = getUserConfig(userId);
   const profile = await getProfile(userId);
   if (!profile) {
@@ -150,16 +157,24 @@ export async function generateDailyInsightForUser(
     const d = daysAgoStr(i);
     const ms = weekMeals.filter((m) => m.date === d);
     const ws = weekWorkouts.filter((w) => workoutKey(w) === d);
+    const totals = dayTotals(ms);
     recent.push({
       date: d,
-      calories: dayTotals(ms).calories,
-      protein_g: dayTotals(ms).protein_g,
+      calories: totals.calories,
+      protein_g: totals.protein_g,
+      meals_logged: totals.meals,
       workouts: ws.map((w) => w.title),
     });
   }
   context.last_7_days = recent;
+  if (morning) {
+    context.generated = "early-morning scheduled run, before the user has eaten or uploaded anything today";
+  }
 
-  const system = withLanguage(DAILY_INSIGHT_SYSTEM, profile.language ?? "en");
+  const system = withLanguage(
+    morning ? DAILY_INSIGHT_SYSTEM + MORNING_INSIGHT_ADDENDUM : DAILY_INSIGHT_SYSTEM,
+    profile.language ?? "en",
+  );
   const resp = await anthropic().messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 500,

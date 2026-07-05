@@ -75,27 +75,35 @@ export async function GET(req: NextRequest) {
     try {
       const already = await hasDailyInsightForToday(user.id);
       let headline: string;
+      let body: string;
       let status: "generated" | "reused";
       if (already) {
         // Already have one (e.g. user opened the app earlier and triggered
-        // generation manually) — reuse it for the notification body.
-        const existingHeadline = await loadTodaysHeadline(user.id);
-        if (!existingHeadline) {
+        // generation manually) — reuse it for the notification.
+        const existing = await loadTodaysInsight(user.id);
+        if (!existing) {
           results.push({ user_id: user.id, status: "no_insight", error: "today's insight not found" });
           continue;
         }
-        headline = existingHeadline;
+        headline = existing.headline;
+        body = existing.body;
         status = "reused";
       } else {
-        const ins = await generateDailyInsightForUser(user.id);
+        // Morning mode: retrospective over recent days — "today" is empty
+        // at this hour and recent gaps may just be un-uploaded batches.
+        const ins = await generateDailyInsightForUser(user.id, { morning: true });
         headline = ins.headline;
+        body = ins.body;
         status = "generated";
       }
 
       const subs = await getPushSubscriptionsForUser(user.id);
+      // Headline as the notification title, full insight text as the body —
+      // Android expands multi-line notifications, so the user gets the whole
+      // insight without opening the app.
       const sendResults = await sendPushToAll(subs, {
-        title: "Your morning insight",
-        body: headline,
+        title: headline,
+        body: body.length > 600 ? body.slice(0, 597) + "…" : body,
         url: "/insights",
         tag: "daily-insight",
       });
@@ -114,13 +122,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, env, results });
 }
 
-async function loadTodaysHeadline(userId: string): Promise<string | null> {
+async function loadTodaysInsight(
+  userId: string,
+): Promise<{ headline: string; body: string } | null> {
   const { getDb, todayStr } = await import("@/lib/db");
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT headline FROM insights WHERE user_id = ? AND type = 'daily' AND for_date = ? ORDER BY id DESC LIMIT 1",
+    sql: "SELECT headline, body FROM insights WHERE user_id = ? AND type = 'daily' AND for_date = ? ORDER BY id DESC LIMIT 1",
     args: [userId, todayStr()],
   });
   const row = res.rows[0] as any;
-  return row?.headline ?? null;
+  return row ? { headline: row.headline, body: row.body ?? "" } : null;
 }
