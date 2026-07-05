@@ -21,7 +21,9 @@ import { sendPushToAll } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // generation + send can take a minute per user
+// 60 is the Hobby-plan ceiling — a higher value can fail the function's
+// deployment. One user's generation+push takes ~10-20s, well within it.
+export const maxDuration = 60;
 
 type PerUserResult =
   | { user_id: string; status: "skipped_no_email" }
@@ -35,22 +37,40 @@ type PerUserResult =
     };
 
 function isAuthorized(req: NextRequest): boolean {
-  // Vercel cron always attaches this header when invoking a cron-tagged
-  // route, even without a CRON_SECRET — accept it as a valid source.
-  if (req.headers.get("x-vercel-cron") === "1") return true;
-  // Bearer-secret path, used by manual curl or by Vercel cron when
-  // CRON_SECRET is set in the project env.
+  // Bearer-secret path: Vercel automatically attaches
+  // "Authorization: Bearer <CRON_SECRET>" to cron invocations when the
+  // CRON_SECRET env var is set; the same header works for manual curls.
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const header = req.headers.get("authorization") || "";
     if (header === `Bearer ${secret}`) return true;
   }
+  // Vercel cron identifies itself with this user-agent. It's spoofable in
+  // principle, but the worst an outsider can do is trigger an insight
+  // generation + push to the user's own devices — annoying, not harmful —
+  // and without this fallback the cron silently 401s forever when
+  // CRON_SECRET was never added to the project env. (The previous check
+  // looked for an "x-vercel-cron" header that Vercel doesn't send, which
+  // is exactly what happened.)
+  const ua = req.headers.get("user-agent") || "";
+  if (ua.startsWith("vercel-cron/")) return true;
   return false;
 }
 
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    console.warn("[cron/daily-insight] unauthorized", {
+      hasSecretEnv: !!process.env.CRON_SECRET,
+      hasAuthHeader: !!req.headers.get("authorization"),
+      userAgent: req.headers.get("user-agent"),
+    });
+    return NextResponse.json(
+      {
+        error: "unauthorized",
+        hint: "Expected Authorization: Bearer <CRON_SECRET> or the vercel-cron user-agent.",
+      },
+      { status: 401 },
+    );
   }
 
   // Surface config gaps in the response so a failed run is easy to
@@ -118,6 +138,10 @@ export async function GET(req: NextRequest) {
       });
     }
   }
+
+  // Shows up in the Vercel function log for the cron run, so a bad morning
+  // is diagnosable without reproducing it.
+  console.log("[cron/daily-insight] run complete", JSON.stringify({ env, results }));
 
   return NextResponse.json({ ok: true, env, results });
 }
