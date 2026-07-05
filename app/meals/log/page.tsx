@@ -1632,9 +1632,10 @@ function PhotoThumb({
   );
 }
 
-/** Post-save "day so far" card. Pure arithmetic over the reloaded meal
- *  list + profile targets — replaces the old LLM tip, which had a habit
- *  of double-counting the meal it was commenting on. */
+/** Post-save one-liner: what's LEFT for the day — the bit the Home rings
+ *  don't emphasize, so it doesn't just restate the main page. Pure
+ *  arithmetic over the reloaded meal list + profile targets, so it can't
+ *  disagree with the list it sits above. */
 function DaySummaryCard({
   meals,
   goals,
@@ -1646,6 +1647,7 @@ function DaySummaryCard({
   lang: Lang;
   onDismiss: () => void;
 }) {
+  if (!goals) return null;
   const totals = meals.reduce(
     (acc, m) => {
       acc.calories += m.calories ?? 0;
@@ -1654,76 +1656,28 @@ function DaySummaryCard({
     },
     { calories: 0, protein_g: 0 },
   );
-  const rows: {
-    label: string;
-    value: number;
-    target: number | null;
-    color: string;
-    unit: string;
-  }[] = [
-    {
-      label: t(lang, "macro_protein"),
-      value: Math.round(totals.protein_g),
-      target: goals?.protein_g || null,
-      color: "#ef4444",
-      unit: "g",
-    },
-    {
-      label: t(lang, "macro_calories"),
-      value: Math.round(totals.calories),
-      target: goals?.calories || null,
-      color: "#10b981",
-      unit: "",
-    },
-  ];
+  const proteinLeft = Math.round(goals.protein_g - totals.protein_g);
+  const calLeft = Math.round(goals.calories - totals.calories);
+  const proteinPart =
+    goals.protein_g > 0
+      ? proteinLeft > 0
+        ? `${proteinLeft}g ${t(lang, "macro_protein")}`
+        : `${t(lang, "macro_protein")} ✓`
+      : null;
+  const calPart =
+    calLeft >= 0
+      ? `${calLeft.toLocaleString()} ${t(lang, "macro_kcal")}`
+      : `${Math.abs(calLeft).toLocaleString()} ${t(lang, "macro_kcal")} ${t(lang, "meal_over_target")}`;
+  const anythingLeft = proteinLeft > 0 || calLeft >= 0;
   return (
-    <div className="card p-4 border-accent-brand/30">
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="text-xs uppercase tracking-wider text-accent-brand font-semibold">
-          {t(lang, "meal_day_so_far")}
-        </div>
-        <button onClick={onDismiss} className="text-white/40 text-sm leading-none px-1" aria-label="Dismiss">
-          ×
-        </button>
-      </div>
-      <div className="space-y-2.5">
-        {rows.map((r) => {
-          const pct = r.target ? Math.min(1, r.value / r.target) : 0;
-          const left = r.target ? Math.max(0, r.target - r.value) : null;
-          const over = r.target ? Math.max(0, r.value - r.target) : 0;
-          return (
-            <div key={r.label}>
-              <div className="flex items-baseline justify-between text-[12px] mb-1">
-                <span className="text-white/60">{r.label}</span>
-                <span className="text-white/85 nums">
-                  {r.value}
-                  {r.unit}
-                  {r.target ? (
-                    <span className="text-white/40"> / {r.target}{r.unit}</span>
-                  ) : null}
-                </span>
-              </div>
-              {r.target && (
-                <>
-                  <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${pct * 100}%`, background: r.color }}
-                    />
-                  </div>
-                  <div className="text-[10px] text-white/40 mt-0.5">
-                    {over > 0
-                      ? `${over}${r.unit} ${t(lang, "meal_over_target")}`
-                      : left !== null && left > 0
-                        ? `${left}${r.unit} ${t(lang, "meal_left_today")}`
-                        : t(lang, "meal_target_hit")}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+    <div className="flex items-center gap-2 rounded-full border border-border bg-bg-elev px-4 py-2 text-[12px] text-white/70">
+      <span className="nums flex-1 truncate">
+        {[proteinPart, calPart].filter(Boolean).join(" · ")}
+        {anythingLeft ? ` ${t(lang, "meal_left_today")}` : ""}
+      </span>
+      <button onClick={onDismiss} className="text-white/40 leading-none" aria-label="Dismiss">
+        ×
+      </button>
     </div>
   );
 }
