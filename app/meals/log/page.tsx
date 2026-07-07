@@ -101,6 +101,16 @@ type BatchItem = {
   error: string | null;
 };
 
+// Monotonic id source for batch items. The previous `Date.now() + index`
+// scheme could collide (Date.now() was read after per-photo compression,
+// whose duration varies), and a duplicated id made typing/analysis updates
+// fan out to every item sharing it.
+let _batchItemSeq = 0;
+function nextBatchItemId(): number {
+  _batchItemSeq += 1;
+  return _batchItemSeq;
+}
+
 function todayStr() {
   const d = new Date();
   const y = d.getFullYear();
@@ -419,7 +429,7 @@ export default function LogMealPage() {
           const blob = await (await fetch(compressed.dataUri)).blob();
           const compFile = new File([blob], `meal-batch-${i}.jpg`, { type: "image/jpeg" });
           return {
-            id: Date.now() + i,
+            id: nextBatchItemId(),
             preview: compressed.dataUri,
             base64: compressed.base64,
             thumbBase64: thumb.base64,
