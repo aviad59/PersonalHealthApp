@@ -19,6 +19,10 @@ export default withAuth({
 
 export const config = {
   matcher: [
-    "/((?!api/auth|signin|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons|widget-templates|sw.js).*)",
+    // api/cron is excluded because Vercel's scheduler calls it with no
+    // session cookie — the middleware would bounce it to /signin before
+    // the route ever ran. The cron route enforces its own auth
+    // (CRON_SECRET bearer / vercel-cron user-agent).
+    "/((?!api/auth|api/cron|signin|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons|widget-templates|sw.js).*)",
   ],
 };
