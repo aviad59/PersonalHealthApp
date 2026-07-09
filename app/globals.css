@@ -2,17 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Material 3 (dark) token system.
+ *
+ * Elevation in M3 dark is expressed by lighter *surface-container* tones
+ * (a tonal tint) rather than heavy drop shadows, so the ramp below goes
+ * from the dim background up through progressively lighter containers.
+ * Shape uses the M3 corner scale (see tailwind borderRadius).
+ */
 :root {
-  /* Layered dark palette — cool blue-tinted darks with teal brand. */
-  --bg: #080c10;
-  --card: #111620;
-  --elev: #1a2030;
-  --border: #252e3d;
-  --hairline: rgba(255, 255, 255, 0.07);
-  --hairline-strong: rgba(255, 255, 255, 0.11);
-  --text: #e8edf5;
-  --muted: #7a8799;
-  --brand: #0ea5e9;
+  /* Surfaces (tonal, cool-neutral) */
+  --surface-dim: #0a0e13;
+  --bg: #0c1117;                       /* surface */
+  --surface-container-lowest: #080b10;
+  --surface-container-low: #12171f;
+  --surface-container: #161c25;        /* default card */
+  --surface-container-high: #1f2631;   /* elevated card / inputs */
+  --surface-container-highest: #29313d;
+  --surface-bright: #333c48;
+
+  /* Outlines */
+  --outline: rgba(255, 255, 255, 0.16);
+  --outline-variant: rgba(255, 255, 255, 0.09);
+
+  /* On-surface text */
+  --text: #e4e9f0;                     /* on-surface */
+  --muted: #9aa6b6;                    /* on-surface-variant */
+
+  /* Primary (sky) tonal roles */
+  --brand: #0ea5e9;                    /* vibrant primary — filled buttons */
+  --primary: #6ecff5;                  /* light primary — text/icons/active */
+  --on-primary: #00344a;
+  --primary-container: #0e4a63;
+  --on-primary-container: #c4ecff;
+  --secondary-container: #22424f;      /* nav active indicator, tonal chips */
+  --on-secondary-container: #cbe7f5;
+
+  /* Legacy aliases kept so existing var() references still resolve. */
+  --card: var(--surface-container);
+  --elev: var(--surface-container-high);
+  --hairline: var(--outline-variant);
+  --hairline-strong: var(--outline);
 }
 
 html, body {
@@ -30,13 +60,14 @@ html {
 body {
   min-height: 100dvh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  /* Very subtle top-down glow so the page has depth instead of flat black. */
+  /* Faint M3 surface-tint glow from the top so the background reads as a
+     tonal surface rather than flat black. */
   background-image:
-    radial-gradient(120% 80% at 50% -10%, rgba(14, 165, 233, 0.07), transparent 60%);
+    radial-gradient(130% 80% at 50% -10%, rgba(110, 207, 245, 0.06), transparent 62%);
   background-attachment: fixed;
 }
 
-/* Tighter, more confident headings. */
+/* M3 type: slightly tighter display/headline tracking. */
 h1, h2, h3 { letter-spacing: -0.01em; }
 
 /* Tabular figures keep stat columns from jittering as numbers change. */
@@ -46,33 +77,69 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* On-brand focus ring */
+/* M3 focus indicator */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--brand) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--primary) 80%, transparent);
   outline-offset: 2px;
 }
 
-/* Surfaces: hairline border + a faint inner top-light and drop shadow for depth. */
+/*
+ * M3 cards = filled surface containers. Corner: large (16px). Elevation
+ * is carried by the container tone plus a whisper of shadow, not a heavy
+ * drop shadow.
+ */
 .card {
-  background: var(--card);
-  border: 1px solid var(--hairline);
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.035),
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 .card-elev {
-  background: var(--elev);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 2px 8px rgba(0, 0, 0, 0.4);
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
 }
 
-/* Brand glow for primary actions / active accents. */
-.glow-brand { box-shadow: 0 6px 24px -8px rgba(14, 165, 233, 0.5); }
+/*
+ * M3 button primitives. Filled = vibrant primary with white label (the
+ * app's established brand look). Tonal = secondary-container. Text = no
+ * container. All fully rounded (M3 Expressive) with a press state layer.
+ */
+.m3-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.625rem 1.25rem;
+  transition: filter 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+.m3-btn:active { filter: brightness(0.92); }
+.m3-btn:disabled { opacity: 0.38; }
+.m3-btn-filled { background: var(--brand); color: #fff; }
+.m3-btn-tonal { background: var(--secondary-container); color: var(--on-secondary-container); }
+.m3-btn-text { background: transparent; color: var(--primary); padding-inline: 0.75rem; }
+
+/* Subtle press/hover state layer for tappable rows (M3 state layer). */
+.state-layer { position: relative; }
+.state-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.state-layer:hover::after { opacity: 0.06; }
+.state-layer:active::after { opacity: 0.1; }
+
+/* Retained brand glow utility for hero accents. */
+.glow-brand { box-shadow: 0 8px 28px -10px rgba(14, 165, 233, 0.5); }
 
 /* Safe-area padding for mobile */
 .safe-top { padding-top: env(safe-area-inset-top); }
@@ -91,7 +158,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   left: 0;
   right: 0;
   height: 40%;
-  background: linear-gradient(to bottom, transparent, rgba(14, 165, 233, 0.4), transparent);
+  background: linear-gradient(to bottom, transparent, rgba(110, 207, 245, 0.4), transparent);
   animation: ai-scan 2.1s ease-in-out infinite;
 }
 
@@ -108,3 +175,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   50% { opacity: 1; transform: scale(1.15); }
 }
 .ai-glow-pulse { animation: ai-glow-pulse 1.6s ease-in-out infinite; }
+
+/* M3 navigation active-indicator pill grow-in. */
+@keyframes m3-indicator-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

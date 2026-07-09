@@ -18,6 +18,7 @@ import {
 } from "@/lib/insights";
 import { getPushSubscriptionsForUser } from "@/lib/db";
 import { sendPushToAll } from "@/lib/push";
+import { getCurrentUserId } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ type PerUserResult =
       push_failed: number;
     };
 
-function isAuthorized(req: NextRequest): boolean {
+async function isAuthorized(req: NextRequest): Promise<boolean> {
   // Bearer-secret path: Vercel automatically attaches
   // "Authorization: Bearer <CRON_SECRET>" to cron invocations when the
   // CRON_SECRET env var is set; the same header works for manual curls.
@@ -54,11 +55,18 @@ function isAuthorized(req: NextRequest): boolean {
   // is exactly what happened.)
   const ua = req.headers.get("user-agent") || "";
   if (ua.startsWith("vercel-cron/")) return true;
+  // Signed-in-user path: lets you open this URL in a browser to run the
+  // exact scheduled logic on demand and read the per-user result JSON —
+  // the definitive way to tell "cron never fired" from "cron fired but
+  // push failed". The middleware excludes /api/cron, so this session
+  // check is enforced here.
+  const userId = await getCurrentUserId();
+  if (userId) return true;
   return false;
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     console.warn("[cron/daily-insight] unauthorized", {
       hasSecretEnv: !!process.env.CRON_SECRET,
       hasAuthHeader: !!req.headers.get("authorization"),

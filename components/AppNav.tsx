@@ -42,7 +42,7 @@ export default function AppNav() {
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop navigation rail (M3-flavored sidebar) */}
       <nav className="hidden md:flex md:flex-col md:w-56 md:shrink-0 md:h-dvh md:sticky md:top-0 border-e border-border bg-bg-card/40 px-3 py-6 gap-1">
         <div className="px-3 mb-6 text-lg font-bold tracking-tight">Health</div>
         {visible.map((it) => {
@@ -51,45 +51,59 @@ export default function AppNav() {
             <Link
               key={it.href}
               href={it.href}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`state-layer flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
                 active
-                  ? "text-white bg-accent-brand/15"
-                  : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                  ? "text-accent-on-sec-container bg-accent-sec-container"
+                  : "text-white/55 hover:text-white/85"
               }`}
             >
-              <it.icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-brand" : ""}`} />
+              <it.icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-on-sec-container" : ""}`} />
               <span>{t(lang, it.labelKey)}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 safe-bottom">
-        <div className="mx-auto w-full max-w-md sm:max-w-lg">
-          <div className="mx-3 mb-3 rounded-3xl border border-border bg-bg-card/80 backdrop-blur-xl shadow-elev px-1.5 py-1.5 flex justify-between gap-0.5">
-            {visible.map((it) => {
-              const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
-              return (
-                <Link
-                  key={it.href}
-                  href={it.href}
-                  className={`flex-1 min-w-0 flex flex-col items-center gap-1 rounded-2xl py-2 text-[10px] font-medium transition-all active:scale-95 ${
-                    active
-                      ? "text-white bg-accent-brand/15"
-                      : "text-white/45 hover:text-white/80 hover:bg-white/5"
+      {/* Mobile M3 Navigation Bar — edge-to-edge, pill active indicator */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-bg-card/95 backdrop-blur-xl border-t border-border shadow-nav safe-bottom">
+        <div className="mx-auto w-full max-w-md sm:max-w-lg flex justify-between px-1.5 pt-2 pb-1">
+          {visible.map((it) => {
+            const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+            return (
+              <Link
+                key={it.href}
+                href={it.href}
+                aria-current={active ? "page" : undefined}
+                className="flex-1 min-w-0 flex flex-col items-center gap-1 py-1"
+              >
+                {/* Active indicator pill sits behind the icon (M3 signature) */}
+                <span
+                  className={`relative flex items-center justify-center h-8 w-16 rounded-full transition-colors ${
+                    active ? "bg-accent-sec-container" : "bg-transparent"
                   }`}
                 >
+                  {active && (
+                    <span
+                      className="absolute inset-0 rounded-full bg-accent-sec-container"
+                      style={{ animation: "m3-indicator-in 220ms ease" }}
+                    />
+                  )}
                   <it.icon
-                    className={`h-5 w-5 shrink-0 transition-colors ${
-                      active ? "text-accent-brand" : ""
+                    className={`relative h-[22px] w-[22px] shrink-0 transition-colors ${
+                      active ? "text-accent-on-sec-container" : "text-white/55"
                     }`}
                   />
-                  <span className="max-w-full truncate px-0.5">{t(lang, it.labelKey)}</span>
-                </Link>
-              );
-            })}
-          </div>
+                </span>
+                <span
+                  className={`max-w-full truncate px-0.5 text-[11px] transition-colors ${
+                    active ? "text-white font-semibold" : "text-white/55 font-medium"
+                  }`}
+                >
+                  {t(lang, it.labelKey)}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </>
