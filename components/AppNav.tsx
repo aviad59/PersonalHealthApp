@@ -76,9 +76,11 @@ export default function AppNav() {
                 aria-current={active ? "page" : undefined}
                 className="flex-1 min-w-0 flex flex-col items-center gap-1 py-1"
               >
-                {/* Active indicator pill sits behind the icon (M3 signature) */}
+                {/* Active indicator pill sits behind the icon (M3 signature).
+                    Width is flexible with a cap so 7 tabs never overflow a
+                    narrow phone (e.g. S23 Ultra ~384px CSS width). */}
                 <span
-                  className={`relative flex items-center justify-center h-8 w-16 rounded-full transition-colors ${
+                  className={`relative flex items-center justify-center h-8 w-full max-w-[3.25rem] rounded-full transition-colors ${
                     active ? "bg-accent-sec-container" : "bg-transparent"
                   }`}
                 >
@@ -89,13 +91,13 @@ export default function AppNav() {
                     />
                   )}
                   <it.icon
-                    className={`relative h-[22px] w-[22px] shrink-0 transition-colors ${
+                    className={`relative h-[21px] w-[21px] shrink-0 transition-colors ${
                       active ? "text-accent-on-sec-container" : "text-white/55"
                     }`}
                   />
                 </span>
                 <span
-                  className={`max-w-full truncate px-0.5 text-[11px] transition-colors ${
+                  className={`max-w-full truncate px-0.5 text-[10px] leading-tight transition-colors ${
                     active ? "text-white font-semibold" : "text-white/55 font-medium"
                   }`}
                 >
