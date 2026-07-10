@@ -204,7 +204,7 @@ export default function CoachPage() {
           <button
             onClick={() => send(input)}
             disabled={!input.trim() || sending}
-            className="rounded-2xl bg-accent-brand text-white font-semibold px-4 py-3 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-full bg-accent-brand text-white font-semibold px-4 py-3 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {sending ? "…" : "Send"}
           </button>

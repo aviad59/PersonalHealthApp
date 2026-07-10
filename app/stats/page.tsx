@@ -133,10 +133,10 @@ export default function StatsPage() {
             <button
               key={r}
               onClick={() => setDays(r)}
-              className={`text-[11px] rounded-full px-3 py-1.5 border transition-colors ${
+              className={`text-[11px] rounded-lg px-3 py-1.5 border transition-colors ${
                 days === r
-                  ? "bg-accent-brand text-white border-accent-brand"
-                  : "bg-bg-elev text-white/70 border-border"
+                  ? "bg-accent-sec-container text-accent-on-sec-container border-transparent font-medium"
+                  : "bg-transparent text-white/70 border-border"
               }`}
             >
               {r}d

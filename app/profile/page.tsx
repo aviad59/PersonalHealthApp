@@ -243,7 +243,7 @@ export default function ProfilePage() {
       <div className="px-5 pt-10 md:max-w-3xl md:mx-auto">
         <h1 className="text-2xl font-bold mb-2">{t(lang, "profile_title")}</h1>
         <p className="text-sm text-white/60 mb-6">{t(lang, "profile_no_profile")}</p>
-        <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-4 py-2 text-sm font-semibold">
+        <Link href="/onboarding" className="inline-block rounded-full bg-accent-brand px-4 py-2 text-sm font-semibold">
           {t(lang, "profile_run_onboarding")}
         </Link>
       </div>
@@ -448,7 +448,7 @@ export default function ProfilePage() {
         <button
           onClick={save}
           disabled={saving}
-          className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+          className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
         >
           {saving ? t(lang, "profile_saving") : t(lang, "profile_save")}
         </button>
@@ -494,7 +494,7 @@ export default function ProfilePage() {
           <button
             onClick={runBackfillCommit}
             disabled={backfillLoading || !backfillPreview || !conflictsResolved}
-            className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+            className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {backfillLoading && backfillPreview ? "Importing…" : "Import"}
           </button>

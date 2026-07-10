@@ -1098,7 +1098,7 @@ export default function LogMealPage() {
           <button
             onClick={saveProtein}
             disabled={proteinSaving}
-            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
+            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
           >
             {proteinSaving ? "שומר…" : isToday ? "שמור" : `שמור ל-${prettyDate(date, lang)}`}
           </button>
@@ -1258,7 +1258,7 @@ export default function LogMealPage() {
               <button
                 onClick={analyzeAllBatch}
                 disabled={batchBusy}
-                className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+                className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
               >
                 {batchBusy ? (
                   <AiThinkingPill label={t(lang, "meal_analyzing")} />
@@ -1270,7 +1270,7 @@ export default function LogMealPage() {
               <button
                 onClick={saveAllBatch}
                 disabled={batchBusy || !batch.some((it) => it.status === "done")}
-                className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+                className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
               >
                 {batchBusy
                   ? t(lang, "meal_saving_short")
@@ -1309,7 +1309,7 @@ export default function LogMealPage() {
           <button
             onClick={analyze}
             disabled={analyzing || !!progress}
-            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {analyzing ? (
               <AiThinkingPill label={progress || t(lang, "meal_analyzing")} />
@@ -1385,7 +1385,7 @@ export default function LogMealPage() {
           <button
             onClick={saveManual}
             disabled={manualSaving}
-            className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {manualSaving
               ? progress || t(lang, "meal_saving_short")
@@ -1493,7 +1493,7 @@ export default function LogMealPage() {
             <button
               onClick={save}
               disabled={saving || clarifying}
-              className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
               {saving
                 ? progress || t(lang, "meal_saving_short")
@@ -2471,7 +2471,7 @@ function CoachReviewModal({
             <button
               onClick={handleAcceptAll}
               disabled={acceptAllBusy}
-              className="w-full rounded-xl bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
               {acceptAllBusy
                 ? "Applying…"

@@ -167,7 +167,7 @@ export default function HomeClient({
       <div className="px-5 pt-10 space-y-4">
         <h1 className="text-3xl font-bold">{t(lang, "home_welcome")}</h1>
         <p className="text-white/60">{t(lang, "home_onboarding_desc")}</p>
-        <Link href="/onboarding" className="inline-block rounded-xl bg-accent-brand px-5 py-3 text-sm font-semibold">
+        <Link href="/onboarding" className="inline-block rounded-full bg-accent-brand px-5 py-3 text-sm font-semibold">
           {t(lang, "home_start_onboarding")}
         </Link>
       </div>

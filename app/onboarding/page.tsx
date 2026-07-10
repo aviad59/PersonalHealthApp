@@ -246,7 +246,7 @@ export default function OnboardingPage() {
           <p className="text-sm text-white/60 mb-3">We&apos;ll calculate personalized goals based on your inputs.</p>
           <button
             onClick={loadPreview}
-            className="w-full rounded-xl bg-accent-brand/15 border border-accent-brand/40 text-accent-brand py-3 text-sm font-semibold mb-4"
+            className="w-full rounded-full bg-accent-brand/15 border border-accent-brand/40 text-accent-brand py-3 text-sm font-semibold mb-4"
           >
             Calculate my targets
           </button>
@@ -286,7 +286,7 @@ export default function OnboardingPage() {
             <button
               disabled={!canNext}
               onClick={() => setStep((s) => s + 1)}
-              className="flex-[2] rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
+              className="flex-[2] rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
             >
               Continue
             </button>
@@ -294,7 +294,7 @@ export default function OnboardingPage() {
             <button
               disabled={saving || !preview}
               onClick={submit}
-              className="flex-[2] rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
+              className="flex-[2] rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
             >
               {saving ? "Saving..." : "Save & start"}
             </button>

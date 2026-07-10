@@ -73,7 +73,7 @@ export default function InsightsPage() {
         <button
           onClick={() => generate("daily")}
           disabled={!!generating}
-          className="flex-1 rounded-xl bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
+          className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
           {generating === "daily" ? t(lang, "insights_generating") : t(lang, "insights_gen_daily")}
         </button>

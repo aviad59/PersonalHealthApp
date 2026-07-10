@@ -148,7 +148,7 @@ export default function WeightLogSection({
         <button
           onClick={logToday}
           disabled={busy || !input}
-          className="rounded-xl bg-accent-brand px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          className="rounded-full bg-accent-brand px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
         >
           {t(lang, "weight_log_btn")}
         </button>
