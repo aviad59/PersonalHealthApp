@@ -764,8 +764,19 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
   const [supported, setSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [subscribed, setSubscribed] = useState(false);
+  const [deviceCount, setDeviceCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function refreshDeviceCount() {
+    try {
+      const r = await fetch("/api/push/subscribe");
+      const j = await r.json();
+      if (typeof j.count === "number") setDeviceCount(j.count);
+    } catch {
+      // non-fatal
+    }
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -780,6 +791,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
       .then((reg) => reg.pushManager.getSubscription())
       .then((sub) => setSubscribed(!!sub))
       .catch(() => {});
+    refreshDeviceCount();
   }, []);
 
   async function enable() {
@@ -819,6 +831,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
         }),
       });
       setSubscribed(true);
+      await refreshDeviceCount();
     } catch (e: any) {
       setError(e?.message ?? "subscribe failed");
     } finally {
@@ -841,6 +854,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
         await sub.unsubscribe();
       }
       setSubscribed(false);
+      await refreshDeviceCount();
     } catch (e: any) {
       setError(e?.message ?? "unsubscribe failed");
     } finally {
@@ -919,6 +933,26 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
             : t(lang, "profile_push_enable")}
         </button>
       </div>
+      {/* Per-device status — makes it obvious that each device (e.g. your
+          phone) needs enabling separately, which is the usual reason a
+          notification only lands on one device. */}
+      <div className="flex items-center gap-2 text-[11px]">
+        <span
+          className={`inline-block w-2 h-2 rounded-full ${
+            subscribed ? "bg-accent-cal" : "bg-white/25"
+          }`}
+        />
+        <span className="text-white/60">
+          {subscribed ? t(lang, "profile_push_this_on") : t(lang, "profile_push_this_off")}
+          {deviceCount !== null && (
+            <span className="text-white/40">
+              {" · "}
+              {deviceCount} {t(lang, "profile_push_devices")}
+            </span>
+          )}
+        </span>
+      </div>
+      <p className="text-[11px] text-white/40 leading-snug">{t(lang, "profile_push_per_device")}</p>
       {permission === "denied" && (
         <p className="text-[11px] text-amber-400">{t(lang, "profile_push_denied")}</p>
       )}

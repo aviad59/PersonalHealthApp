@@ -15,7 +15,11 @@
 // next step (IndexedDB + Background Sync). This SW is the minimum to make the
 // app installable and feel native on Android.
 
-const VERSION = "health-v3";
+// Bumped to v4 for the Material 3 redesign — the activate handler purges
+// every cache that doesn't start with the current VERSION, so old cached
+// CSS/HTML shells are cleared and the new UI shows up without the user
+// having to reinstall the PWA.
+const VERSION = "health-v4";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PHOTO_CACHE = `${VERSION}-photos`;
 

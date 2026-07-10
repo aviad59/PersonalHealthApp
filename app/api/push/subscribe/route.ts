@@ -7,11 +7,21 @@ import { z } from "zod";
 import {
   deletePushSubscription,
   upsertPushSubscription,
+  getPushSubscriptionsForUser,
 } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// How many devices this user has enrolled — the Profile toggle shows this
+// so it's obvious when a device (e.g. the phone) still needs enabling.
+export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const subs = await getPushSubscriptionsForUser(userId);
+  return NextResponse.json({ count: subs.length });
+}
 
 const SubscribeSchema = z.object({
   endpoint: z.string().url(),
