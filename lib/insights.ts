@@ -122,6 +122,7 @@ export async function generateDailyInsightForUser(
       weekly_workout_target: profile.weekly_workout_target,
     },
     has_workouts: cfg.hasWorkouts,
+    ...(profile.coach_notes ? { user_notes: profile.coach_notes } : {}),
     ...(cfg.hasWorkouts && {
       training_notes:
         "Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.",

@@ -66,7 +66,7 @@ export default function AppNav() {
 
       {/* Mobile M3 Navigation Bar — edge-to-edge, pill active indicator */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-bg-card/95 backdrop-blur-xl border-t border-border shadow-nav safe-bottom">
-        <div className="mx-auto w-full max-w-md sm:max-w-lg flex justify-between px-1.5 pt-2 pb-1">
+        <div className="mx-auto w-full max-w-md sm:max-w-lg flex justify-between items-center px-1.5 h-[var(--nav-h)]">
           {visible.map((it) => {
             const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
             return (

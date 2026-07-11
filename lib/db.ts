@@ -142,6 +142,8 @@ const COLUMN_ADDS: { sql: string }[] = [
   { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE insights ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE user_profile ADD COLUMN language TEXT NOT NULL DEFAULT 'en'" },
+  // Free-text "tell the coach about yourself" notes (allergies, kosher, etc.)
+  { sql: "ALTER TABLE user_profile ADD COLUMN coach_notes TEXT" },
   // Per-user scoping for the Hevy workout cache. Existing rows default to
   // 'idan' since he was the only user with workouts pre-migration.
   { sql: "ALTER TABLE workouts_cache ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
@@ -182,6 +184,7 @@ const PER_USER_TABLES = `
     weekly_workout_target INTEGER,
     weekly_volume_note TEXT,
     goal_mode TEXT DEFAULT 'recomp',
+    coach_notes TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -418,6 +421,10 @@ export type Profile = {
   weekly_volume_note: string | null;
   goal_mode: string;
   language: string;
+  // Free-text notes the user writes for the AI (allergies, dietary rules,
+  // preferences, injuries…) so the coach/insights know context that isn't
+  // captured by the structured fields.
+  coach_notes: string | null;
   updated_at: string;
 };
 

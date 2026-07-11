@@ -1323,12 +1323,6 @@ export default function LogMealPage() {
               t(lang, "meal_analyze_empty")
             )}
           </button>
-          <button
-            onClick={() => { setManualMode(true); clearPhoto(); setText(""); setErr(null); }}
-            className="w-full text-center text-[12px] text-white/40 py-1"
-          >
-            {t(lang, "meal_manual_link")}
-          </button>
         </div>
       )}
 

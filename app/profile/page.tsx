@@ -288,6 +288,9 @@ export default function ProfilePage() {
         {langSaving && <p className="text-xs text-white/40">{t(lang, "profile_lang_saving")}</p>}
       </section>
 
+      {/* Free-text notes fed to the coach + insights */}
+      <CoachNotes lang={lang} initial={profile.coach_notes ?? ""} />
+
       {/* Daily-insight push notifications */}
       <PushToggle lang={lang} />
 
@@ -751,6 +754,64 @@ function CurrentUserCard() {
       >
         {t(lang, "profile_sign_out")}
       </button>
+    </section>
+  );
+}
+
+/**
+ * Free-text "about you" notes the user can give the AI (allergies, kosher,
+ * lactose intolerance, injuries, dislikes). Saved to user_profile.coach_notes
+ * and injected into the coach and insight prompts.
+ */
+function CoachNotes({ lang, initial }: { lang: ReturnType<typeof useLang>; initial: string }) {
+  const [value, setValue] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ coach_notes: value }),
+      });
+      setBaseline(value);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card p-5 space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+          {t(lang, "profile_notes_title")}
+        </h2>
+        <p className="text-xs text-white/55 mt-1.5 leading-snug">{t(lang, "profile_notes_desc")}</p>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => { setValue(e.target.value); setSaved(false); }}
+        dir={/[֐-׿]/.test(value) ? "rtl" : "ltr"}
+        placeholder={t(lang, "profile_notes_placeholder")}
+        rows={3}
+        maxLength={1000}
+        className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[14px] resize-none focus:outline-none focus:border-white/30"
+      />
+      <div className="flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving || value === baseline}
+          className="rounded-full bg-accent-brand text-white px-4 py-2 text-xs font-semibold disabled:opacity-40"
+        >
+          {saving ? "…" : t(lang, "profile_notes_save")}
+        </button>
+        {saved && <span className="text-[11px] text-accent-cal">{t(lang, "profile_notes_saved")}</span>}
+      </div>
     </section>
   );
 }

@@ -117,17 +117,38 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const json = await req.json().catch(() => ({}));
-  const { language } = json;
-  if (language !== "en" && language !== "he") {
-    return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
-  }
   const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
-  await db.execute({
-    sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",
-    args: [language, userId],
-  });
-  const resp = NextResponse.json({ ok: true });
-  resp.cookies.set("lang", language, { path: "/", maxAge: 31536000, sameSite: "lax" });
-  return resp;
+
+  const hasLanguage = "language" in json;
+  const hasNotes = "coach_notes" in json;
+  if (!hasLanguage && !hasNotes) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+  }
+
+  // Coach notes — free text, capped so a runaway paste can't bloat the row
+  // or the prompt.
+  if (hasNotes) {
+    const notes = typeof json.coach_notes === "string" ? json.coach_notes.slice(0, 1000) : null;
+    await db.execute({
+      sql: "UPDATE user_profile SET coach_notes = ? WHERE user_id = ?",
+      args: [notes && notes.trim() ? notes.trim() : null, userId],
+    });
+  }
+
+  if (hasLanguage) {
+    const { language } = json;
+    if (language !== "en" && language !== "he") {
+      return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
+    }
+    await db.execute({
+      sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",
+      args: [language, userId],
+    });
+    const resp = NextResponse.json({ ok: true });
+    resp.cookies.set("lang", language, { path: "/", maxAge: 31536000, sameSite: "lax" });
+    return resp;
+  }
+
+  return NextResponse.json({ ok: true });
 }

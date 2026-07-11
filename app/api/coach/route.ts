@@ -347,6 +347,9 @@ async function buildContext(userId: UserId): Promise<any> {
     now: { date: today, hour: new Date().getHours() },
     has_workouts: cfg.hasWorkouts,
     note: "Call get_day_meals(date) to see individual meals with photos for any day. Call get_meal_history/get_workout_history/get_weight_history for longer date ranges.",
+    // Free-text facts the user entered about themselves (allergies, dietary
+    // rules, preferences, injuries). Authoritative — always respect these.
+    ...(profile?.coach_notes ? { user_notes: profile.coach_notes } : {}),
     computed,
     profile: profile && {
       age: profile.age,

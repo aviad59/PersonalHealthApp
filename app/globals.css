@@ -43,6 +43,11 @@
   --elev: var(--surface-container-high);
   --hairline: var(--outline-variant);
   --hairline-strong: var(--outline);
+
+  /* Mobile bottom-nav content height (excludes the safe-area inset the nav
+     adds below it). Shared so full-height screens like the coach can size
+     their composer to sit flush against the nav instead of guessing. */
+  --nav-h: 4rem;
 }
 
 html, body {

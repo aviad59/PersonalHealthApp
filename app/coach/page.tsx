@@ -151,14 +151,14 @@ export default function CoachPage() {
 
   return (
     <div
-      className="flex flex-col md:max-w-3xl md:mx-auto md:w-full"
-      // Fill the viewport minus the fixed bottom nav (7rem) AND minus the
-      // safe-area insets — otherwise the composer overshoots the nav on
-      // phones with a notch/gesture bar and its second placeholder line
-      // gets clipped.
+      // -mb-28 cancels the layout <main>'s pb-28 (which is sized generously
+      // for scrolling pages); without it there'd be a gap between the
+      // composer and the fixed nav. Height then fills exactly from the top
+      // safe area down to the top of the nav, so the composer sits flush.
+      className="flex flex-col -mb-28 md:mb-0 md:max-w-3xl md:mx-auto md:w-full"
       style={{
         height:
-          "calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
+          "calc(100dvh - var(--nav-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
       }}
     >
       {/* Header */}
