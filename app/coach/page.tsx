@@ -6,6 +6,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { safeFetchJson } from "@/lib/fetch-json";
+import { useLang } from "@/components/LangProvider";
+import { t, Lang } from "@/lib/i18n";
 
 const CACHE_KEY = "coach-messages";
 function lsGet<T>(key: string): T | null {
@@ -21,14 +23,15 @@ type Msg = {
   created_at?: string;
 };
 
-const STARTER_PROMPTS = [
-  "What should I eat for dinner tonight?",
-  "Am I on track with my protein this week?",
-  "What's my weight trend doing?",
-  "Should I train today?",
-];
+const STARTER_KEYS = [
+  "coach_starter_1",
+  "coach_starter_2",
+  "coach_starter_3",
+  "coach_starter_4",
+] as const;
 
 export default function CoachPage() {
+  const lang = useLang();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -120,7 +123,7 @@ export default function CoachPage() {
   }
 
   async function clearThread() {
-    if (!confirm("Clear the whole conversation?")) return;
+    if (!confirm(t(lang, "coach_clear_confirm"))) return;
     try {
       await fetch("/api/coach", { method: "DELETE" });
       setMessages([]);
@@ -161,15 +164,15 @@ export default function CoachPage() {
       {/* Header */}
       <div className="px-5 pt-6 pb-3 flex items-end justify-between">
         <div>
-          <div className="text-xs text-white/50 uppercase tracking-wider">AI coach</div>
-          <h1 className="text-2xl font-bold mt-0.5">Coach</h1>
+          <div className="text-xs text-white/50 uppercase tracking-wider">{t(lang, "coach_ai_label")}</div>
+          <h1 className="text-2xl font-bold mt-0.5">{t(lang, "coach_title")}</h1>
         </div>
         {messages.length > 0 && (
           <button
             onClick={clearThread}
             className="text-[11px] text-white/40 hover:text-white/70 transition-colors"
           >
-            Clear
+            {t(lang, "coach_clear")}
           </button>
         )}
       </div>
@@ -177,9 +180,9 @@ export default function CoachPage() {
       {/* Scrollable message area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
         {loading ? (
-          <div className="text-sm text-white/50 px-2 pt-2">Loading thread…</div>
+          <div className="text-sm text-white/50 px-2 pt-2">{t(lang, "coach_loading")}</div>
         ) : messages.length === 0 ? (
-          <EmptyState onPick={(q) => send(q)} />
+          <EmptyState lang={lang} onPick={(q) => send(q)} />
         ) : (
           messages.map((m) => <Bubble key={m.id} msg={m} />)
         )}
@@ -197,7 +200,8 @@ export default function CoachPage() {
             value={input}
             onChange={autoGrow}
             onKeyDown={onKeyDown}
-            placeholder="Ask about training or nutrition…"
+            placeholder={t(lang, "coach_placeholder")}
+            dir={/[֐-׿]/.test(input) ? "rtl" : "ltr"}
             rows={1}
             className="flex-1 resize-none rounded-2xl bg-bg-elev border border-border px-4 py-3 text-[15px] leading-snug focus:outline-none focus:border-white/30"
           />
@@ -206,7 +210,7 @@ export default function CoachPage() {
             disabled={!input.trim() || sending}
             className="rounded-full bg-accent-brand text-white font-semibold px-4 py-3 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {sending ? "…" : "Send"}
+            {sending ? "…" : t(lang, "coach_send")}
           </button>
         </div>
       </div>
@@ -262,25 +266,31 @@ function TypingBubble() {
   );
 }
 
-function EmptyState({ onPick }: { onPick: (q: string) => void }) {
+function EmptyState({ lang, onPick }: { lang: Lang; onPick: (q: string) => void }) {
+  const rtl = lang === "he";
   return (
-    <div className="pt-10 px-2 space-y-5">
+    <div className="pt-10 px-2 space-y-5" dir={rtl ? "rtl" : "ltr"}>
       <div className="text-center space-y-2">
-        <div className="text-base font-semibold">Ask me anything</div>
+        <div className="text-base font-semibold">{t(lang, "coach_empty_title")}</div>
         <p className="text-[13px] text-white/55 leading-snug">
-          I can see your profile, today's meals, recent weight, and (if you track them) your workouts.
+          {t(lang, "coach_empty_desc")}
         </p>
       </div>
       <div className="space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-2">
-        {STARTER_PROMPTS.map((q) => (
-          <button
-            key={q}
-            onClick={() => onPick(q)}
-            className="w-full text-left text-[13px] text-white/80 bg-bg-elev border border-border rounded-xl px-3 py-2.5 hover:border-white/30 transition-colors"
-          >
-            {q}
-          </button>
-        ))}
+        {STARTER_KEYS.map((k) => {
+          const q = t(lang, k);
+          return (
+            <button
+              key={k}
+              onClick={() => onPick(q)}
+              className={`w-full text-[13px] text-white/80 bg-bg-elev border border-border rounded-xl px-3 py-2.5 hover:border-white/30 transition-colors ${
+                rtl ? "text-right" : "text-left"
+              }`}
+            >
+              {q}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
