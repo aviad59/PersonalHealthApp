@@ -22,7 +22,7 @@ export type UserConfig = {
 
 export const USERS: Record<UserId, UserConfig> = {
   idan: { id: "idan", displayName: "Idan", email: "idanaviad10@gmail.com", hasWorkouts: true },
-  orly: { id: "orly", displayName: "Orly", email: null, hasWorkouts: false },
+  orly: { id: "orly", displayName: "Orly", email: "aviad59@gmail.com", hasWorkouts: false },
   eran: { id: "eran", displayName: "Eran", email: null, hasWorkouts: false },
 };
 
