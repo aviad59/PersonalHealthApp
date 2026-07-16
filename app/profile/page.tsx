@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { ACTIVITY_LABELS } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
+import MeasurementsSection from "@/components/MeasurementsSection";
 import { useLang } from "@/components/LangProvider";
 import { t, TKey, type TextSize, readTextSizeCookie, setTextSizeCookie, applyTextSize } from "@/lib/i18n";
 
@@ -34,6 +35,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [langSaving, setLangSaving] = useState(false);
+  const [tab, setTab] = useState<"settings" | "logging">("settings");
   const [textSize, setTextSize] = useState<TextSize>("md");
   const [profile, setProfile] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
@@ -262,6 +264,36 @@ export default function ProfilePage() {
 
       <CurrentUserCard />
 
+      {/* Settings / Logging tabs */}
+      <div className="flex gap-1 rounded-full bg-bg-elev border border-border p-1">
+        {(["settings", "logging"] as const).map((tb) => (
+          <button
+            key={tb}
+            onClick={() => setTab(tb)}
+            className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
+              tab === tb ? "bg-accent-brand text-white" : "text-white/60"
+            }`}
+          >
+            {t(lang, tb === "settings" ? "profile_tab_settings" : "profile_tab_logging")}
+          </button>
+        ))}
+      </div>
+
+      {tab === "logging" && (
+        <>
+          <WeightLogSection
+            onProfileMaybeChanged={async () => {
+              const r = await fetch("/api/profile", { cache: "no-store" });
+              const j = await r.json();
+              setProfile(j.profile);
+            }}
+          />
+          <MeasurementsSection />
+        </>
+      )}
+
+      {tab === "settings" && (
+        <>
       {/* Language toggle */}
       <section className="card p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_language")}</h2>
@@ -416,14 +448,6 @@ export default function ProfilePage() {
         <Row k={t(lang, "macro_carbs")} v={`${profile.goal_carbs_g} g`} emphasize />
         <Row k={t(lang, "profile_workouts_wk")} v={`${profile.weekly_workout_target}`} />
       </section>
-
-      <WeightLogSection
-        onProfileMaybeChanged={async () => {
-          const r = await fetch("/api/profile", { cache: "no-store" });
-          const j = await r.json();
-          setProfile(j.profile);
-        }}
-      />
 
       {preview && (
         <section className="card p-5 space-y-3 border-accent-brand/40">
@@ -632,6 +656,8 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }

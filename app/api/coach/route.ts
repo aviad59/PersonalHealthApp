@@ -11,6 +11,7 @@ import {
   getMealsByDateLite,
   getMealsSince,
   getWeightLogSince,
+  getMeasurementsSince,
   getCachedWorkoutsSince,
   getCoachMessages,
   addCoachMessage,
@@ -227,12 +228,13 @@ async function buildContext(userId: UserId): Promise<any> {
   const today = todayStr();
   const weekStart = startOfWeekStr();
   const daysIntoWeek = diffDaysKey(today, weekStart); // 0 (Sun) .. 6 (Sat)
-  const [profile, todayMeals, weekMeals, weightLog, workoutRows] =
+  const [profile, todayMeals, weekMeals, weightLog, measurements, workoutRows] =
     await Promise.all([
       getProfile(userId),
       getMealsByDate(userId, today),
       getMealsSince(userId, weekStart),
       getWeightLogSince(userId, daysAgoStr(13)),
+      getMeasurementsSince(userId, daysAgoStr(180)),
       cfg.hasWorkouts && hasHevyKey(userId)
         ? getCachedWorkoutsSince(userId, daysAgoStr(13))
         : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
@@ -398,6 +400,22 @@ async function buildContext(userId: UserId): Promise<any> {
       by_day: week_by_day,
     },
     weight_log_last_14d: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
+    // Body circumference measurements (cm) the user logs on Profile → Logging.
+    // Sparse (logged occasionally), so up to ~6 months are included; only the
+    // fields the user actually recorded appear per entry.
+    ...(measurements.length > 0 && {
+      measurements_last_180d: measurements.map((m) => {
+        const e: Record<string, string | number> = { date: m.date };
+        if (m.waist_cm != null) e.waist_cm = m.waist_cm;
+        if (m.neck_cm != null) e.neck_cm = m.neck_cm;
+        if (m.hips_cm != null) e.hips_cm = m.hips_cm;
+        if (m.chest_cm != null) e.chest_cm = m.chest_cm;
+        if (m.arm_cm != null) e.arm_cm = m.arm_cm;
+        if (m.thigh_cm != null) e.thigh_cm = m.thigh_cm;
+        if (m.note) e.note = m.note;
+        return e;
+      }),
+    }),
     ...(cfg.hasWorkouts && { recent_workouts: recentWorkouts }),
     ...(cfg.hasWorkouts && {
       training_notes:

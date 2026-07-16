@@ -210,6 +210,24 @@ const PER_USER_TABLES = `
     PRIMARY KEY (user_id, date)
   );
 
+  -- Body circumference measurements logged over time (progress tracking).
+  -- Every field except date is optional — the user logs whatever they
+  -- measured that day. One row per user/date.
+  CREATE TABLE IF NOT EXISTS user_measurements (
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    waist_cm REAL,
+    neck_cm REAL,
+    hips_cm REAL,
+    chest_cm REAL,
+    arm_cm REAL,
+    thigh_cm REAL,
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, date)
+  );
+
   -- Persistent chat history for the AI coach. We keep the full thread per
   -- user so the conversation feels continuous across sessions, and so the
   -- model can reference earlier turns. Old turns can be trimmed later if
@@ -775,6 +793,101 @@ export async function setProfileGoalCalories(
              SET goal_calories = ?, goal_carbs_g = ?, updated_at = datetime('now')
            WHERE user_id = ?`,
     args: [goalCalories, goalCarbsG, userId],
+  });
+}
+
+// ---------------------------------------------------------------
+// Body measurements (circumferences over time)
+// ---------------------------------------------------------------
+
+export type MeasurementEntry = {
+  date: string;
+  waist_cm: number | null;
+  neck_cm: number | null;
+  hips_cm: number | null;
+  chest_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MeasurementInput = {
+  date: string;
+  waist_cm?: number | null;
+  neck_cm?: number | null;
+  hips_cm?: number | null;
+  chest_cm?: number | null;
+  arm_cm?: number | null;
+  thigh_cm?: number | null;
+  note?: string | null;
+};
+
+/** Upsert one day's measurements. Only the provided fields are written;
+ *  omitted fields on an existing row are left untouched (COALESCE keeps the
+ *  prior value when the new one is null), so partial logging accumulates. */
+export async function upsertMeasurement(userId: string, m: MeasurementInput): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO user_measurements
+            (user_id, date, waist_cm, neck_cm, hips_cm, chest_cm, arm_cm, thigh_cm, note, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(user_id, date) DO UPDATE SET
+            waist_cm = COALESCE(excluded.waist_cm, waist_cm),
+            neck_cm  = COALESCE(excluded.neck_cm, neck_cm),
+            hips_cm  = COALESCE(excluded.hips_cm, hips_cm),
+            chest_cm = COALESCE(excluded.chest_cm, chest_cm),
+            arm_cm   = COALESCE(excluded.arm_cm, arm_cm),
+            thigh_cm = COALESCE(excluded.thigh_cm, thigh_cm),
+            note     = COALESCE(excluded.note, note),
+            updated_at = datetime('now')`,
+    args: [
+      userId,
+      m.date,
+      m.waist_cm ?? null,
+      m.neck_cm ?? null,
+      m.hips_cm ?? null,
+      m.chest_cm ?? null,
+      m.arm_cm ?? null,
+      m.thigh_cm ?? null,
+      m.note ?? null,
+    ],
+  });
+}
+
+export async function getMeasurementsSince(
+  userId: string,
+  sinceDate: string,
+): Promise<MeasurementEntry[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, waist_cm, neck_cm, hips_cm, chest_cm, arm_cm, thigh_cm, note, created_at, updated_at
+            FROM user_measurements
+           WHERE user_id = ? AND date >= ?
+           ORDER BY date ASC`,
+    args: [userId, sinceDate],
+  });
+  return res.rows as unknown as MeasurementEntry[];
+}
+
+export async function getAllMeasurements(userId: string): Promise<MeasurementEntry[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT date, waist_cm, neck_cm, hips_cm, chest_cm, arm_cm, thigh_cm, note, created_at, updated_at
+            FROM user_measurements
+           WHERE user_id = ?
+           ORDER BY date ASC`,
+    args: [userId],
+  });
+  return res.rows as unknown as MeasurementEntry[];
+}
+
+export async function deleteMeasurement(userId: string, date: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM user_measurements WHERE user_id = ? AND date = ?",
+    args: [userId, date],
   });
 }
 
