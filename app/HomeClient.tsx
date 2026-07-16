@@ -108,6 +108,41 @@ export default function HomeClient({
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+
+  async function generateInsight() {
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const r = await fetch("/api/insights/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "daily" }),
+      });
+      const j = await r.json();
+      if (r.ok && j.insight) {
+        setData((d) =>
+          d
+            ? {
+                ...d,
+                latestInsight: {
+                  id: j.insight.id,
+                  type: (j.insight.type as "daily" | "weekly") ?? "daily",
+                  headline: j.insight.headline,
+                  body: j.insight.body,
+                  created_at: j.insight.created_at ?? new Date().toISOString(),
+                  tags: j.insight.tags ?? [],
+                },
+              }
+            : d,
+        );
+      }
+    } catch {
+      // non-fatal
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   useEffect(() => {
     // Hydrate from the previous session's snapshot immediately so the
@@ -145,6 +180,13 @@ export default function HomeClient({
     if (hasWorkouts) {
       (async () => {
         try {
+          // Show cached training immediately from the panel above, then:
+          // 1) GET /api/workouts warms the workout cache and auto-syncs
+          //    from Hevy if it's >10min stale (cheap when fresh) — this is
+          //    the "auto-sync on open" so the Workouts tab isn't needed.
+          // 2) Re-read /api/today/training so the week counter + recovery
+          //    reflect the freshly-synced sessions.
+          await fetch("/api/workouts", { cache: "no-store" }).catch(() => {});
           const r = await fetch("/api/today/training", { cache: "no-store" });
           const j = await r.json();
           setTraining(j);
@@ -287,23 +329,39 @@ export default function HomeClient({
           <section>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_latest_insight")}</h2>
-              <Link href="/insights" className="text-xs text-accent-brand">{t(lang, "home_all_insights")}</Link>
-            </div>
-            {latestInsight ? (
-              <InsightCard
-                headline={latestInsight.headline}
-                body={latestInsight.body}
-                type={latestInsight.type}
-                tags={latestInsight.tags}
-                date={new Date(latestInsight.created_at).toLocaleString()}
-              />
-            ) : (
-              <div className="card p-5 text-sm text-white/60">
-                {t(lang, "home_no_insights")}{" "}
-                <Link href="/insights" className="text-accent-brand underline underline-offset-2">
-                  {t(lang, "home_generate_first")}
-                </Link>.
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={generateInsight}
+                  disabled={generating}
+                  className="text-xs font-medium text-accent-brand disabled:opacity-50"
+                >
+                  {generating ? t(lang, "insights_generating") : t(lang, "home_gen_insight")}
+                </button>
+                <Link href="/insights" className="text-xs text-white/45">{t(lang, "home_all_insights")}</Link>
               </div>
+            </div>
+            {generating && !latestInsight ? (
+              <div className="card p-5 text-sm text-white/50 animate-pulse">{t(lang, "insights_generating")}</div>
+            ) : latestInsight ? (
+              <div className={generating ? "animate-pulse [animation-duration:2.5s]" : ""}>
+                <InsightCard
+                  headline={latestInsight.headline}
+                  body={latestInsight.body}
+                  type={latestInsight.type}
+                  tags={latestInsight.tags}
+                  date={new Date(latestInsight.created_at).toLocaleString()}
+                />
+              </div>
+            ) : (
+              <button
+                onClick={generateInsight}
+                className="card p-5 text-sm text-white/60 w-full text-start hover:border-accent-brand/40"
+              >
+                {t(lang, "home_no_insights")}{" "}
+                <span className="text-accent-brand underline underline-offset-2">
+                  {t(lang, "home_generate_first")}
+                </span>
+              </button>
             )}
           </section>
 

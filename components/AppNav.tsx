@@ -14,13 +14,14 @@ type NavItem = {
   workoutsOnly?: boolean;
 };
 
+// Insights and Workouts intentionally omitted from the nav: insights are
+// generated/viewed from the Home insights card, and workouts auto-sync on
+// Home open. Both routes still exist and are reachable via Home links.
 const items: NavItem[] = [
   { href: "/", labelKey: "nav_today", icon: HomeIcon },
   { href: "/meals/log", labelKey: "nav_log", icon: CameraIcon },
   { href: "/stats", labelKey: "nav_stats", icon: ChartIcon },
   { href: "/coach", labelKey: "nav_coach", icon: ChatIcon },
-  { href: "/insights", labelKey: "nav_insights", icon: SparklesIcon },
-  { href: "/workouts", labelKey: "nav_workouts", icon: DumbbellIcon, workoutsOnly: true },
   { href: "/profile", labelKey: "nav_profile", icon: UserIcon },
 ];
 

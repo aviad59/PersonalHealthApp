@@ -59,31 +59,45 @@ export default function MacroRing({
   const center = svgSize / 2;
 
   const hasOver = over > 0;
-  const gradientId = `over-${label.replace(/\s+/g, "")}`;
+  const safeLabel = label.replace(/\s+/g, "");
+  const gradientId = `over-${safeLabel}`;
+  const innerId = `inner-${safeLabel}`;
 
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative" style={{ width: svgSize, height: svgSize }}>
         <svg width={svgSize} height={svgSize} className="-rotate-90">
-          {hasOver && (
-            <defs>
+          <defs>
+            {/* Inner shadow so the track reads as a recessed groove and the
+                value arc looks like it fills it. */}
+            <filter id={innerId} x="-30%" y="-30%" width="160%" height="160%">
+              <feOffset dx="0" dy="1.2" />
+              <feGaussianBlur stdDeviation="1.6" result="offset-blur" />
+              <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse" />
+              <feFlood floodColor="#000000" floodOpacity="0.6" result="color" />
+              <feComposite operator="in" in="color" in2="inverse" result="shadow" />
+              <feComposite operator="over" in="shadow" in2="SourceGraphic" />
+            </filter>
+            {hasOver && (
               <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#f59e0b" />
                 <stop offset="100%" stopColor="#ef4444" />
               </linearGradient>
-            </defs>
-          )}
+            )}
+          </defs>
 
-          {/* Base track */}
+          {/* Base track — recessed groove via inner-shadow filter */}
           <circle
             cx={center}
             cy={center}
             r={baseR}
-            stroke="#26262b"
+            stroke="#1b2029"
             strokeWidth={stroke}
             fill="none"
+            filter={`url(#${innerId})`}
           />
-          {/* Base value ring */}
+          {/* Base value ring — sits in the groove with a soft glow so it
+              reads as a filled level. */}
           <circle
             cx={center}
             cy={center}
@@ -93,7 +107,10 @@ export default function MacroRing({
             fill="none"
             strokeDasharray={`${baseDash} ${baseC}`}
             strokeLinecap="round"
-            style={{ transition: "stroke-dasharray 300ms ease" }}
+            style={{
+              transition: "stroke-dasharray 300ms ease",
+              filter: basePct > 0 ? `drop-shadow(0 0 3px ${color}66)` : undefined,
+            }}
           />
 
           {/* Overage layer */}
