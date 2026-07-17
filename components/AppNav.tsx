@@ -19,8 +19,8 @@ type NavItem = {
 // Home open. Both routes still exist and are reachable via Home links.
 const items: NavItem[] = [
   { href: "/", labelKey: "nav_today", icon: HomeIcon },
-  { href: "/meals/log", labelKey: "nav_log", icon: CameraIcon },
   { href: "/stats", labelKey: "nav_stats", icon: ChartIcon },
+  { href: "/meals/log", labelKey: "nav_log", icon: CameraIcon },
   { href: "/coach", labelKey: "nav_coach", icon: ChatIcon },
   { href: "/profile", labelKey: "nav_profile", icon: UserIcon },
 ];

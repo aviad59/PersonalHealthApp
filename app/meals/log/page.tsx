@@ -361,6 +361,44 @@ export default function LogMealPage() {
     setPhotoExt2("jpg");
   }
 
+  /** Save a freshly-captured photo to the device (Downloads) so the user
+   *  keeps a full-quality copy — a camera capture via <input> isn't added
+   *  to the gallery by the browser, so we offer the file for download. */
+  function saveToDevice(f: File) {
+    try {
+      const url = URL.createObjectURL(f);
+      const a = document.createElement("a");
+      a.href = url;
+      const ext = (f.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
+      a.download = `meal-${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch {
+      // best-effort — never block logging on the save
+    }
+  }
+
+  // Camera capture: same as picking one photo into slot 1, but we also save
+  // the original to the phone since a captured photo isn't stored otherwise.
+  async function onPickCamera(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    saveToDevice(f);
+    setErr(null);
+    setAnalysis(null);
+    setEditing(null);
+    setProgress(t(lang, "meal_compress"));
+    try {
+      await loadPhotoIntoSlot1(f);
+    } catch (err: any) {
+      setErr(err?.message || "Could not read that photo");
+    } finally {
+      setProgress(null);
+    }
+  }
+
   // Gallery picks allow selecting 2 photos at once (e.g. the burger and the
   // salad next to it) — the first fills slot 1, and if a second file was
   // selected and slot 2 is still empty, it fills slot 2 too.
@@ -1188,13 +1226,17 @@ export default function LogMealPage() {
         </div>
       )}
 
+      {/* File inputs use sr-only (not `hidden`/display:none): some mobile
+          browsers refuse to open the camera/picker when a display:none
+          input is clicked programmatically. sr-only keeps them in the
+          layout but invisible, which triggers reliably. */}
       <input
         ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={onPick}
-        className="hidden"
+        onChange={onPickCamera}
+        className="sr-only"
       />
       <input
         ref={galleryRef}
@@ -1202,7 +1244,7 @@ export default function LogMealPage() {
         accept="image/*"
         multiple
         onChange={onPick}
-        className="hidden"
+        className="sr-only"
       />
       <input
         ref={camera2Ref}
@@ -1210,14 +1252,14 @@ export default function LogMealPage() {
         accept="image/*"
         capture="environment"
         onChange={onPick2}
-        className="hidden"
+        className="sr-only"
       />
       <input
         ref={gallery2Ref}
         type="file"
         accept="image/*"
         onChange={onPick2}
-        className="hidden"
+        className="sr-only"
       />
       <input
         ref={batchRef}
@@ -1225,7 +1267,7 @@ export default function LogMealPage() {
         accept="image/*"
         multiple
         onChange={onPickBatch}
-        className="hidden"
+        className="sr-only"
       />
 
       {/* --- BATCH MODE: each photo is its own meal --- */}
@@ -1324,13 +1366,9 @@ export default function LogMealPage() {
             </label>
             <textarea
               value={text}
-              dir={/[֐-׿]/.test(text) ? "rtl" : "ltr"}
+              dir={text ? (/[֐-׿]/.test(text) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
               onChange={(e) => setText(e.target.value)}
-              placeholder={
-                photoPreview
-                  ? "e.g. grilled chicken breast, half the rice"
-                  : "e.g. two scrambled eggs, toast with butter, black coffee"
-              }
+              placeholder={photoPreview ? t(lang, "meal_notes_placeholder") : t(lang, "meal_describe_placeholder")}
               rows={3}
               className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] resize-none"
             />

@@ -219,7 +219,7 @@ export default function CoachPage() {
             onChange={autoGrow}
             onKeyDown={onKeyDown}
             placeholder={t(lang, "coach_placeholder")}
-            dir={/[֐-׿]/.test(input) ? "rtl" : "ltr"}
+            dir={input ? (/[֐-׿]/.test(input) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
             rows={1}
             className="flex-1 resize-none rounded-2xl bg-bg-elev border border-border px-4 py-3 text-[15px] leading-snug focus:outline-none focus:border-white/30"
           />
