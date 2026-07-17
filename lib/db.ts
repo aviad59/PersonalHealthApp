@@ -132,6 +132,8 @@ const COLUMN_ADDS: { sql: string }[] = [
   // home/meals-list views can inline it directly in HTML and skip both the
   // image optimizer and a serverless DB read per row.
   { sql: "ALTER TABLE meals ADD COLUMN photo_thumb TEXT" },
+  // Optional icon id shown in lists for meals with no photo.
+  { sql: "ALTER TABLE meals ADD COLUMN icon TEXT" },
   // Optional second photo (e.g. the back of a packaged product, or a
   // second angle of a plate) for meals where one photo isn't enough
   // for an accurate read.
@@ -473,6 +475,9 @@ export type Meal = {
   items_json: string | null;
   ai_tip: string | null;
   confidence: string | null;
+  // Optional chosen icon id (see components/MealIcon) shown in lists when
+  // the meal has no photo.
+  icon: string | null;
   created_at: string;
 };
 
@@ -511,7 +516,7 @@ export type MealLite = Omit<Meal, "photo_path" | "photo_path_2"> & {
 };
 
 const MEAL_LITE_COLUMNS =
-  "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, created_at, " +
+  "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, icon, created_at, " +
   "photo_thumb, photo_thumb_2, " +
   "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo, " +
   "(CASE WHEN photo_path_2 IS NULL OR photo_path_2 = '' THEN 0 ELSE 1 END) AS has_photo_2";

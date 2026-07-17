@@ -56,6 +56,7 @@ export async function GET() {
       carbs_g: m.carbs_g,
       photo_thumb: m.photo_thumb,
       photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,
+      icon: m.icon,
       ai_tip: m.ai_tip,
       created_at: m.created_at,
     })),

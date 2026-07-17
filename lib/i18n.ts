@@ -129,6 +129,7 @@ const en = {
   meal_delete_confirm: "Delete this meal?",
   meal_save_changes: "Save changes",
   meal_description_label: "Description",
+  meal_pick_icon: "Pick an icon (shown when there's no photo)",
   // Insights
   insights_title: "Insights",
   insights_gen_daily: "Generate daily",
@@ -396,6 +397,7 @@ const he: typeof en = {
   meal_delete_confirm: "למחוק את הארוחה?",
   meal_save_changes: "שמור שינויים",
   meal_description_label: "תיאור",
+  meal_pick_icon: "בחר אייקון (יוצג כשאין תמונה)",
   // Insights
   insights_title: "תובנות",
   insights_gen_daily: "צור תובנה יומית",

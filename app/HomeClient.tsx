@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
+import { MealIcon } from "@/components/MealIcon";
 import { useLang } from "@/components/LangProvider";
 import { t, Lang } from "@/lib/i18n";
 
@@ -394,6 +395,10 @@ export default function HomeClient({
                       <img src={m.photo_thumb} alt="" width={56} height={56} decoding="async" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
                     ) : m.photo_path ? (
                       <Image src={m.photo_path} alt="" width={56} height={56} quality={55} sizes="56px" loading="lazy" className="w-14 h-14 rounded-lg object-cover bg-bg-elev" />
+                    ) : m.icon ? (
+                      <div className="w-14 h-14 rounded-lg bg-bg-elev border border-border flex items-center justify-center">
+                        <MealIcon id={m.icon} className="h-7 w-7 text-accent-brand" />
+                      </div>
                     ) : (
                       <div className="w-14 h-14 rounded-lg bg-bg-elev" />
                     )}

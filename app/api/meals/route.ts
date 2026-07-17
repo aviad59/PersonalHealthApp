@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
     items_json: m.items_json,
     ai_tip: m.ai_tip,
     confidence: m.confidence,
+    icon: m.icon,
     created_at: m.created_at,
     photo_thumb: m.photo_thumb,
     photo_path: m.has_photo ? `/api/meals/${m.id}/photo` : null,

@@ -14,6 +14,7 @@ const PatchSchema = z.object({
   fat_g: z.number().nullable().optional(),
   carbs_g: z.number().nullable().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  icon: z.string().max(40).nullable().optional(),
 });
 
 function badId() {
@@ -62,6 +63,10 @@ export async function PATCH(
   if (p.date !== undefined) {
     sets.push("date = ?");
     args.push(p.date);
+  }
+  if (p.icon !== undefined) {
+    sets.push("icon = ?");
+    args.push(p.icon);
   }
   if (sets.length === 0) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });

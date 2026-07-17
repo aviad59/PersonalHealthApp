@@ -6,6 +6,7 @@ import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import { useLang } from "@/components/LangProvider";
 import { useBackgroundTasks } from "@/components/BackgroundTasks";
+import { MealIcon, MEAL_ICON_IDS } from "@/components/MealIcon";
 import { t, Lang } from "@/lib/i18n";
 
 const ANALYZE_TASK = "meal-analyze";
@@ -50,6 +51,7 @@ type ExistingMeal = {
   photo_thumb_2: string | null;
   items_json: string | null;
   ai_tip: string | null;
+  icon: string | null;
   created_at: string;
 };
 
@@ -920,7 +922,7 @@ export default function LogMealPage() {
 
   async function patchMeal(
     id: number,
-    fields: Partial<Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g"> & { date: string }>,
+    fields: Partial<Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g" | "icon"> & { date: string }>,
   ) {
     const r = await fetch(`/api/meals/${id}`, {
       method: "PATCH",
@@ -1754,6 +1756,7 @@ function ExistingMealRow({
   const [f, setF] = useState<number>(Math.round(meal.fat_g ?? 0));
   const [c, setC] = useState<number>(Math.round(meal.carbs_g ?? 0));
   const [moveDate, setMoveDate] = useState<string>(meal.date);
+  const [icon, setIcon] = useState<string | null>(meal.icon ?? null);
   const [busy, setBusy] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
@@ -1765,9 +1768,18 @@ function ExistingMealRow({
     setF(Math.round(meal.fat_g ?? 0));
     setC(Math.round(meal.carbs_g ?? 0));
     setMoveDate(meal.date);
-  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date]);
+    setIcon(meal.icon ?? null);
+  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date, meal.icon]);
 
   const isMoving = moveDate !== meal.date;
+
+  const isProteinPowder = (() => {
+    if (!meal.items_json) return false;
+    try { return JSON.parse(meal.items_json)?.[0]?.type === "protein_powder"; }
+    catch { return false; }
+  })();
+  // Icon is only relevant when there's no image to show.
+  const noPhoto = !isProteinPowder && !meal.photo_thumb && !meal.photo_path;
 
   async function handleSave() {
     setBusy(true);
@@ -1779,17 +1791,12 @@ function ExistingMealRow({
         fat_g: f,
         carbs_g: c,
         ...(isMoving && { date: moveDate }),
+        ...(noPhoto && { icon: icon || null }),
       });
     } finally {
       setBusy(false);
     }
   }
-
-  const isProteinPowder = (() => {
-    if (!meal.items_json) return false;
-    try { return JSON.parse(meal.items_json)?.[0]?.type === "protein_powder"; }
-    catch { return false; }
-  })();
 
   return (
     <div className="card p-3">
@@ -1827,6 +1834,10 @@ function ExistingMealRow({
             loading="lazy"
             className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
           />
+        ) : meal.icon ? (
+          <div className="w-12 h-12 rounded-lg bg-bg-elev border border-border flex items-center justify-center shrink-0">
+            <MealIcon id={meal.icon} className="h-6 w-6 text-accent-brand" />
+          </div>
         ) : (
           <div className="w-12 h-12 rounded-lg bg-bg-elev shrink-0" />
         )}
@@ -1869,6 +1880,30 @@ function ExistingMealRow({
             <NumField label={t(lang, "macro_fat")} unit="g" value={f} onChange={setF} />
             <NumField label={t(lang, "macro_carbs")} unit="g" value={c} onChange={setC} />
           </div>
+          {noPhoto && (
+            <div className="rounded-lg bg-bg-elev border border-border px-3 py-2.5 space-y-2">
+              <div className="text-[11px] text-white/50">{t(lang, "meal_pick_icon")}</div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {MEAL_ICON_IDS.map((id) => {
+                  const selected = icon === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setIcon(selected ? null : id)}
+                      className={`aspect-square rounded-lg flex items-center justify-center border transition-colors ${
+                        selected
+                          ? "bg-accent-brand/20 border-accent-brand text-accent-brand"
+                          : "bg-bg-card border-border text-white/60 hover:text-white"
+                      }`}
+                    >
+                      <MealIcon id={id} className="h-5 w-5" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 rounded-lg bg-bg-elev border border-border px-3 py-2">
             <span className="text-[11px] text-white/50 flex-1">Move to date</span>
             <input
