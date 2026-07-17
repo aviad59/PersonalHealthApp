@@ -179,16 +179,20 @@ export default function CoachPage() {
           "calc(100dvh - var(--nav-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
       }}
     >
-      {/* Header */}
-      <div className="px-5 pt-6 pb-3 flex items-end justify-between">
-        <div>
-          <div className="text-xs text-white/50 uppercase tracking-wider">{t(lang, "coach_ai_label")}</div>
-          <h1 className="text-2xl font-bold mt-0.5">{t(lang, "coach_title")}</h1>
+      {/* Chat header — avatar, name, online status */}
+      <div className="px-4 pt-5 pb-3 flex items-center gap-3 border-b border-border">
+        <CoachAvatar size={42} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[16px] font-bold leading-tight">{t(lang, "coach_title")}</div>
+          <div className="flex items-center gap-1.5 text-[11px] text-white/50 mt-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            {t(lang, "coach_status")}
+          </div>
         </div>
         {messages.length > 0 && (
           <button
             onClick={clearThread}
-            className="text-[11px] text-white/40 hover:text-white/70 transition-colors"
+            className="text-[11px] text-white/40 hover:text-white/70 transition-colors shrink-0"
           >
             {t(lang, "coach_clear")}
           </button>
@@ -196,7 +200,7 @@ export default function CoachPage() {
       </div>
 
       {/* Scrollable message area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {loading ? (
           <div className="text-sm text-white/50 px-2 pt-2">{t(lang, "coach_loading")}</div>
         ) : messages.length === 0 ? (
@@ -251,18 +255,52 @@ function renderContent(text: string): React.ReactNode {
   );
 }
 
+/** Template coach profile image — a person glyph on the brand gradient. */
+function CoachAvatar({ size = 32 }: { size?: number }) {
+  return (
+    <div
+      className="rounded-full bg-gradient-to-br from-[#12b0f0] to-[#0a4e6d] flex items-center justify-center shrink-0 shadow-[0_2px_6px_rgba(0,0,0,0.3)] ring-1 ring-white/15"
+      style={{ width: size, height: size }}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size * 0.62}
+        height={size * 0.62}
+        className="text-white"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="8.5" r="3.3" />
+        <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+      </svg>
+    </div>
+  );
+}
+
 function Bubble({ msg }: { msg: Msg }) {
   const isUser = msg.role === "user";
   const rtl = hasHebrew(msg.content);
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div
+          dir={rtl ? "rtl" : "ltr"}
+          className="max-w-[80%] rounded-2xl rounded-br-sm bg-accent-brand text-white px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap shadow-sm"
+        >
+          {renderContent(msg.content)}
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className="flex justify-start items-end gap-2">
+      <CoachAvatar size={28} />
       <div
         dir={rtl ? "rtl" : "ltr"}
-        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap ${
-          isUser
-            ? "bg-accent-brand text-white rounded-br-md"
-            : "bg-bg-elev border border-border text-white/90 rounded-bl-md"
-        }`}
+        className="max-w-[80%] rounded-2xl rounded-bl-sm bg-bg-elev border border-border text-white/90 px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap shadow-sm"
       >
         {renderContent(msg.content)}
       </div>
@@ -272,8 +310,9 @@ function Bubble({ msg }: { msg: Msg }) {
 
 function TypingBubble() {
   return (
-    <div className="flex justify-start">
-      <div className="bg-bg-elev border border-border rounded-2xl rounded-bl-md px-4 py-3">
+    <div className="flex justify-start items-end gap-2">
+      <CoachAvatar size={28} />
+      <div className="bg-bg-elev border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
         <div className="flex gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse [animation-delay:0ms]" />
           <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse [animation-delay:150ms]" />
@@ -287,10 +326,11 @@ function TypingBubble() {
 function EmptyState({ lang, onPick }: { lang: Lang; onPick: (q: string) => void }) {
   const rtl = lang === "he";
   return (
-    <div className="pt-10 px-2 space-y-5" dir={rtl ? "rtl" : "ltr"}>
-      <div className="text-center space-y-2">
+    <div className="pt-8 px-2 space-y-5" dir={rtl ? "rtl" : "ltr"}>
+      <div className="flex flex-col items-center text-center space-y-3">
+        <CoachAvatar size={64} />
         <div className="text-base font-semibold">{t(lang, "coach_empty_title")}</div>
-        <p className="text-[13px] text-white/55 leading-snug">
+        <p className="text-[13px] text-white/55 leading-snug max-w-xs">
           {t(lang, "coach_empty_desc")}
         </p>
       </div>
