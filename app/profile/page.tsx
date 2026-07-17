@@ -238,7 +238,7 @@ export default function ProfilePage() {
     setApplyToAll(null); // user diverged from the blanket policy
   }
 
-  if (loading) return <div className="p-6 text-white/60">{t(lang, "profile_saving")}</div>;
+  if (loading) return <ProfileSkeleton />;
 
   if (!profile) {
     return (
@@ -748,6 +748,45 @@ function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean })
     <div className="flex justify-between items-center">
       <span className="text-sm text-white/60">{k}</span>
       <span className={emphasize ? "text-base font-semibold" : "text-sm"}>{v}</span>
+    </div>
+  );
+}
+
+/** Placeholder shown while /api/profile loads — mirrors the real layout
+ *  (user card, tabs, and a few setting cards) so the page doesn't jump. */
+function ProfileSkeleton() {
+  const bar = (w: string, h = "h-3") => <div className={`${h} ${w} rounded bg-white/10`} />;
+  return (
+    <div className="px-5 pt-6 pb-6 space-y-6 md:max-w-3xl md:mx-auto animate-pulse [animation-duration:1.6s]">
+      <div className="h-7 w-28 rounded bg-white/10" />
+
+      {/* User card */}
+      <section className="card p-4 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-white/10" />
+        <div className="flex-1 space-y-2">
+          {bar("w-20", "h-2")}
+          {bar("w-40")}
+        </div>
+        <div className="h-3 w-12 rounded bg-white/10" />
+      </section>
+
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-full bg-bg-elev border border-border p-1">
+        <div className="flex-1 h-9 rounded-full bg-white/10" />
+        <div className="flex-1 h-9 rounded-full bg-white/5" />
+      </div>
+
+      {/* A few setting cards */}
+      {[0, 1, 2].map((i) => (
+        <section key={i} className="card p-5 space-y-3">
+          {bar("w-24", "h-2")}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-11 rounded-xl bg-white/10" />
+            <div className="h-11 rounded-xl bg-white/10" />
+          </div>
+          {i === 1 && bar("w-3/4")}
+        </section>
+      ))}
     </div>
   );
 }
