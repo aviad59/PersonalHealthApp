@@ -90,7 +90,19 @@ export async function PATCH(
     sql: "SELECT * FROM meals WHERE id = ? AND user_id = ?",
     args: [id, userId],
   });
-  return NextResponse.json({ ok: true, meal: r.rows[0] });
+  const savedMeal = r.rows[0] as any;
+
+  // An icon represents the meal *type*, so apply it to every meal with the
+  // same description — past entries and this one — so identical meals all
+  // show it (new re-logs inherit it on creation, see POST /api/meals).
+  if (p.icon !== undefined && savedMeal?.description) {
+    await db.execute({
+      sql: "UPDATE meals SET icon = ? WHERE user_id = ? AND description = ?",
+      args: [p.icon, userId, savedMeal.description],
+    });
+  }
+
+  return NextResponse.json({ ok: true, meal: savedMeal });
 }
 
 export async function DELETE(

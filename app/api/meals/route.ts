@@ -100,10 +100,22 @@ export async function POST(req: NextRequest) {
   const photo_thumb_2 = thumbDataUri(m.photo_thumb_base64_2);
 
   const db = await getDb();
+
+  // Inherit the icon from a previous meal with the same description, so a
+  // re-logged "identical meal" keeps its chosen icon without re-picking.
+  let inheritedIcon: string | null = null;
+  if (m.description) {
+    const prior = await db.execute({
+      sql: "SELECT icon FROM meals WHERE user_id = ? AND description = ? AND icon IS NOT NULL ORDER BY id DESC LIMIT 1",
+      args: [userId, m.description],
+    });
+    inheritedIcon = (prior.rows[0] as any)?.icon ?? null;
+  }
+
   const ins = await db.execute({
     sql: `INSERT INTO meals (
-        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence, icon
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       userId,
       date,
@@ -118,6 +130,7 @@ export async function POST(req: NextRequest) {
       m.carbs_g,
       m.items ? JSON.stringify(m.items) : null,
       m.confidence ?? null,
+      inheritedIcon,
     ],
   });
   const mealId = Number(ins.lastInsertRowid ?? 0);
