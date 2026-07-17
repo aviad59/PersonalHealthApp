@@ -225,16 +225,34 @@ export default function HomeClient({
 
   return (
     <div className={`px-5 pt-6 pb-6 space-y-5 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
-      <div className="flex items-end justify-between">
-        <div>
-          <div className="text-xs text-white/50 uppercase tracking-wider">
+      {/* Branded top header — gradient rounded-bottom rectangle with the app
+          logo, a profile avatar, and a greeting (inspired by the reference). */}
+      <div className="-mx-5 -mt-6 px-5 pt-7 pb-6 rounded-b-[28px] bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] relative overflow-hidden shadow-[0_10px_30px_-12px_rgba(14,165,233,0.5)]">
+        {/* soft decorative glow, top-right */}
+        <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center">
+              <PulseLogo className="h-5 w-5 text-white" />
+            </span>
+            <span className="text-lg font-bold tracking-tight text-white">Health</span>
+          </div>
+          <Link
+            href="/profile"
+            aria-label={userDisplayName}
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center text-white text-sm font-semibold"
+          >
+            {userDisplayName.slice(0, 1).toUpperCase()}
+          </Link>
+        </div>
+        <div className="relative mt-4">
+          <div className="text-[11px] uppercase tracking-wider text-white/70">
             {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
           </div>
-          <h1 className="text-2xl font-bold mt-0.5">{t(lang, "home_title")}</h1>
+          <div className="text-xl font-bold text-white mt-0.5">
+            {t(lang, "home_greeting")} {userDisplayName}
+          </div>
         </div>
-        <Link href="/profile" className="text-[11px] text-white/50 hover:text-white/80 transition-colors">
-          {userDisplayName}
-        </Link>
       </div>
 
       <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
@@ -548,6 +566,16 @@ function RationaleRow({ label, value, highlight }: { label: string; value: strin
       <span className="text-white/60">{label}</span>
       <span className={highlight ? "text-amber-400 font-medium" : "text-white/85"}>{value}</span>
     </div>
+  );
+}
+
+function PulseLogo(props: React.SVGProps<SVGSVGElement>) {
+  // Heart + heartbeat line — a compact health mark for the header.
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M20.8 5.6a5 5 0 0 0-7.1 0l-1.7 1.7-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.1 1.7-1.7a5 5 0 0 0 0-7.1Z" opacity="0.55" />
+      <path d="M3 12.5h4l2-3 2.5 5 2-4 1.5 2H21" />
+    </svg>
   );
 }
 

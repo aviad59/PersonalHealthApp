@@ -12,6 +12,7 @@ const en = {
   nav_profile: "Profile",
   // Home
   home_title: "Today",
+  home_greeting: "Hello",
   home_macros: "Macros",
   home_log_meal: "+ Log meal",
   home_next_meal: "Next meal",
@@ -276,6 +277,7 @@ const he: typeof en = {
   nav_profile: "פרופיל",
   // Home
   home_title: "היום",
+  home_greeting: "שלום",
   home_macros: "מאקרו",
   home_log_meal: "+ תיעוד ארוחה",
   home_next_meal: "ארוחה הבאה",
