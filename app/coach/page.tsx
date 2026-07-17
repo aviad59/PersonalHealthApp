@@ -7,7 +7,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { useLang } from "@/components/LangProvider";
+import { useBackgroundTasks } from "@/components/BackgroundTasks";
 import { t, Lang } from "@/lib/i18n";
+
+const COACH_TASK = "coach-send";
 
 const CACHE_KEY = "coach-messages";
 function lsGet<T>(key: string): T | null {
@@ -32,12 +35,16 @@ const STARTER_KEYS = [
 
 export default function CoachPage() {
   const lang = useLang();
+  const bg = useBackgroundTasks();
+  // The send itself runs in the background provider so it survives leaving
+  // the page — "sending" is derived from the provider, not local state.
+  const sending = bg.isPending(COACH_TASK);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const wasSending = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -79,11 +86,29 @@ export default function CoachPage() {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
+  async function reloadThread() {
+    try {
+      const r = await safeFetchJson<{ messages: Msg[] }>("/api/coach", { cache: "no-store" });
+      const msgs = r.messages || [];
+      setMessages(msgs);
+      lsSet(CACHE_KEY, msgs);
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // When a background coach-send finishes (whether we stayed on the page or
+  // came back to it mid-flight), pull the thread so the reply appears.
+  useEffect(() => {
+    if (wasSending.current && !sending) reloadThread();
+    wasSending.current = sending;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sending]);
+
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setErr(null);
-    setSending(true);
     // Optimistic append so the bubble appears immediately, before the round-trip.
     const optimistic: Msg = {
       id: Date.now(),
@@ -95,30 +120,23 @@ export default function CoachPage() {
     if (taRef.current) taRef.current.style.height = "auto";
 
     try {
-      const j = await safeFetchJson<{ reply: string }>("/api/coach", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-      // Reload the real history so message ids/timestamps come from the DB.
-      const r = await safeFetchJson<{ messages: Msg[] }>("/api/coach", {
-        cache: "no-store",
-      });
-      const msgs = r.messages || [];
-      setMessages(msgs);
-      lsSet(CACHE_KEY, msgs);
-      // If the reload somehow lost the assistant turn, fall back to the inline reply.
-      if (!msgs.some((m) => m.role === "assistant" && m.content === j.reply)) {
-        setMessages((m) => [
-          ...m,
-          { id: Date.now() + 1, role: "assistant", content: j.reply },
-        ]);
-      }
+      // Runs in the background provider, so navigating away won't abort it
+      // and won't throw "failed to fetch". The reply is persisted
+      // server-side; the sending-transition effect reloads the thread when
+      // it completes. The global spinner shows progress on any page.
+      await bg.run(
+        COACH_TASK,
+        () =>
+          safeFetchJson<{ reply: string }>("/api/coach", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ message: trimmed }),
+          }),
+        { label: t(lang, "coach_thinking") },
+      );
     } catch (e: any) {
       setErr(e.message);
       // Leave the optimistic user bubble visible so the user sees what they sent.
-    } finally {
-      setSending(false);
     }
   }
 

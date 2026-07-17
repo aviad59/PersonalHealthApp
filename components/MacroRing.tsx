@@ -43,7 +43,7 @@ export default function MacroRing({
   const over = warnOnOver ? Math.max(0, ratio - 1) : 0;
   const overPct = Math.min(1, over); // visually cap at +100% past target
 
-  const stroke = 9;
+  const stroke = 12;
   const overStroke = 5;
   const overGap = 4; // px between base ring and overage ring
   const baseR = (size - stroke) / 2;

@@ -5,7 +5,10 @@ import Image from "next/image";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import { useLang } from "@/components/LangProvider";
+import { useBackgroundTasks } from "@/components/BackgroundTasks";
 import { t, Lang } from "@/lib/i18n";
+
+const ANALYZE_TASK = "meal-analyze";
 
 type Analysis = {
   description: string;
@@ -127,6 +130,7 @@ function refreshFrequentMeals() {
 
 export default function LogMealPage() {
   const lang = useLang();
+  const bg = useBackgroundTasks();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   // Second (optional) photo — e.g. the back of a package or another
@@ -310,6 +314,24 @@ export default function LogMealPage() {
   useEffect(() => {
     setShowDaySummary(false);
   }, [date]);
+
+  // If an analysis finished in the background while we were on another page,
+  // restore it on return so the review card appears (macros/description; the
+  // photo preview itself isn't restored, but the meal can still be saved).
+  useEffect(() => {
+    const done = bg.consume(ANALYZE_TASK);
+    if (done?.status === "done" && done.result?.analysis) {
+      const a = done.result.analysis as Analysis;
+      setAnalysis(a);
+      setEditing({
+        calories: a.total.calories,
+        protein_g: a.total.protein_g,
+        fat_g: a.total.fat_g,
+        carbs_g: a.total.carbs_g,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadPhotoIntoSlot1(f: File) {
     const [compressed, thumb] = await Promise.all([
@@ -579,10 +601,17 @@ export default function LogMealPage() {
       // we're in. Claude's vision call is the bulk of the wait when a photo
       // is attached; text-only calls are noticeably faster.
       setProgress(hasPhoto ? t(lang, "meal_asking_photo") : t(lang, "meal_asking_text"));
-      const j = await safeFetchJson<{ analysis: Analysis }>(
-        "/api/meals/analyze",
-        { method: "POST", body: fd },
+      // Runs in the background provider so leaving the page mid-analysis
+      // doesn't abort it or throw "failed to fetch"; the global spinner
+      // shows progress on any page and the result is restored on return.
+      const j = await bg.run(
+        ANALYZE_TASK,
+        () => safeFetchJson<{ analysis: Analysis }>("/api/meals/analyze", { method: "POST", body: fd }),
+        { label: t(lang, "meal_analyzing") },
       );
+      // Applied here — clear the stored result so a later remount doesn't
+      // re-restore a stale analysis.
+      bg.consume(ANALYZE_TASK);
       setProgress(t(lang, "meal_reading"));
       setAnalysis(j.analysis as Analysis);
       setEditing({
