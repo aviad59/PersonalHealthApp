@@ -39,6 +39,7 @@ export default function ProfilePage() {
   const [textSize, setTextSize] = useState<TextSize>("md");
   const [profile, setProfile] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   // --- CSV backfill state ---
@@ -65,6 +66,7 @@ export default function ProfilePage() {
 
   function update<K extends string>(k: K, v: any) {
     setProfile((p: any) => ({ ...p, [k]: v }));
+    setSavedMsg(null);
   }
 
   async function recalculate() {
@@ -118,6 +120,12 @@ export default function ProfilePage() {
       }
       setProfile(j.profile);
       setPreview(null);
+      // Explicit confirmation with the freshly-computed targets, so it's
+      // obvious the recalculation happened (otherwise the numbers update
+      // silently in the card below and the save looks like a no-op).
+      setSavedMsg(
+        `${j.profile.goal_calories} kcal · P${j.profile.goal_protein_g} · C${j.profile.goal_carbs_g} · F${j.profile.goal_fat_g}`,
+      );
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -465,6 +473,15 @@ export default function ProfilePage() {
       )}
 
       {err && <div className="text-sm text-red-400">{err}</div>}
+
+      {savedMsg && (
+        <div className="rounded-xl border border-accent-cal/40 bg-accent-cal/10 px-4 py-3 flex items-center gap-2 text-sm">
+          <span className="text-accent-cal">✓</span>
+          <span className="text-white/80">
+            {t(lang, "profile_saved")} <span className="nums font-medium">{savedMsg}</span>
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button
