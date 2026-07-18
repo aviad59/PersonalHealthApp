@@ -130,6 +130,28 @@ function refreshFrequentMeals() {
   fetch("/api/meals/frequent/refresh", { method: "POST" }).catch(() => {});
 }
 
+// In-progress new-meal draft, held at MODULE scope so it survives
+// client-side navigation (persists across route changes; cleared on a full
+// reload). Lets the user pick a photo / kick off an analysis, switch pages,
+// and return to the logger with everything intact — mirroring how the coach
+// keeps its request going in the background.
+type MealDraft = {
+  text: string;
+  photoPreview: string | null;
+  photoBase64: string | null;
+  photoThumbBase64: string | null;
+  photoExt: string;
+  compressedFile: File | null;
+  photoPreview2: string | null;
+  photoBase64_2: string | null;
+  photoThumbBase64_2: string | null;
+  photoExt2: string;
+  compressedFile2: File | null;
+  analysis: Analysis | null;
+  editing: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
+};
+let mealDraft: MealDraft | null = null;
+
 export default function LogMealPage() {
   const lang = useLang();
   const bg = useBackgroundTasks();
@@ -173,7 +195,9 @@ export default function LogMealPage() {
   const [photoThumbBase64_2, setPhotoThumbBase64_2] = useState<string | null>(null);
   const [text, setText] = useState(""); // description/hint/context
 
-  const [analyzing, setAnalyzing] = useState(false);
+  // Analysis runs in the background provider so it survives navigation;
+  // "analyzing" reflects that pending state rather than a local flag.
+  const analyzing = bg.isPending(ANALYZE_TASK);
   const [saving, setSaving] = useState(false);
   // Granular step label, surfaced in the action button so the user knows
   // which stage is taking time. Cleared back to null when idle.
@@ -317,23 +341,76 @@ export default function LogMealPage() {
     setShowDaySummary(false);
   }, [date]);
 
-  // If an analysis finished in the background while we were on another page,
-  // restore it on return so the review card appears (macros/description; the
-  // photo preview itself isn't restored, but the meal can still be saved).
+  // --- New-meal draft persistence across navigation ---
+  // On mount, restore any in-progress draft (photo/text/analysis) so a photo
+  // added before leaving is still here; also pick up an analysis that
+  // finished in the background while we were away.
   useEffect(() => {
+    if (mealDraft) {
+      const d = mealDraft;
+      setText(d.text);
+      setPhotoPreview(d.photoPreview);
+      setPhotoBase64(d.photoBase64);
+      setPhotoThumbBase64(d.photoThumbBase64);
+      setPhotoExt(d.photoExt);
+      setCompressedFile(d.compressedFile);
+      setPhotoPreview2(d.photoPreview2);
+      setPhotoBase64_2(d.photoBase64_2);
+      setPhotoThumbBase64_2(d.photoThumbBase64_2);
+      setPhotoExt2(d.photoExt2);
+      setCompressedFile2(d.compressedFile2);
+      if (d.analysis) applyAnalysis(d.analysis);
+    }
     const done = bg.consume(ANALYZE_TASK);
     if (done?.status === "done" && done.result?.analysis) {
-      const a = done.result.analysis as Analysis;
-      setAnalysis(a);
-      setEditing({
-        calories: a.total.calories,
-        protein_g: a.total.protein_g,
-        fat_g: a.total.fat_g,
-        carbs_g: a.total.carbs_g,
-      });
+      applyAnalysis(done.result.analysis as Analysis);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist the draft to module scope whenever it changes, so navigating
+  // away and back keeps the photo/text/analysis. Cleared once nothing is
+  // in progress (i.e. after a save or discard).
+  useEffect(() => {
+    const hasDraft = !!(photoPreview || photoPreview2 || text.trim() || analysis);
+    mealDraft = hasDraft
+      ? {
+          text,
+          photoPreview,
+          photoBase64,
+          photoThumbBase64,
+          photoExt,
+          compressedFile,
+          photoPreview2,
+          photoBase64_2,
+          photoThumbBase64_2,
+          photoExt2,
+          compressedFile2,
+          analysis,
+          editing,
+        }
+      : null;
+  }, [
+    text, photoPreview, photoBase64, photoThumbBase64, photoExt, compressedFile,
+    photoPreview2, photoBase64_2, photoThumbBase64_2, photoExt2, compressedFile2,
+    analysis, editing,
+  ]);
+
+  // Apply the analysis when the background task finishes while we're on the
+  // page (stayed, or returned mid-flight).
+  const wasAnalyzing = useRef(false);
+  useEffect(() => {
+    if (wasAnalyzing.current && !analyzing) {
+      const done = bg.consume(ANALYZE_TASK);
+      if (done?.status === "done" && done.result?.analysis) {
+        applyAnalysis(done.result.analysis as Analysis);
+      } else if (done?.status === "error") {
+        setErr(done.error ?? "analyze failed");
+      }
+    }
+    wasAnalyzing.current = analyzing;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzing]);
 
   async function loadPhotoIntoSlot1(f: File) {
     const [compressed, thumb] = await Promise.all([
@@ -618,7 +695,17 @@ export default function LogMealPage() {
     clearPhoto();
   }
 
-  async function analyze() {
+  function applyAnalysis(a: Analysis) {
+    setAnalysis(a);
+    setEditing({
+      calories: a.total.calories,
+      protein_g: a.total.protein_g,
+      fat_g: a.total.fat_g,
+      carbs_g: a.total.carbs_g,
+    });
+  }
+
+  function analyze() {
     const f = pickedFile();
     const hasPhoto = !!f;
     const hasText = !!text.trim();
@@ -626,46 +713,24 @@ export default function LogMealPage() {
       setErr("Add a photo or a description");
       return;
     }
-    setAnalyzing(true);
     setErr(null);
-    try {
-      const fd = new FormData();
-      if (f) fd.append("photo", f);
-      const f2 = pickedFile2();
-      if (f2) fd.append("photo2", f2);
-      if (hasText) {
-        // When a photo is present, text is context; otherwise text is the description.
-        fd.append(hasPhoto ? "hint" : "text", text.trim());
-      }
-      // Step labels surface in the button so the user knows which slow part
-      // we're in. Claude's vision call is the bulk of the wait when a photo
-      // is attached; text-only calls are noticeably faster.
-      setProgress(hasPhoto ? t(lang, "meal_asking_photo") : t(lang, "meal_asking_text"));
-      // Runs in the background provider so leaving the page mid-analysis
-      // doesn't abort it or throw "failed to fetch"; the global spinner
-      // shows progress on any page and the result is restored on return.
-      const j = await bg.run(
-        ANALYZE_TASK,
-        () => safeFetchJson<{ analysis: Analysis }>("/api/meals/analyze", { method: "POST", body: fd }),
-        { label: t(lang, "meal_analyzing") },
-      );
-      // Applied here — clear the stored result so a later remount doesn't
-      // re-restore a stale analysis.
-      bg.consume(ANALYZE_TASK);
-      setProgress(t(lang, "meal_reading"));
-      setAnalysis(j.analysis as Analysis);
-      setEditing({
-        calories: j.analysis.total.calories,
-        protein_g: j.analysis.total.protein_g,
-        fat_g: j.analysis.total.fat_g,
-        carbs_g: j.analysis.total.carbs_g,
-      });
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setAnalyzing(false);
-      setProgress(null);
+    const fd = new FormData();
+    if (f) fd.append("photo", f);
+    const f2 = pickedFile2();
+    if (f2) fd.append("photo2", f2);
+    if (hasText) {
+      // When a photo is present, text is context; otherwise text is the description.
+      fd.append(hasPhoto ? "hint" : "text", text.trim());
     }
+    // Runs in the background provider (not awaited here) so leaving the page
+    // mid-analysis keeps it going with the global spinner, and the result is
+    // applied by the analyze-transition effect — whether we stayed or came
+    // back. `analyzing` is derived from the provider's pending state.
+    bg.run(
+      ANALYZE_TASK,
+      () => safeFetchJson<{ analysis: Analysis }>("/api/meals/analyze", { method: "POST", body: fd }),
+      { label: t(lang, "meal_analyzing") },
+    ).catch((e: any) => setErr(e?.message ?? "analyze failed"));
   }
 
   /** Re-runs the analysis with the user's answer folded into the context
