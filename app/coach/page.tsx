@@ -55,6 +55,27 @@ export default function CoachPage() {
 
   // Safety net: always drop the body flag when leaving the coach.
   useEffect(() => () => { document.body.classList.remove("kb-open"); }, []);
+
+  // Authoritative keyboard-open detection via the visual viewport. The
+  // Android back button closes the keyboard WITHOUT firing the textarea's
+  // blur, so relying on focus/blur alone leaves the nav stuck hidden (or
+  // the layout half-collapsed). The visual viewport height, on the other
+  // hand, always reflects the space above the keyboard — so when it grows
+  // back we know the keyboard closed and can restore the nav + drop focus.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let maxH = vv.height;
+    const sync = () => {
+      maxH = Math.max(maxH, vv.height);
+      const open = maxH - vv.height > 120; // keyboard eats >120px
+      setKbOpen(open);
+      document.body.classList.toggle("kb-open", open);
+      if (!open && taRef.current) taRef.current.blur();
+    };
+    vv.addEventListener("resize", sync);
+    return () => vv.removeEventListener("resize", sync);
+  }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
