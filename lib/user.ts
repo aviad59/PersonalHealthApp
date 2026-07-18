@@ -6,7 +6,7 @@
 // Components without dragging next/headers/next-auth server internals
 // into the client bundle.
 
-export type UserId = "idan" | "orly" | "eran";
+export type UserId = "idan" | "orly" | "eran" | "dan";
 
 export type UserConfig = {
   id: UserId;
@@ -24,12 +24,13 @@ export const USERS: Record<UserId, UserConfig> = {
   idan: { id: "idan", displayName: "Idan", email: "idanaviad10@gmail.com", hasWorkouts: true },
   orly: { id: "orly", displayName: "Orly", email: "aviad59@gmail.com", hasWorkouts: false },
   eran: { id: "eran", displayName: "Eran", email: null, hasWorkouts: false },
+  dan: { id: "dan", displayName: "Dan", email: "brima.dan@gmail.com", hasWorkouts: true },
 };
 
-export const USER_LIST: UserConfig[] = [USERS.idan, USERS.orly, USERS.eran];
+export const USER_LIST: UserConfig[] = [USERS.idan, USERS.orly, USERS.eran, USERS.dan];
 
 export function isUserId(s: string | null | undefined): s is UserId {
-  return s === "idan" || s === "orly" || s === "eran";
+  return s === "idan" || s === "orly" || s === "eran" || s === "dan";
 }
 
 export function getUserConfig(id: UserId): UserConfig {

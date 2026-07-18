@@ -420,7 +420,8 @@ async function buildContext(userId: UserId): Promise<any> {
       }),
     }),
     ...(cfg.hasWorkouts && { recent_workouts: recentWorkouts }),
-    ...(cfg.hasWorkouts && {
+    // idan-specific training preference; other users get neutral advice.
+    ...(userId === "idan" && {
       training_notes:
         "Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development. Don't surface leg volume as an issue.",
     }),

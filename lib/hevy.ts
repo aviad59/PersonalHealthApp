@@ -9,20 +9,23 @@ import { dateKey } from "@/lib/db";
 
 const BASE = "https://api.hevyapp.com/v1";
 
+// Per-user Hevy key env var. Each workouts-enabled user needs their OWN
+// key so we never pull another user's workouts. Unknown/default → idan's.
+function hevyEnvVar(userId?: string): string {
+  if (userId === "eran") return "HEVY_API_KEY_ERAN";
+  if (userId === "dan") return "HEVY_API_KEY_DAN";
+  return "HEVY_API_KEY"; // idan (and the default)
+}
+
 export function hevyKey(userId?: string): string {
-  if (userId === "eran") {
-    const k = process.env.HEVY_API_KEY_ERAN;
-    if (!k) throw new Error("HEVY_API_KEY_ERAN is not set. Add it to .env.local");
-    return k;
-  }
-  const k = process.env.HEVY_API_KEY;
-  if (!k) throw new Error("HEVY_API_KEY is not set. Add it to .env.local");
+  const envVar = hevyEnvVar(userId);
+  const k = process.env[envVar];
+  if (!k) throw new Error(`${envVar} is not set. Add it to the environment.`);
   return k;
 }
 
 export function hasHevyKey(userId?: string): boolean {
-  if (userId === "eran") return !!process.env.HEVY_API_KEY_ERAN;
-  return !!process.env.HEVY_API_KEY;
+  return !!process.env[hevyEnvVar(userId)];
 }
 
 async function get<T>(path: string, userId?: string): Promise<T> {

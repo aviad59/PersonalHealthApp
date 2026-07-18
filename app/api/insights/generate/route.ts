@@ -120,8 +120,8 @@ export async function POST(req: NextRequest) {
     },
     has_workouts: cfg.hasWorkouts,
     ...(profile.coach_notes ? { user_notes: profile.coach_notes } : {}),
-    // Per-user training context — only present when the user tracks workouts.
-    ...(cfg.hasWorkouts && {
+    // idan-specific training preference; other users get neutral advice.
+    ...(userId === "idan" && {
       training_notes: "Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.",
     }),
     today: {
