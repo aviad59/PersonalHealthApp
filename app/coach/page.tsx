@@ -33,6 +33,10 @@ const STARTER_KEYS = [
   "coach_starter_4",
 ] as const;
 
+// Unsent composer text, held at module scope so it survives leaving the
+// coach tab and coming back (cleared on send or full reload).
+let coachInputDraft = "";
+
 export default function CoachPage() {
   const lang = useLang();
   const bg = useBackgroundTasks();
@@ -40,7 +44,7 @@ export default function CoachPage() {
   // the page — "sending" is derived from the provider, not local state.
   const sending = bg.isPending(COACH_TASK);
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(coachInputDraft);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -54,6 +58,12 @@ export default function CoachPage() {
   useEffect(() => {
     setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
   }, []);
+
+  // Persist the unsent composer text so switching tabs mid-typing doesn't
+  // lose it (send() clears input, which clears the draft too).
+  useEffect(() => {
+    coachInputDraft = input;
+  }, [input]);
 
   // Initial load — show cached thread instantly, refresh from server in background.
   useEffect(() => {
