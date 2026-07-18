@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { ACTIVITY_LABELS } from "@/lib/calc";
+import { ACTIVITY_LABELS, computeGoalsFromMetrics, ActivityLevel, GoalMode } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
 import MeasurementsSection from "@/components/MeasurementsSection";
 import { useLang } from "@/components/LangProvider";
@@ -455,6 +455,12 @@ export default function ProfilePage() {
         <Row k={t(lang, "macro_fat")} v={`${profile.goal_fat_g} g`} emphasize />
         <Row k={t(lang, "macro_carbs")} v={`${profile.goal_carbs_g} g`} emphasize />
         <Row k={t(lang, "profile_workouts_wk")} v={`${profile.weekly_workout_target}`} />
+        {(() => {
+          // Recompute the breakdown from the saved metrics so "Show the math"
+          // is available for the current goals, not only the preview.
+          const b = safeBreakdown(profile);
+          return b ? <CalcBreakdown b={b} lang={lang} /> : null;
+        })()}
       </section>
 
       {preview && (
@@ -694,6 +700,29 @@ function toPayload(p: any) {
     goal_mode: p.goal_mode ?? "recomp",
     weekly_workout_target: Number.isFinite(wkt) && wkt > 0 ? wkt : null,
   };
+}
+
+/** Recompute the calc breakdown from a saved profile so "Show the math"
+ *  works on the Current goals card. Returns null if the metrics are
+ *  incomplete/invalid (e.g. female without hips), so it never throws. */
+function safeBreakdown(p: any) {
+  try {
+    const r = computeGoalsFromMetrics({
+      age: Number(p.age),
+      sex: p.sex,
+      heightCm: Number(p.height_cm),
+      weightKg: Number(p.weight_kg),
+      neckCm: Number(p.neck_cm),
+      waistCm: Number(p.waist_cm),
+      hipsCm: p.sex === "female" ? Number(p.hips_cm) : null,
+      activity: p.activity_level as ActivityLevel,
+      goalMode: (p.goal_mode ?? "recomp") as GoalMode,
+      weeklyWorkoutTarget: Number(p.weekly_workout_target) || null,
+    });
+    return r.breakdown;
+  } catch {
+    return null;
+  }
 }
 
 function NumField({
