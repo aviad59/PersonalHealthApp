@@ -10,6 +10,7 @@ type DayBucket = Macros & {
   date: string;
   meals: number;
   trend: Macros;
+  goal: Macros | null;
 };
 
 type Stats = {
@@ -407,16 +408,41 @@ function BarChart({
         )}
       </div>
       <div className="relative" style={{ height: HEIGHT + 16 }}>
-        {target ? (
-          <div
-            className="absolute left-0 right-0 border-t border-dashed border-accent-brand/50"
-            style={{ top: HEIGHT - (target / max) * HEIGHT }}
-          >
-            <span className="absolute -top-3.5 right-0 text-[9px] text-accent-brand/80">
-              target {target}
-            </span>
-          </div>
-        ) : null}
+        {/* Per-day target line — steps whenever the goal changed, so a day
+            is shown against the goal that was in effect then. */}
+        {(() => {
+          const n = series.length;
+          if (n === 0) return null;
+          let d = "";
+          let penUp = true;
+          series.forEach((day, i) => {
+            const g = day.goal?.[metric];
+            if (g == null) { penUp = true; return; }
+            const x0 = (i / n) * 100;
+            const x1 = ((i + 1) / n) * 100;
+            const y = 100 - (g / max) * 100;
+            d += `${penUp ? "M" : "L"} ${x0} ${y} L ${x1} ${y} `;
+            penUp = false;
+          });
+          const latest = [...series].reverse().find((s) => s.goal?.[metric] != null)?.goal?.[metric];
+          return (
+            <>
+              <svg
+                className="absolute inset-x-0 top-0 w-full pointer-events-none"
+                style={{ height: HEIGHT }}
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <path d={d} fill="none" stroke="var(--primary)" strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />
+              </svg>
+              {latest != null && (
+                <span className="absolute right-0 text-[9px] text-accent-primary/80" style={{ top: HEIGHT - (latest / max) * HEIGHT - 12 }}>
+                  target {latest}
+                </span>
+              )}
+            </>
+          );
+        })()}
         <div className="absolute inset-x-0 bottom-4 flex items-end gap-[2px] h-[120px]">
           {series.map((d) => {
             const v = d[metric];
@@ -498,7 +524,9 @@ function DayRow({
   targets: Stats["targets"];
   lang: Lang;
 }) {
-  const pct = targets ? Math.round((day.calories / targets.calories) * 100) : null;
+  // % against the calorie goal that was in effect on that specific day.
+  const dayGoalCal = day.goal?.calories ?? targets?.calories ?? null;
+  const pct = dayGoalCal ? Math.round((day.calories / dayGoalCal) * 100) : null;
   const empty = day.meals === 0;
   return (
     <div className="flex items-center justify-between py-2.5 text-sm">

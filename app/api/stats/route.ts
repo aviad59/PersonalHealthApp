@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getMealDailyTotalsSince,
   getProfile,
+  getGoalHistory,
   daysAgoStr,
   todayStr,
+  type GoalSnapshot,
 } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
@@ -16,7 +18,39 @@ type DayBucket = Macros & {
   date: string;
   meals: number;
   trend: Macros;
+  // The goal in effect on this specific day (may differ from the current
+  // goal if targets were changed) — null when no goals are set at all.
+  goal: Macros | null;
 };
+
+/** Resolve the goal in effect on `date`: the most recent snapshot with
+ *  effective_date <= date, falling back to the current profile goals. */
+function goalForDate(
+  history: GoalSnapshot[],
+  date: string,
+  current: Macros | null,
+): Macros | null {
+  let chosen: GoalSnapshot | null = null;
+  for (const g of history) {
+    if (g.effective_date <= date) chosen = g;
+    else break;
+  }
+  if (
+    chosen &&
+    chosen.goal_calories != null &&
+    chosen.goal_protein_g != null &&
+    chosen.goal_fat_g != null &&
+    chosen.goal_carbs_g != null
+  ) {
+    return {
+      calories: chosen.goal_calories,
+      protein_g: chosen.goal_protein_g,
+      fat_g: chosen.goal_fat_g,
+      carbs_g: chosen.goal_carbs_g,
+    };
+  }
+  return current;
+}
 
 // Trailing window (in days, inclusive of the day itself) used for the
 // rolling-average trend line shown alongside the bar chart.
@@ -35,9 +69,10 @@ export async function GET(req: NextRequest) {
   const today = todayStr();
 
   const userId = await getCurrentUserIdOrDefault();
-  const [dailyTotals, profile] = await Promise.all([
+  const [dailyTotals, profile, goalHistory] = await Promise.all([
     getMealDailyTotalsSince(userId, lookbackSince),
     getProfile(userId),
+    getGoalHistory(userId),
   ]);
 
   const byDate = new Map<string, DayBucket>();
@@ -51,6 +86,7 @@ export async function GET(req: NextRequest) {
       carbs_g: 0,
       meals: 0,
       trend: { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+      goal: null,
     });
   }
 
@@ -139,11 +175,21 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
+  // Attach the goal that was in effect on each day (falls back to the
+  // current target when there's no dated history yet).
+  for (const d of fullSeries) {
+    d.goal = goalForDate(goalHistory, d.date, targets);
+  }
+
+  // Protein hit-rate judged against each day's OWN goal, so raising the
+  // target today doesn't retroactively mark past hits as misses.
   let proteinHitRate: number | null = null;
-  if (targets && logged.length > 0) {
-    const threshold = targets.protein_g * 0.9;
-    const hits = logged.filter((d) => d.protein_g >= threshold).length;
-    proteinHitRate = Math.round((hits / logged.length) * 100);
+  if (logged.length > 0) {
+    const withGoal = logged.filter((d) => d.goal?.protein_g);
+    if (withGoal.length > 0) {
+      const hits = withGoal.filter((d) => d.protein_g >= d.goal!.protein_g * 0.9).length;
+      proteinHitRate = Math.round((hits / withGoal.length) * 100);
+    }
   }
 
   return NextResponse.json({

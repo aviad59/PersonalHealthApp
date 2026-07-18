@@ -254,6 +254,20 @@ const PER_USER_TABLES = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Goal history: a snapshot of macro/calorie goals with the date they
+  -- became effective. Lets past days be judged against the goal in effect
+  -- then, instead of re-scoring history against a newly-raised target.
+  CREATE TABLE IF NOT EXISTS user_goal_history (
+    user_id TEXT NOT NULL,
+    effective_date TEXT NOT NULL,
+    goal_calories INTEGER,
+    goal_protein_g INTEGER,
+    goal_fat_g INTEGER,
+    goal_carbs_g INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, effective_date)
+  );
+
   -- Web Push subscriptions. One row per (user_id, browser endpoint) so a
   -- user can have multiple devices. Used by the daily-insight cron to
   -- notify everyone who opted in.
@@ -456,6 +470,71 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   });
   const row = res.rows[0];
   return row ? (row as unknown as Profile) : null;
+}
+
+// ---------------------------------------------------------------
+// Goal history (versioned macro/calorie targets by effective date)
+// ---------------------------------------------------------------
+
+export type GoalSnapshot = {
+  effective_date: string;
+  goal_calories: number | null;
+  goal_protein_g: number | null;
+  goal_fat_g: number | null;
+  goal_carbs_g: number | null;
+};
+
+/** Upsert a goal snapshot effective from a given date (one per user/date). */
+export async function recordGoalSnapshot(
+  userId: string,
+  effectiveDate: string,
+  goals: {
+    goal_calories: number | null;
+    goal_protein_g: number | null;
+    goal_fat_g: number | null;
+    goal_carbs_g: number | null;
+  },
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO user_goal_history
+            (user_id, effective_date, goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(user_id, effective_date) DO UPDATE SET
+            goal_calories = excluded.goal_calories,
+            goal_protein_g = excluded.goal_protein_g,
+            goal_fat_g = excluded.goal_fat_g,
+            goal_carbs_g = excluded.goal_carbs_g`,
+    args: [
+      userId,
+      effectiveDate,
+      goals.goal_calories,
+      goals.goal_protein_g,
+      goals.goal_fat_g,
+      goals.goal_carbs_g,
+    ],
+  });
+}
+
+/** All goal snapshots for a user, oldest first. */
+export async function getGoalHistory(userId: string): Promise<GoalSnapshot[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT effective_date, goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g
+            FROM user_goal_history WHERE user_id = ? ORDER BY effective_date ASC`,
+    args: [userId],
+  });
+  return res.rows as unknown as GoalSnapshot[];
+}
+
+/** How many goal snapshots exist (used to decide whether to seed a baseline). */
+export async function countGoalHistory(userId: string): Promise<number> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM user_goal_history WHERE user_id = ?",
+    args: [userId],
+  });
+  return Number((res.rows[0] as any)?.n ?? 0);
 }
 
 // ---------------------------------------------------------------

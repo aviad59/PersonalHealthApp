@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb, getProfile } from "@/lib/db";
+import {
+  getDb,
+  getProfile,
+  todayStr,
+  countGoalHistory,
+  recordGoalSnapshot,
+} from "@/lib/db";
 import { computeGoalsFromMetrics, ActivityLevel, GoalMode } from "@/lib/calc";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
@@ -65,6 +71,9 @@ export async function POST(req: NextRequest) {
 
   const userId = await getCurrentUserIdOrDefault();
   const db = await getDb();
+  // Capture the goals in effect before this save, so we can seed a baseline
+  // goal-history entry covering all past days the first time goals change.
+  const priorProfile = await getProfile(userId);
   await db.execute({
     sql: `INSERT INTO user_profile (
       user_id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm, activity_level,
@@ -110,6 +119,26 @@ export async function POST(req: NextRequest) {
       weekly_volume_note: goals.weekly_volume_note,
       goal_mode: goals.goal_mode,
     },
+  });
+
+  // Goal history so past days are judged against the goal that was in
+  // effect then. The first time goals change, seed a baseline from the
+  // PRIOR goals covering all earlier dates; then stamp the new goals from
+  // today forward.
+  const today = todayStr();
+  if (priorProfile?.goal_calories != null && (await countGoalHistory(userId)) === 0) {
+    await recordGoalSnapshot(userId, "2000-01-01", {
+      goal_calories: priorProfile.goal_calories,
+      goal_protein_g: priorProfile.goal_protein_g,
+      goal_fat_g: priorProfile.goal_fat_g,
+      goal_carbs_g: priorProfile.goal_carbs_g,
+    });
+  }
+  await recordGoalSnapshot(userId, today, {
+    goal_calories: goals.goal_calories,
+    goal_protein_g: goals.goal_protein_g,
+    goal_fat_g: goals.goal_fat_g,
+    goal_carbs_g: goals.goal_carbs_g,
   });
 
   return NextResponse.json({ ok: true, profile: await getProfile(userId) });

@@ -12,6 +12,7 @@ import {
   getMealsSince,
   getWeightLogSince,
   getMeasurementsSince,
+  getGoalHistory,
   getCachedWorkoutsSince,
   getCoachMessages,
   addCoachMessage,
@@ -228,7 +229,7 @@ async function buildContext(userId: UserId): Promise<any> {
   const today = todayStr();
   const weekStart = startOfWeekStr();
   const daysIntoWeek = diffDaysKey(today, weekStart); // 0 (Sun) .. 6 (Sat)
-  const [profile, todayMeals, weekMeals, weightLog, measurements, workoutRows] =
+  const [profile, todayMeals, weekMeals, weightLog, measurements, goalHistory, workoutRows] =
     await Promise.all([
       getProfile(userId),
       getMealsByDate(userId, today),
@@ -237,6 +238,7 @@ async function buildContext(userId: UserId): Promise<any> {
       // full history in the snapshot, not just the last two weeks.
       getWeightLogSince(userId, "2000-01-01"),
       getMeasurementsSince(userId, daysAgoStr(180)),
+      getGoalHistory(userId),
       cfg.hasWorkouts && hasHevyKey(userId)
         ? getCachedWorkoutsSince(userId, daysAgoStr(13))
         : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
@@ -403,6 +405,17 @@ async function buildContext(userId: UserId): Promise<any> {
       by_day: week_by_day,
     },
     weight_log: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
+    // Goal changes over time. Each entry is effective from its date forward.
+    // Judge a past day against the goal in effect THEN, not the current one.
+    ...(goalHistory.length > 0 && {
+      goal_history: goalHistory.map((g) => ({
+        effective_date: g.effective_date,
+        calories: g.goal_calories,
+        protein_g: g.goal_protein_g,
+        fat_g: g.goal_fat_g,
+        carbs_g: g.goal_carbs_g,
+      })),
+    }),
     // Body circumference measurements (cm) the user logs on Profile → Logging.
     // Sparse (logged occasionally), so up to ~6 months are included; only the
     // fields the user actually recorded appear per entry.
