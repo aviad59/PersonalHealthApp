@@ -80,18 +80,47 @@ export function mifflinBMR(opts: {
   return sex === "male" ? base + 5 : base - 161;
 }
 
+/**
+ * Katch-McArdle BMR in kcal/day — based purely on lean body mass, so it
+ * accounts for muscle mass that Mifflin (weight/height/age only) can't.
+ * More accurate for lean/muscular people; less so when body-fat is unknown.
+ */
+export function katchBMR(leanMassKg: number): number {
+  return 370 + 21.6 * leanMassKg;
+}
+
+/**
+ * Blended BMR: the average of Mifflin-St Jeor and Katch-McArdle. Hedges the
+ * weaknesses of each — Mifflin ignores body composition, Katch depends on a
+ * body-fat estimate that carries error.
+ */
+export function blendedBMR(mifflin: number, katch: number): number {
+  return (mifflin + katch) / 2;
+}
+
 export function tdee(bmr: number, activity: ActivityLevel): number {
   return bmr * ACTIVITY_MULTIPLIER[activity];
 }
 
 /**
- * Given TDEE, lean mass (kg), body weight (kg), and goal mode, return personalized macro targets.
- * Recomp: slight deficit (-200), high protein (≈2.2 g/kg LBM), moderate fat.
- * Cut:    -500, protein ≈2.4 g/kg LBM.
- * Bulk:   +300, protein ≈2.0 g/kg LBM.
- * Maintain: +0, protein ≈2.0 g/kg LBM.
- *
- * Fat target uses real body weight (no longer approximated from LBM).
+ * Per-goal energy delta and macro ratios. Protein is set off LEAN mass (so
+ * fat mass doesn't inflate the target) and sits at the higher end of the
+ * evidence-based range for muscle retention, especially in a deficit.
+ */
+export const GOAL_PARAMS: Record<
+  GoalMode,
+  { deltaKcal: number; proteinPerKgLbm: number; fatPerKgBw: number }
+> = {
+  recomp: { deltaKcal: -200, proteinPerKgLbm: 2.4, fatPerKgBw: 0.9 },
+  cut: { deltaKcal: -500, proteinPerKgLbm: 2.6, fatPerKgBw: 0.8 },
+  bulk: { deltaKcal: 300, proteinPerKgLbm: 2.2, fatPerKgBw: 1.0 },
+  maintain: { deltaKcal: 0, proteinPerKgLbm: 2.2, fatPerKgBw: 0.9 },
+};
+
+/**
+ * Given TDEE, lean mass (kg), body weight (kg), and goal mode, return
+ * personalized macro targets. Protein is derived from lean mass; fat from
+ * real body weight; carbs fill the remaining calories.
  */
 export function macroTargets(opts: {
   tdee: number;
@@ -105,38 +134,11 @@ export function macroTargets(opts: {
   carbs_g: number;
 } {
   const { tdee, leanMassKg, bodyWeightKg, goalMode } = opts;
+  const params = GOAL_PARAMS[goalMode] ?? GOAL_PARAMS.maintain;
+  const kcal = tdee + params.deltaKcal;
 
-  let kcal: number;
-  let proteinPerKgLbm: number;
-  let fatPerKgBw: number;
-
-  switch (goalMode) {
-    case "recomp":
-      kcal = tdee - 200;
-      proteinPerKgLbm = 2.2;
-      fatPerKgBw = 0.9;
-      break;
-    case "cut":
-      kcal = tdee - 500;
-      proteinPerKgLbm = 2.4;
-      fatPerKgBw = 0.8;
-      break;
-    case "bulk":
-      kcal = tdee + 300;
-      proteinPerKgLbm = 2.0;
-      fatPerKgBw = 1.0;
-      break;
-    case "maintain":
-    default:
-      kcal = tdee;
-      proteinPerKgLbm = 2.0;
-      fatPerKgBw = 0.9;
-      break;
-  }
-
-  const protein_g = Math.round(leanMassKg * proteinPerKgLbm);
-  // Real body weight, not approximated from LBM.
-  const fat_g = Math.round(bodyWeightKg * fatPerKgBw);
+  const protein_g = Math.round(leanMassKg * params.proteinPerKgLbm);
+  const fat_g = Math.round(bodyWeightKg * params.fatPerKgBw);
 
   const proteinKcal = protein_g * 4;
   const fatKcal = fat_g * 9;
@@ -214,12 +216,18 @@ export function computeGoalsFromMetrics(opts: {
     hipsCm: opts.hipsCm,
   });
   const lean_mass_kg = opts.weightKg * (1 - body_fat_pct / 100);
-  const bmr = mifflinBMR({
+  const bmr_mifflin = mifflinBMR({
     sex: opts.sex,
     weightKg: opts.weightKg,
     heightCm: opts.heightCm,
     ageYears: opts.age,
   });
+  const bmr_katch = katchBMR(lean_mass_kg);
+  // Blend the two BMR models: Mifflin (weight/height/age) + Katch-McArdle
+  // (lean mass) so muscle mass is accounted for without over-trusting the
+  // body-fat estimate.
+  const bmr = blendedBMR(bmr_mifflin, bmr_katch);
+  const activity_multiplier = ACTIVITY_MULTIPLIER[opts.activity];
   const tdeeVal = tdee(bmr, opts.activity);
   const macros = macroTargets({
     tdee: tdeeVal,
@@ -227,6 +235,7 @@ export function computeGoalsFromMetrics(opts: {
     bodyWeightKg: opts.weightKg,
     goalMode,
   });
+  const params = GOAL_PARAMS[goalMode] ?? GOAL_PARAMS.maintain;
   const wo = weeklyWorkoutTarget(opts.activity);
   const sessions =
     opts.weeklyWorkoutTarget != null && opts.weeklyWorkoutTarget > 0
@@ -244,6 +253,20 @@ export function computeGoalsFromMetrics(opts: {
     goal_carbs_g: macros.carbs_g,
     weekly_workout_target: sessions,
     weekly_volume_note: wo.note,
+    // Step-by-step derivation, surfaced on the Profile preview so the user
+    // can see how each number was reached.
+    breakdown: {
+      bmr_mifflin: Math.round(bmr_mifflin),
+      bmr_katch: Math.round(bmr_katch),
+      bmr_blended: Math.round(bmr),
+      activity_multiplier,
+      tdee: Math.round(tdeeVal),
+      goal_delta_kcal: params.deltaKcal,
+      protein_per_kg_lbm: params.proteinPerKgLbm,
+      fat_per_kg_bw: params.fatPerKgBw,
+      lean_mass_kg: Math.round(lean_mass_kg * 10) / 10,
+      body_weight_kg: opts.weightKg,
+    },
   };
 }
 

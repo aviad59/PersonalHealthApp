@@ -221,6 +221,11 @@ const en = {
   profile_save: "Save & recalculate",
   profile_saving: "Saving…",
   profile_new_targets: "New targets (preview)",
+  profile_show_math: "Show the math",
+  profile_math_bmr: "BMR",
+  profile_math_tdee: "TDEE",
+  profile_math_goal: "Goal adjust",
+  profile_math_carbs: "fills remaining calories",
   profile_language: "Language",
   profile_lang_saving: "Saving…",
   // Weight log
@@ -490,6 +495,11 @@ const he: typeof en = {
   profile_save: "שמור וחשב מחדש",
   profile_saving: "שומר…",
   profile_new_targets: "יעדים חדשים (תצוגה מקדימה)",
+  profile_show_math: "הצג את החישוב",
+  profile_math_bmr: "BMR",
+  profile_math_tdee: "TDEE",
+  profile_math_goal: "התאמת יעד",
+  profile_math_carbs: "משלים את שאר הקלוריות",
   profile_language: "שפה",
   profile_lang_saving: "שומר…",
   // Weight log

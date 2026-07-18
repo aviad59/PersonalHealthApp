@@ -460,6 +460,7 @@ export default function ProfilePage() {
           <Row k={t(lang, "macro_fat")} v={`${preview.goal_fat_g} g`} emphasize />
           <Row k={t(lang, "macro_carbs")} v={`${preview.goal_carbs_g} g`} emphasize />
           <Row k={t(lang, "profile_workouts_wk")} v={`${preview.weekly_workout_target}`} />
+          {preview.breakdown && <CalcBreakdown b={preview.breakdown} lang={lang} />}
         </section>
       )}
 
@@ -748,6 +749,58 @@ function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean })
     <div className="flex justify-between items-center">
       <span className="text-sm text-white/60">{k}</span>
       <span className={emphasize ? "text-base font-semibold" : "text-sm"}>{v}</span>
+    </div>
+  );
+}
+
+/** Collapsible "how these numbers were reached" breakdown under the preview. */
+function CalcBreakdown({
+  b,
+  lang,
+}: {
+  b: {
+    bmr_mifflin: number;
+    bmr_katch: number;
+    bmr_blended: number;
+    activity_multiplier: number;
+    tdee: number;
+    goal_delta_kcal: number;
+    protein_per_kg_lbm: number;
+    fat_per_kg_bw: number;
+    lean_mass_kg: number;
+    body_weight_kg: number;
+  };
+  lang: ReturnType<typeof useLang>;
+}) {
+  const [open, setOpen] = useState(false);
+  const line = (label: string, value: string) => (
+    <div className="flex justify-between text-[12px]">
+      <span className="text-white/50">{label}</span>
+      <span className="text-white/80 nums">{value}</span>
+    </div>
+  );
+  const deltaStr = `${b.goal_delta_kcal > 0 ? "+" : ""}${b.goal_delta_kcal}`;
+  return (
+    <div className="pt-2 mt-1 border-t border-border">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-[12px] text-accent-brand"
+      >
+        <span>{t(lang, "profile_show_math")}</span>
+        <svg viewBox="0 0 24 24" className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1">
+          {line(t(lang, "profile_math_bmr"), `${b.bmr_mifflin} (Mifflin) · ${b.bmr_katch} (Katch) → ${b.bmr_blended}`)}
+          {line(t(lang, "profile_math_tdee"), `${b.bmr_blended} × ${b.activity_multiplier} = ${b.tdee}`)}
+          {line(t(lang, "profile_math_goal"), `${b.tdee} ${deltaStr} = ${b.tdee + b.goal_delta_kcal} kcal`)}
+          {line(t(lang, "macro_protein"), `${b.protein_per_kg_lbm} g × ${b.lean_mass_kg} kg lean`)}
+          {line(t(lang, "macro_fat"), `${b.fat_per_kg_bw} g × ${b.body_weight_kg} kg`)}
+          {line(t(lang, "macro_carbs"), t(lang, "profile_math_carbs"))}
+        </div>
+      )}
     </div>
   );
 }
