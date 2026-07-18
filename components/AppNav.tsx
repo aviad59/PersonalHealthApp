@@ -67,7 +67,7 @@ export default function AppNav() {
 
       {/* Mobile Navigation Bar — matches the Home header: same sky-blue
           gradient, rounded top corners, and glow. */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] shadow-[0_-10px_30px_-12px_rgba(14,165,233,0.55)] safe-bottom">
+      <nav className="mobile-nav md:hidden fixed bottom-0 left-0 right-0 z-40 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] shadow-[0_-10px_30px_-12px_rgba(14,165,233,0.55)] safe-bottom">
         {/* soft decorative glow, mirrors the header banner */}
         <div className="absolute -top-10 -left-8 w-36 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="relative mx-auto w-full max-w-md sm:max-w-lg flex justify-between items-center px-1.5 h-[var(--nav-h)]">

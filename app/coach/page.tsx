@@ -48,7 +48,13 @@ export default function CoachPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  // True while the composer is focused (keyboard up) — hides the nav and
+  // lets the composer fill down to the keyboard.
+  const [kbOpen, setKbOpen] = useState(false);
   const wasSending = useRef(false);
+
+  // Safety net: always drop the body flag when leaving the coach.
+  useEffect(() => () => { document.body.classList.remove("kb-open"); }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -185,8 +191,11 @@ export default function CoachPage() {
       // safe area down to the top of the nav, so the composer sits flush.
       className="flex flex-col -mb-28 md:mb-0 md:max-w-3xl md:mx-auto md:w-full"
       style={{
-        height:
-          "calc(100dvh - var(--nav-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
+        // While the keyboard is up the nav is hidden, so reclaim its height
+        // and let the composer sit right above the keyboard.
+        height: kbOpen
+          ? "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))"
+          : "calc(100dvh - var(--nav-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
       }}
     >
       {/* Chat header — avatar, name, online status */}
@@ -232,6 +241,8 @@ export default function CoachPage() {
             value={input}
             onChange={autoGrow}
             onKeyDown={onKeyDown}
+            onFocus={() => { setKbOpen(true); document.body.classList.add("kb-open"); }}
+            onBlur={() => { setKbOpen(false); document.body.classList.remove("kb-open"); }}
             placeholder={t(lang, "coach_placeholder")}
             dir={input ? (/[֐-׿]/.test(input) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
             rows={1}

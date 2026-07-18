@@ -150,6 +150,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .safe-top { padding-top: env(safe-area-inset-top); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 
+/* When a composer sets body.kb-open (e.g. the coach input is focused and
+   the keyboard is up), hide the bottom nav so it doesn't float above the
+   keyboard — only the input sits above it. */
+body.kb-open .mobile-nav { display: none; }
+
 /* "AI is thinking" — a light beam sweeping down the photo while Claude
    reads it, instead of a generic skeleton block. */
 @keyframes ai-scan {

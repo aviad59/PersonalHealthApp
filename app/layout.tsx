@@ -41,6 +41,10 @@ export const viewport: Viewport = {
   // viewportFit: cover lets the app draw under the status bar / nav bar when
   // installed as a PWA — needed for the immersive feel on Android.
   viewportFit: "cover",
+  // When the on-screen keyboard opens, shrink the layout to the space above
+  // it so a focused composer sits right above the keyboard (and the nav can
+  // be hidden) instead of the keyboard overlaying content.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
