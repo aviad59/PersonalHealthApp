@@ -233,7 +233,9 @@ async function buildContext(userId: UserId): Promise<any> {
       getProfile(userId),
       getMealsByDate(userId, today),
       getMealsSince(userId, weekStart),
-      getWeightLogSince(userId, daysAgoStr(13)),
+      // All weight entries (they're tiny — date + kg) so the coach sees the
+      // full history in the snapshot, not just the last two weeks.
+      getWeightLogSince(userId, "2000-01-01"),
       getMeasurementsSince(userId, daysAgoStr(180)),
       cfg.hasWorkouts && hasHevyKey(userId)
         ? getCachedWorkoutsSince(userId, daysAgoStr(13))
@@ -335,12 +337,13 @@ async function buildContext(userId: UserId): Promise<any> {
           ).size
         : null,
     },
-    weight_14d:
+    weight_change:
       firstWeight && lastWeight && firstWeight.date !== lastWeight.date
         ? {
             from: { date: firstWeight.date, kg: firstWeight.weight_kg },
             to: { date: lastWeight.date, kg: lastWeight.weight_kg },
             change_kg: Math.round((lastWeight.weight_kg - firstWeight.weight_kg) * 10) / 10,
+            entries: weightLog.length,
           }
         : null,
   };
@@ -399,7 +402,7 @@ async function buildContext(userId: UserId): Promise<any> {
       note: "Calendar week (Sunday through Saturday), not a rolling 7-day window — may contain fewer than 7 days if it's still early in the week.",
       by_day: week_by_day,
     },
-    weight_log_last_14d: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
+    weight_log: weightLog.map((w) => ({ date: w.date, weight_kg: w.weight_kg })),
     // Body circumference measurements (cm) the user logs on Profile → Logging.
     // Sparse (logged occasionally), so up to ~6 months are included; only the
     // fields the user actually recorded appear per entry.
