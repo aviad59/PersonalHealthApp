@@ -88,7 +88,24 @@ export default function OnboardingPage() {
         body: JSON.stringify(toPayload()),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "save failed");
+      if (!res.ok) {
+        // Surface which field failed instead of a bare "validation" — the
+        // usual cause is a measurement entered in inches or out of range.
+        if (j.error === "validation" && Array.isArray(j.issues) && j.issues.length) {
+          const label: Record<string, string> = {
+            age: "Age", height_cm: "Height (cm)", weight_kg: "Weight (kg)",
+            neck_cm: "Neck (cm)", waist_cm: "Waist (cm)", hips_cm: "Hips (cm)",
+          };
+          const lines = j.issues
+            .map((iss: any) => {
+              const f = Array.isArray(iss.path) ? iss.path[0] : "";
+              return `• ${label[f] ?? f}: ${iss.message}`;
+            })
+            .join("\n");
+          throw new Error(`Please check these fields (measurements should be in cm):\n${lines}`);
+        }
+        throw new Error(j.error || "save failed");
+      }
       router.push("/");
       router.refresh();
     } catch (e: any) {
