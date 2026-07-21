@@ -377,7 +377,13 @@ async function buildContext(userId: UserId): Promise<any> {
       weekly_workout_target: profile.weekly_workout_target,
     },
     today: {
-      totals: totalsForMeals(todayMeals),
+      // Today's authoritative totals live in `computed.today` — do NOT sum the
+      // meals below or add anything to them. This list is descriptive only: it
+      // shows WHAT was eaten and each meal's macros, so the coach can talk about
+      // individual meals. `items` are the components that make up each meal
+      // (their macros already roll up into the meal's macros) — never add item
+      // macros on top of the meal, and never re-sum meals to get a day total.
+      note: "Descriptive breakdown only. The day's total is computed.today — do not re-sum these meals or add item macros on top of meal macros.",
       meals: todayMeals.map((m) => {
         let items: any[] | null = null;
         if (m.items_json) { try { items = JSON.parse(m.items_json); } catch {} }
@@ -389,11 +395,12 @@ async function buildContext(userId: UserId): Promise<any> {
           fat_g: m.fat_g,
           carbs_g: m.carbs_g,
           ...(items && items.length > 0 && {
+            // Names/portions only — the numeric macros already live in the
+            // meal-level fields above, so we omit per-item numbers here to
+            // remove any temptation to double-count.
             items: items.map((it: any) => ({
               name: it.name,
               portion: it.portion,
-              calories: it.calories,
-              protein_g: it.protein_g,
             })),
           }),
         };
