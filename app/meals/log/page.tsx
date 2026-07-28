@@ -147,6 +147,7 @@ type MealDraft = {
   photoThumbBase64_2: string | null;
   photoExt2: string;
   compressedFile2: File | null;
+  photoSource: "camera" | "gallery" | null;
   analysis: Analysis | null;
   editing: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
 };
@@ -194,6 +195,10 @@ export default function LogMealPage() {
   const [compressedFile2, setCompressedFile2] = useState<File | null>(null);
   const [photoThumbBase64_2, setPhotoThumbBase64_2] = useState<string | null>(null);
   const [text, setText] = useState(""); // description/hint/context
+  // How the FIRST photo was added — so the "add second photo" button opens the
+  // SAME picker (gallery→gallery, camera→camera) instead of always defaulting
+  // to the camera. Mirrors what the user did for photo #1.
+  const [photoSource, setPhotoSource] = useState<"camera" | "gallery" | null>(null);
 
   // Analysis runs in the background provider so it survives navigation;
   // "analyzing" reflects that pending state rather than a local flag.
@@ -359,6 +364,7 @@ export default function LogMealPage() {
       setPhotoThumbBase64_2(d.photoThumbBase64_2);
       setPhotoExt2(d.photoExt2);
       setCompressedFile2(d.compressedFile2);
+      setPhotoSource(d.photoSource);
       if (d.analysis) applyAnalysis(d.analysis);
     }
     const done = bg.consume(ANALYZE_TASK);
@@ -386,6 +392,7 @@ export default function LogMealPage() {
           photoThumbBase64_2,
           photoExt2,
           compressedFile2,
+          photoSource,
           analysis,
           editing,
         }
@@ -393,7 +400,7 @@ export default function LogMealPage() {
   }, [
     text, photoPreview, photoBase64, photoThumbBase64, photoExt, compressedFile,
     photoPreview2, photoBase64_2, photoThumbBase64_2, photoExt2, compressedFile2,
-    analysis, editing,
+    photoSource, analysis, editing,
   ]);
 
   // Apply the analysis when the background task finishes while we're on the
@@ -465,6 +472,7 @@ export default function LogMealPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     saveToDevice(f);
+    setPhotoSource("camera");
     setErr(null);
     setAnalysis(null);
     setEditing(null);
@@ -485,6 +493,7 @@ export default function LogMealPage() {
     const files = e.target.files;
     const f = files?.[0];
     if (!f) return;
+    setPhotoSource("gallery");
     const f2 = !photoPreview2 ? files?.[1] : undefined;
     setErr(null);
     setAnalysis(null);
@@ -505,6 +514,23 @@ export default function LogMealPage() {
   async function onPick2(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
+    setErr(null);
+    setProgress(t(lang, "meal_compress"));
+    try {
+      await loadPhotoIntoSlot2(f);
+    } catch (err: any) {
+      setErr(err?.message || "Could not read that photo");
+    } finally {
+      setProgress(null);
+    }
+  }
+
+  // Second photo captured with the camera — like slot 1's camera handler, we
+  // also save the original to the device (a capture isn't stored otherwise).
+  async function onPickCamera2(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    saveToDevice(f);
     setErr(null);
     setProgress(t(lang, "meal_compress"));
     try {
@@ -546,6 +572,7 @@ export default function LogMealPage() {
     setPhotoBase64(null);
     setPhotoThumbBase64(null);
     setCompressedFile(null);
+    setPhotoSource(null);
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
     clearPhoto2();
@@ -1263,7 +1290,9 @@ export default function LogMealPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => camera2Ref.current?.click()}
+                onClick={() =>
+                  (photoSource === "gallery" ? gallery2Ref : camera2Ref).current?.click()
+                }
                 className="shrink-0 w-28 h-28 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white/80 hover:border-accent-brand/50 transition-colors"
                 aria-label={t(lang, "meal_add_second_photo")}
               >
@@ -1318,7 +1347,7 @@ export default function LogMealPage() {
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={onPick2}
+        onChange={onPickCamera2}
         className="sr-only"
       />
       <input
@@ -2337,6 +2366,30 @@ function AiThinkingPill({ label }: { label: string }) {
 
 function ImageLightbox({ src, onClose }: { src: string | string[]; onClose: () => void }) {
   const srcs = Array.isArray(src) ? src : [src];
+
+  // Make the hardware/browser Back button close the image instead of leaving
+  // the page. On open we push a throwaway history entry; a Back press pops it
+  // and fires `popstate`, which we turn into a close. If the lightbox is
+  // instead dismissed from the UI (× / backdrop → onClose unmounts us), the
+  // cleanup pops that entry itself so it never lingers. onClose is read
+  // through a ref so this effect runs only once, on mount/unmount.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    let poppedByBack = false;
+    window.history.pushState({ lightbox: true }, "");
+    const onPop = () => {
+      poppedByBack = true;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // Closed from the UI, not the Back button — remove the entry we added.
+      if (!poppedByBack) window.history.back();
+    };
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
