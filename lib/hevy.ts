@@ -6,15 +6,18 @@
 // Auth: `api-key: <HEVY_API_KEY>` header (requires Hevy PRO).
 
 import { dateKey } from "@/lib/db";
+import { getUserConfig } from "@/lib/user";
 
 const BASE = "https://api.hevyapp.com/v1";
 
-// Per-user Hevy key env var. Each workouts-enabled user needs their OWN
-// key so we never pull another user's workouts. Unknown/default → idan's.
+// Per-user Hevy key env var. Each workouts-enabled user needs their OWN key so
+// we never pull another user's workouts. The env var name is a field on the
+// user's config (`hevyKeyEnv`), defaulting to `HEVY_API_KEY_<ID>` — so there
+// are no per-user branches here and adding a user needs no code change.
 function hevyEnvVar(userId?: string): string {
-  if (userId === "eran") return "HEVY_API_KEY_ERAN";
-  if (userId === "dan") return "HEVY_API_KEY_DAN";
-  return "HEVY_API_KEY"; // idan (and the default)
+  if (!userId) return "HEVY_API_KEY";
+  const cfg = getUserConfig(userId);
+  return cfg.hevyKeyEnv || `HEVY_API_KEY_${userId.toUpperCase()}`;
 }
 
 export function hevyKey(userId?: string): string {
