@@ -14,27 +14,28 @@ const BASE = "https://api.hevyapp.com/v1";
 // we never pull another user's workouts. The env var name is a field on the
 // user's config (`hevyKeyEnv`), defaulting to `HEVY_API_KEY_<ID>` — so there
 // are no per-user branches here and adding a user needs no code change.
-function hevyEnvVar(userId?: string): string {
+async function hevyEnvVar(userId?: string): Promise<string> {
   if (!userId) return "HEVY_API_KEY";
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
   return cfg.hevyKeyEnv || `HEVY_API_KEY_${userId.toUpperCase()}`;
 }
 
-export function hevyKey(userId?: string): string {
-  const envVar = hevyEnvVar(userId);
+export async function hevyKey(userId?: string): Promise<string> {
+  const envVar = await hevyEnvVar(userId);
   const k = process.env[envVar];
   if (!k) throw new Error(`${envVar} is not set. Add it to the environment.`);
   return k;
 }
 
-export function hasHevyKey(userId?: string): boolean {
-  return !!process.env[hevyEnvVar(userId)];
+export async function hasHevyKey(userId?: string): Promise<boolean> {
+  return !!process.env[await hevyEnvVar(userId)];
 }
 
 async function get<T>(path: string, userId?: string): Promise<T> {
+  const apiKey = await hevyKey(userId);
   const res = await fetch(`${BASE}${path}`, {
     headers: {
-      "api-key": hevyKey(userId),
+      "api-key": apiKey,
       "accept": "application/json",
     },
     // Next.js: don't cache — Hevy data is user-specific & lightweight.

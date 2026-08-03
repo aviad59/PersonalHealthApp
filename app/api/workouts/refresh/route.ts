@@ -19,7 +19,7 @@ const BACKFILL_PAGES = 200; // ?full=1 — pages through the user's entire histo
 
 export async function POST(req: NextRequest) {
   const userId = await getCurrentUserIdOrDefault();
-  if (!hasHevyKey(userId)) {
+  if (!(await hasHevyKey(userId))) {
     return NextResponse.json(
       { ok: false, error: "HEVY_API_KEY not set" },
       { status: 400 },

@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/signin");
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
   return (
     <HomeClient
       hasWorkouts={cfg.hasWorkouts}

@@ -11,7 +11,7 @@
 // can be sent manually for debugging.
 
 import { NextRequest, NextResponse } from "next/server";
-import { USER_LIST } from "@/lib/user";
+import { getActiveUsers } from "@/lib/user";
 import {
   generateDailyInsightForUser,
   hasDailyInsightForToday,
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
 
   const results: PerUserResult[] = [];
 
-  for (const user of USER_LIST) {
+  for (const user of await getActiveUsers()) {
     // No email mapped → no real user behind the slot; nothing to send to.
     if (!user.email) {
       results.push({ user_id: user.id, status: "skipped_no_email" });

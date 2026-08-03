@@ -225,7 +225,8 @@ async function executeTool(
 // Context snapshot — this calendar week's meals (Sun–Sat), 14d weight/workouts
 // ---------------------------------------------------------------------------
 async function buildContext(userId: UserId): Promise<any> {
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
+  const canReadWorkouts = cfg.hasWorkouts && (await hasHevyKey(userId));
   const today = todayStr();
   const weekStart = startOfWeekStr();
   const daysIntoWeek = diffDaysKey(today, weekStart); // 0 (Sun) .. 6 (Sat)
@@ -239,7 +240,7 @@ async function buildContext(userId: UserId): Promise<any> {
       getWeightLogSince(userId, "2000-01-01"),
       getMeasurementsSince(userId, daysAgoStr(180)),
       getGoalHistory(userId),
-      cfg.hasWorkouts && hasHevyKey(userId)
+      canReadWorkouts
         ? getCachedWorkoutsSince(userId, daysAgoStr(13))
         : Promise.resolve([] as Awaited<ReturnType<typeof getCachedWorkoutsSince>>),
     ]);
@@ -481,7 +482,7 @@ export async function POST(req: NextRequest) {
       getCoachMessages(userId, HISTORY_LIMIT),
     ]);
 
-    const cfg = getUserConfig(userId);
+    const cfg = await getUserConfig(userId);
     const tools = cfg.hasWorkouts
       ? [DAY_MEALS_TOOL, NUTRITION_TOOL, WORKOUT_TOOL, WEIGHT_TOOL]
       : [DAY_MEALS_TOOL, NUTRITION_TOOL, WEIGHT_TOOL];

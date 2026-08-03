@@ -25,7 +25,8 @@ function SignIn() {
 
       {denied && (
         <div className="card p-4 text-sm text-amber-400/90 text-center">
-          That Google account isn&apos;t connected to this app yet.
+          This account isn&apos;t approved yet. Your request has been recorded —
+          ask the app admin to approve it, then sign in again.
         </div>
       )}
 

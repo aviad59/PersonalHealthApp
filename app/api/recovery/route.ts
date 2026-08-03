@@ -45,7 +45,7 @@ function dailyTotalsFromMeals(
 
 export async function GET() {
   const userId = await getCurrentUserIdOrDefault();
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
   if (!cfg.hasWorkouts) {
     return NextResponse.json({ recovery: null });
   }

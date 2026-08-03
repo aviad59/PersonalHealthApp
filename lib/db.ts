@@ -281,6 +281,24 @@ const PER_USER_TABLES = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+
+  -- The user roster, source of truth for who may sign in and their per-user
+  -- settings. Replaces the old hardcoded map in lib/user.ts so adding a user
+  -- needs no code/env change. A new Google sign-in creates a 'pending' row;
+  -- an admin approves (status='active') and configures it from the app.
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT,
+    display_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',   -- 'pending' | 'active' | 'disabled'
+    has_workouts INTEGER NOT NULL DEFAULT 0,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    training_notes TEXT,
+    hevy_key_env TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `;
 
 // One-time copy of the legacy single-row / date-keyed tables into the new
@@ -316,6 +334,22 @@ const ONE_TIME_USER_MIGRATIONS: { sql: string }[] = [
           )
           SELECT 'idan', date, weight_kg, note, created_at, updated_at
             FROM weight_log`,
+  },
+  // Seed the roster with the pre-existing users, keeping their legacy ids so
+  // all their data (keyed by these ids) stays attached. INSERT OR IGNORE means
+  // this runs once and never overwrites later admin edits. idan is the admin.
+  {
+    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin, hevy_key_env, training_notes)
+          VALUES ('idan', 'idanaviad10@gmail.com', 'Idan', 'active', 1, 1, 'HEVY_API_KEY',
+            'Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.')`,
+  },
+  {
+    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
+          VALUES ('orly', 'aviad59@gmail.com', 'Orly', 'active', 0, 0)`,
+  },
+  {
+    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
+          VALUES ('dan', 'brima.dan@gmail.com', 'Dan', 'active', 1, 0)`,
   },
 ];
 
@@ -1163,5 +1197,92 @@ export async function touchPushSubscription(endpoint: string): Promise<void> {
   await db.execute({
     sql: "UPDATE push_subscriptions SET last_used_at = datetime('now') WHERE endpoint = ?",
     args: [endpoint],
+  });
+}
+
+// ---------------------------------------------------------------
+// Users roster (see the `users` table in PER_USER_TABLES)
+// ---------------------------------------------------------------
+
+export type UserRow = {
+  id: string;
+  email: string | null;
+  display_name: string;
+  status: string; // 'pending' | 'active' | 'disabled'
+  has_workouts: number;
+  is_admin: number;
+  training_notes: string | null;
+  hevy_key_env: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const USER_COLUMNS =
+  "id, email, display_name, status, has_workouts, is_admin, training_notes, hevy_key_env, created_at, updated_at";
+
+export async function getAllUserRows(): Promise<UserRow[]> {
+  const db = await getDb();
+  const res = await db.execute(
+    `SELECT ${USER_COLUMNS} FROM users ORDER BY created_at ASC`,
+  );
+  return res.rows as unknown as UserRow[];
+}
+
+export async function getUserRowById(id: string): Promise<UserRow | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ${USER_COLUMNS} FROM users WHERE id = ? LIMIT 1`,
+    args: [id],
+  });
+  return (res.rows[0] as unknown as UserRow) ?? null;
+}
+
+/** Create a new pending user. INSERT OR IGNORE so a repeat sign-in before
+ *  approval doesn't error or reset an existing row. */
+export async function insertPendingUser(
+  id: string,
+  email: string | null,
+  displayName: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
+          VALUES (?, ?, ?, 'pending', 0, 0)`,
+    args: [id, email, displayName],
+  });
+}
+
+/** Patch a user row. Only the provided fields are written. */
+export async function updateUserRow(
+  id: string,
+  patch: Partial<{
+    display_name: string;
+    email: string | null;
+    status: string;
+    has_workouts: boolean;
+    is_admin: boolean;
+    training_notes: string | null;
+    hevy_key_env: string | null;
+  }>,
+): Promise<void> {
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  const push = (col: string, val: string | number | null) => {
+    sets.push(`${col} = ?`);
+    args.push(val);
+  };
+  if (patch.display_name !== undefined) push("display_name", patch.display_name);
+  if (patch.email !== undefined) push("email", patch.email);
+  if (patch.status !== undefined) push("status", patch.status);
+  if (patch.has_workouts !== undefined) push("has_workouts", patch.has_workouts ? 1 : 0);
+  if (patch.is_admin !== undefined) push("is_admin", patch.is_admin ? 1 : 0);
+  if (patch.training_notes !== undefined) push("training_notes", patch.training_notes);
+  if (patch.hevy_key_env !== undefined) push("hevy_key_env", patch.hevy_key_env);
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE users SET ${sets.join(", ")} WHERE id = ?`,
+    args: [...args, id],
   });
 }

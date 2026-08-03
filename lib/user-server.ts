@@ -5,18 +5,25 @@
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
-import { isUserId, type UserId } from "./user";
+import { type UserId } from "./user";
 
 /**
  * Resolve the current user from the verified Google session, or null if
  * unauthenticated. Unlike the old cookie-based version, this cannot be
  * spoofed by the client — it's derived from a server-verified, signed
- * session token.
+ * session token. `appUserId` is only set for approved (active) users by the
+ * jwt callback, so a non-empty value here means an authorized user.
  */
 export async function getCurrentUserId(): Promise<UserId | null> {
   const session = await getServerSession(authOptions);
   const id = (session as any)?.appUserId;
-  return isUserId(id) ? id : null;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** True if the current session belongs to an admin user. */
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  return (session as any)?.isAdmin === true;
 }
 
 /**

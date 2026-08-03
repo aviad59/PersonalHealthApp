@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { useLang } from "@/components/LangProvider";
 import { t } from "@/lib/i18n";
-import { isUserId, getUserConfig } from "@/lib/user";
 
 type NavItem = {
   href: string;
@@ -33,13 +31,12 @@ const items: NavItem[] = [
 export default function AppNav() {
   const pathname = usePathname() || "/";
   const lang = useLang();
-  const { data: session } = useSession();
-  const appUserId = (session as any)?.appUserId;
-  const hideWorkouts = isUserId(appUserId) ? !getUserConfig(appUserId).hasWorkouts : false;
 
   if (pathname.startsWith("/onboarding")) return null;
   if (pathname.startsWith("/signin")) return null;
-  const visible = items.filter((it) => !(it.workoutsOnly && hideWorkouts));
+  // No workouts-only tabs remain in the nav (Workouts is reached from Home),
+  // so every item is always visible.
+  const visible = items.filter((it) => !it.workoutsOnly);
 
   return (
     <>

@@ -900,6 +900,7 @@ function CurrentUserCard() {
   const lang = useLang();
   const { data: session } = useSession();
   const name = session?.user?.name || session?.user?.email || "";
+  const isAdmin = (session as any)?.isAdmin === true;
 
   return (
     <section className="card p-4 flex items-center gap-3">
@@ -912,12 +913,19 @@ function CurrentUserCard() {
         </div>
         <div className="text-sm font-semibold truncate">{name || "—"}</div>
       </div>
-      <button
-        onClick={() => signOut({ callbackUrl: "/signin" })}
-        className="text-xs font-medium text-accent-brand"
-      >
-        {t(lang, "profile_sign_out")}
-      </button>
+      <div className="flex flex-col items-end gap-1.5">
+        {isAdmin && (
+          <Link href="/admin" className="text-xs font-medium text-accent-brand">
+            {t(lang, "profile_manage_users")}
+          </Link>
+        )}
+        <button
+          onClick={() => signOut({ callbackUrl: "/signin" })}
+          className="text-xs font-medium text-accent-brand"
+        >
+          {t(lang, "profile_sign_out")}
+        </button>
+      </div>
     </section>
   );
 }

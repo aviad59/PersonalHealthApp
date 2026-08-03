@@ -58,7 +58,7 @@ function safeParseTags(s: string | null): string[] {
 }
 
 async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
-  if (!hasHevyKey(userId)) return [];
+  if (!(await hasHevyKey(userId))) return [];
   try {
     const r = await listWorkouts({ page: 1, pageSize: 10 }, userId);
     return r.workouts || [];
@@ -79,7 +79,7 @@ export async function generateDailyInsightForUser(
   opts?: { morning?: boolean },
 ): Promise<GeneratedInsight> {
   const morning = opts?.morning ?? false;
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
   const profile = await getProfile(userId);
   if (!profile) {
     throw new Error("profile not set up");

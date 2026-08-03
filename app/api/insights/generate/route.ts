@@ -53,7 +53,7 @@ function safeParseTags(s: string | null): string[] {
 }
 
 async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
-  if (!hasHevyKey(userId)) return [];
+  if (!(await hasHevyKey(userId))) return [];
   try {
     const r = await listWorkouts({ page: 1, pageSize: 10 }, userId);
     return r.workouts || [];
@@ -64,7 +64,7 @@ async function safeLoadWorkouts(userId: string): Promise<HevyWorkout[]> {
 
 export async function POST(req: NextRequest) {
   const userId = await getCurrentUserIdOrDefault();
-  const cfg = getUserConfig(userId);
+  const cfg = await getUserConfig(userId);
   const body = await req.json().catch(() => ({}));
   const type: InsightType = body?.type === "weekly" ? "weekly" : "daily";
 

@@ -6,7 +6,7 @@
 
 import type { AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { getUserIdByEmail, type UserId } from "./user";
+import { authorizeSignIn, getActiveUserByEmail, type UserId } from "./user";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -21,19 +21,24 @@ export const authOptions: AuthOptions = {
     error: "/signin",
   },
   callbacks: {
-    // Hard gate: only emails mapped in lib/user.ts may sign in at all.
+    // Hard gate: only APPROVED (active) users in the roster may sign in.
+    // Unknown Google accounts are recorded as 'pending' here so an admin can
+    // approve them later, but are denied access until then.
     async signIn({ user }) {
-      return getUserIdByEmail(user.email) !== null;
+      return authorizeSignIn({ email: user.email, name: user.name });
     },
     async jwt({ token }) {
       // Re-derive on every request rather than trusting a value cached at
-      // sign-in time, so revoking/changing an email mapping takes effect
-      // on the user's next request instead of only after they re-login.
-      token.appUserId = getUserIdByEmail(token.email as string | undefined);
+      // sign-in time, so approving/revoking a user takes effect on their next
+      // request instead of only after they re-login.
+      const u = await getActiveUserByEmail(token.email as string | undefined);
+      token.appUserId = u?.id ?? null;
+      token.isAdmin = u?.isAdmin ?? false;
       return token;
     },
     async session({ session, token }) {
       (session as any).appUserId = token.appUserId as UserId | null;
+      (session as any).isAdmin = (token.isAdmin as boolean) ?? false;
       return session;
     },
   },

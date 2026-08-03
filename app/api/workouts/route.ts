@@ -108,7 +108,7 @@ function buildResponse(workouts: HevyWorkout[]) {
 
 export async function GET(req: NextRequest) {
   const userId = await getCurrentUserIdOrDefault();
-  const haveKey = hasHevyKey(userId);
+  const haveKey = await hasHevyKey(userId);
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";
   const limit = Number(url.searchParams.get("limit") ?? "20");
