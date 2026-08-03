@@ -82,6 +82,13 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* On phones, hide the page scrollbar entirely (still scrollable). Desktop
+   keeps its scrollbar since it's useful with a mouse. */
+@media (max-width: 767px) {
+  html, body { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+}
+
 /* M3 focus indicator */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--primary) 80%, transparent);
