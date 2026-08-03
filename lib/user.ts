@@ -106,7 +106,7 @@ export async function getUserConfig(id: UserId): Promise<UserConfig> {
 /**
  * Canonicalize an email for comparison. Gmail/Googlemail ignore dots in the
  * local part and treat everything after a "+" as a tag, so
- * "brima.dan@gmail.com", "brimadan@gmail.com", and "brima.dan+x@googlemail.com"
+ * "john.doe@gmail.com", "johndoe@gmail.com", and "john.doe+x@googlemail.com"
  * are all the same account. We normalize those so a stored address matches
  * whatever exact form Google returns for the signed-in user.
  */

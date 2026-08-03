@@ -335,23 +335,30 @@ const ONE_TIME_USER_MIGRATIONS: { sql: string }[] = [
           SELECT 'idan', date, weight_kg, note, created_at, updated_at
             FROM weight_log`,
   },
-  // Seed the roster with the pre-existing users, keeping their legacy ids so
-  // all their data (keyed by these ids) stays attached. INSERT OR IGNORE means
-  // this runs once and never overwrites later admin edits. idan is the admin.
-  {
-    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin, hevy_key_env, training_notes)
-          VALUES ('idan', 'idanaviad10@gmail.com', 'Idan', 'active', 1, 1, 'HEVY_API_KEY',
-            'Legs are intentionally undertrained (already strong/overdeveloped). Priority is chest and arm (biceps/triceps) development, which are currently weaker. Never surface leg volume or leg frequency as an issue. Focus muscle commentary on chest, arms, shoulders, back, and core.')`,
-  },
-  {
-    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
-          VALUES ('orly', 'aviad59@gmail.com', 'Orly', 'active', 0, 0)`,
-  },
-  {
-    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
-          VALUES ('dan', 'brima.dan@gmail.com', 'Dan', 'active', 1, 0)`,
-  },
 ];
+
+/**
+ * Bootstrap the very first admin from the environment so a FRESH database has
+ * someone who can sign in and approve everyone else — without any personal
+ * email living in the repo. No-op if ADMIN_EMAIL is unset, or if the row
+ * already exists (INSERT OR IGNORE), so it never overwrites live data or
+ * later admin edits. On the existing production DB the admin row already
+ * exists, so this changes nothing there.
+ *
+ * ADMIN_ID defaults to "idan" so it maps onto the existing owner's data;
+ * everyone else is added from the in-app admin screen, not seeded here.
+ */
+async function seedBootstrapAdmin(c: Client): Promise<void> {
+  const email = process.env.ADMIN_EMAIL?.trim();
+  if (!email) return;
+  const id = (process.env.ADMIN_ID?.trim() || "idan").toLowerCase();
+  const name = process.env.ADMIN_NAME?.trim() || "Admin";
+  await c.execute({
+    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
+          VALUES (?, ?, ?, 'active', 1, 1)`,
+    args: [id, email, name],
+  });
+}
 
 async function ensureInit(): Promise<void> {
   if (!_initPromise) {
@@ -385,6 +392,8 @@ async function ensureInit(): Promise<void> {
           if (!/no such table/i.test(msg)) throw err;
         }
       }
+      // Ensure a signable admin exists (from ADMIN_EMAIL) on fresh databases.
+      await seedBootstrapAdmin(c);
     })().catch((err) => {
       // allow retry on next call after a failure
       _initPromise = null;

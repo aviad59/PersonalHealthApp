@@ -12,6 +12,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
+import { getProfile } from "@/lib/db";
 import HomeClient from "./HomeClient";
 
 export const runtime = "nodejs";
@@ -20,7 +21,13 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/signin");
-  const cfg = await getUserConfig(userId);
+  const [cfg, profile] = await Promise.all([
+    getUserConfig(userId),
+    getProfile(userId),
+  ]);
+  // A freshly-approved user has no profile yet — send them through onboarding
+  // once so the app has their metrics/goals before showing an empty Home.
+  if (!profile) redirect("/onboarding");
   return (
     <HomeClient
       hasWorkouts={cfg.hasWorkouts}
