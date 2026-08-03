@@ -913,15 +913,18 @@ function CurrentUserCard() {
         </div>
         <div className="text-sm font-semibold truncate">{name || "—"}</div>
       </div>
-      <div className="flex flex-col items-end gap-1.5">
+      <div className="flex flex-col items-end gap-3">
         {isAdmin && (
-          <Link href="/admin" className="text-xs font-medium text-accent-brand">
+          <Link
+            href="/admin"
+            className="text-xs font-medium text-accent-brand rounded-full border border-accent-brand/30 px-3 py-1"
+          >
             {t(lang, "profile_manage_users")}
           </Link>
         )}
         <button
           onClick={() => signOut({ callbackUrl: "/signin" })}
-          className="text-xs font-medium text-accent-brand"
+          className="text-xs font-medium text-white/50"
         >
           {t(lang, "profile_sign_out")}
         </button>

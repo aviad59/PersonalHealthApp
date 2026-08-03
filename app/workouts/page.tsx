@@ -159,8 +159,8 @@ export default function WorkoutsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Last 7 days</h2>
           <div className={`grid gap-3 ${data.summary.avgRpe !== null ? "grid-cols-4" : "grid-cols-3"}`}>
             <Stat label="Sessions" value={data.summary.sessions.toString()} />
-            <Stat label="Volume" value={`${Math.round(data.summary.totalVolumeKg).toLocaleString()} kg`} />
-            <Stat label="Minutes" value={data.summary.totalMinutes.toString()} />
+            <Stat label="Volume" value={Math.round(data.summary.totalVolumeKg).toLocaleString()} unit="kg" />
+            <Stat label="Minutes" value={data.summary.totalMinutes.toString()} unit="min" />
             {data.summary.avgRpe !== null && (
               <Stat label="Avg RPE" value={data.summary.avgRpe.toString()} />
             )}
@@ -226,11 +226,17 @@ export default function WorkoutsPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="rounded-xl bg-bg-elev border border-border p-3 text-center">
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-white/50">{label}</div>
+    <div className="rounded-xl bg-bg-elev border border-border p-3 text-center overflow-hidden">
+      {/* Number + unit on one line: the unit is a small suffix so a large
+          value like "14,701 kg" stays together instead of the "kg" dropping
+          to its own line when the cell runs out of width. */}
+      <div className="flex items-baseline justify-center gap-0.5 whitespace-nowrap leading-none">
+        <span className="text-[15px] sm:text-lg font-semibold tabular-nums">{value}</span>
+        {unit && <span className="text-[10px] font-medium text-white/45">{unit}</span>}
+      </div>
+      <div className="mt-1 text-[10px] uppercase tracking-wide text-white/50">{label}</div>
     </div>
   );
 }
