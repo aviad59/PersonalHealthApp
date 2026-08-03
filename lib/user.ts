@@ -162,9 +162,13 @@ export async function authorizeSignIn(params: {
   const normalized = normalizeEmail(params.email);
   if (!normalized) return false;
   const users = await loadUsers();
-  const existing = users.find(
-    (u) => u.email && normalizeEmail(u.email) === normalized,
-  );
+  const matches = (u: UserConfig) => u.email && normalizeEmail(u.email) === normalized;
+  // Prefer an ACTIVE row: if the account somehow has both an active row and a
+  // stray pending duplicate (e.g. created during a lockout window), the active
+  // one must win so the user isn't wrongly denied.
+  const active = users.find((u) => u.status === "active" && matches(u));
+  if (active) return true;
+  const existing = users.find(matches);
   if (existing) return existing.status === "active";
   // First time we've seen this account — record it as pending for approval.
   await insertPendingUser(

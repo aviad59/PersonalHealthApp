@@ -353,10 +353,26 @@ async function seedBootstrapAdmin(c: Client): Promise<void> {
   if (!email) return;
   const id = (process.env.ADMIN_ID?.trim() || "idan").toLowerCase();
   const name = process.env.ADMIN_NAME?.trim() || "Admin";
+  // Upsert: create the admin if missing, and if the row already exists force
+  // it back to active+admin with this email. This makes ADMIN_EMAIL a reliable
+  // "restore my access" lever even if the account was left pending/disabled.
+  // display_name is only set on insert (COALESCE keeps any admin-chosen name).
   await c.execute({
-    sql: `INSERT OR IGNORE INTO users (id, email, display_name, status, has_workouts, is_admin)
-          VALUES (?, ?, ?, 'active', 1, 1)`,
+    sql: `INSERT INTO users (id, email, display_name, status, has_workouts, is_admin)
+          VALUES (?, ?, ?, 'active', 1, 1)
+          ON CONFLICT(id) DO UPDATE SET
+            email = excluded.email,
+            status = 'active',
+            is_admin = 1,
+            updated_at = datetime('now')`,
     args: [id, email, name],
+  });
+  // If the admin got recorded as a separate pending row (keyed by their email)
+  // during a lockout window, remove that stray so it doesn't shadow the real
+  // admin id or clutter the roster. Only ever deletes a *pending* duplicate.
+  await c.execute({
+    sql: `DELETE FROM users WHERE email = ? AND id != ? AND status = 'pending'`,
+    args: [email, id],
   });
 }
 
