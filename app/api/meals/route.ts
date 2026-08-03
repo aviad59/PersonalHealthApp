@@ -18,6 +18,7 @@ const SaveSchema = z.object({
   carbs_g: z.number(),
   items: z.array(z.any()).optional(),
   confidence: z.string().optional(),
+  icon: z.string().optional(),
   photo_base64: z.string().optional(),
   // Tiny inlineable thumbnail (~5–10 KB JPEG) generated client-side.
   photo_thumb_base64: z.string().optional(),
@@ -130,7 +131,9 @@ export async function POST(req: NextRequest) {
       m.carbs_g,
       m.items ? JSON.stringify(m.items) : null,
       m.confidence ?? null,
-      inheritedIcon,
+      // An explicit icon from the client (e.g. the creatine shortcut) wins;
+      // otherwise inherit from a prior meal with the same description.
+      m.icon ?? inheritedIcon,
     ],
   });
   const mealId = Number(ins.lastInsertRowid ?? 0);

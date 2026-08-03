@@ -83,10 +83,6 @@ function lsSet(key: string, val: unknown) {
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
-/** Cap on how many frequent-meal chips show in the quick-add carousel.
- *  The full expandable list still lives further down on the page. */
-const FREQUENT_CHIP_LIMIT = 6;
-
 /** One entry in batch-logging mode, where each selected photo becomes its
  *  own meal. Carries the compressed image, the user's optional note, and
  *  the full per-item analysis lifecycle (including a clarifying-question
@@ -249,6 +245,9 @@ export default function LogMealPage() {
   const [proteinMode, setProteinMode] = useState(false);
   const [proteinBase, setProteinBase] = useState<string>(PROTEIN_BASES[0]);
   const [proteinSaving, setProteinSaving] = useState(false);
+
+  // Creatine one-tap log (no parameters — creatine has no macros).
+  const [creatineBusy, setCreatineBusy] = useState(false);
 
   // Batch-logging state — null means not in batch mode.
   const [batch, setBatch] = useState<BatchItem[] | null>(null);
@@ -958,6 +957,39 @@ export default function LogMealPage() {
     }
   }
 
+  /** One-tap creatine log. Creatine has no calories/macros, so this saves a
+   *  zero-macro marker meal instantly — no picker, no parameters — just to
+   *  record that it was taken today. */
+  async function saveCreatine() {
+    if (creatineBusy) return;
+    setCreatineBusy(true);
+    setErr(null);
+    try {
+      await safeFetchJson("/api/meals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date,
+          description: "קריאטין",
+          calories: 0,
+          protein_g: 0,
+          fat_g: 0,
+          carbs_g: 0,
+          confidence: "high",
+          icon: "shake",
+          items: [{ type: "creatine", name: "קריאטין", portion: "5g" }],
+        }),
+      });
+      await loadExisting(date);
+      refreshFrequentMeals();
+      setShowDaySummary(true);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setCreatineBusy(false);
+    }
+  }
+
   async function saveProtein() {
     const calc = {
       calories: ALLIN_WHEY.cal,
@@ -1157,10 +1189,8 @@ export default function LogMealPage() {
             {t(lang, "meal_batch_button")}
           </button>
           <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
-          {/* Quick-add carousel — protein-powder shortcut + the user's most
-              frequent meals as one-tap chips. Tapping a meal chip re-logs
-              it with the same remembered macros; the modifier flow lives
-              further down the page in the expandable list. */}
+          {/* Quick-add carousel — two fixed one-tap shortcuts: protein powder
+              (opens the base picker) and creatine (logs instantly, no params). */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
             <button
               type="button"
@@ -1170,39 +1200,18 @@ export default function LogMealPage() {
               <ShakerIcon className="h-4 w-4 text-white/55" />
               <span className="whitespace-nowrap">אבקת חלבון</span>
             </button>
-            {frequent.slice(0, FREQUENT_CHIP_LIMIT).map((m) => {
-              const isBusy = chipBusy === m.description;
-              return (
-                <button
-                  key={m.description}
-                  type="button"
-                  onClick={async () => {
-                    if (chipBusy) return;
-                    setChipBusy(m.description);
-                    setErr(null);
-                    try {
-                      await quickLog(m, "");
-                    } finally {
-                      setChipBusy(null);
-                    }
-                  }}
-                  disabled={!!chipBusy && !isBusy}
-                  className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white/55" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12a9 9 0 1 1-3-6.7" />
-                    <polyline points="21 4 21 10 15 10" />
-                  </svg>
-                  <span className="truncate max-w-[14ch]">{m.description}</span>
-                  <span className="text-[10px] text-white/45 whitespace-nowrap">
-                    {Math.round(m.calories)} {t(lang, "macro_kcal")}
-                  </span>
-                  {isBusy && (
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
-                  )}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={saveCreatine}
+              disabled={creatineBusy}
+              className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
+            >
+              <CreatineIcon className="h-4 w-4 text-white/55" />
+              <span className="whitespace-nowrap">קריאטין</span>
+              {creatineBusy && (
+                <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -2066,6 +2075,17 @@ function prettyDate(s: string, lang: Lang): string {
     month: "short",
     day: "numeric",
   });
+}
+
+/** Small scoop/tub icon for the creatine one-tap chip. */
+function CreatineIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 8h14l-1 11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 8Z" />
+      <path d="M4 8h16V6a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2Z" />
+      <path d="M10 12h4" />
+    </svg>
+  );
 }
 
 function ShakerIcon(props: React.SVGProps<SVGSVGElement>) {
