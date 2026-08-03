@@ -6,7 +6,7 @@
 // (the session cookie rides along automatically).
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, dateKey } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/user-server";
 
 export const runtime = "nodejs";
@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const type = new URL(req.url).searchParams.get("type") || "meals";
+  const url = new URL(req.url);
+  const type = url.searchParams.get("type") || "meals";
+  // Optional day-range filter for meals (7 / 14 / 30 …). Absent → all history.
+  const daysRaw = Number(url.searchParams.get("days"));
+  const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.floor(daysRaw) : null;
   const db = await getDb();
 
   if (type === "weight") {
@@ -56,12 +60,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (type === "meals") {
+    // "Last N days" means the N calendar days ending today (inclusive).
+    const cutoff = days ? dateKey(new Date(Date.now() - (days - 1) * 86400000)) : null;
     const res = await db.execute({
       sql: `SELECT date, created_at, description, calories, protein_g, fat_g, carbs_g, confidence
               FROM meals
-             WHERE user_id = ?
+             WHERE user_id = ?${cutoff ? " AND date >= ?" : ""}
              ORDER BY date ASC, id ASC`,
-      args: [userId],
+      args: cutoff ? [userId, cutoff] : [userId],
     });
     const csv = toCsv(
       ["date", "logged_at", "description", "calories", "protein_g", "fat_g", "carbs_g", "confidence"],
@@ -76,10 +82,11 @@ export async function GET(req: NextRequest) {
         r.confidence,
       ]),
     );
+    const suffix = days ? `-last${days}d` : "";
     return new NextResponse(csv, {
       headers: {
         "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="meals-${userId}.csv"`,
+        "content-disposition": `attachment; filename="meals-${userId}${suffix}.csv"`,
       },
     });
   }

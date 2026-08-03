@@ -54,6 +54,10 @@ export default function ProfilePage() {
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [applyToAll, setApplyToAll] = useState<Resolution | null>(null);
 
+  // Collapsible "Extra" section (data export + CSV backfill). Closed by
+  // default so the common settings stay uncluttered.
+  const [extraOpen, setExtraOpen] = useState(false);
+
   useEffect(() => {
     setTextSize(readTextSizeCookie());
     (async () => {
@@ -334,30 +338,6 @@ export default function ProfilePage() {
       {/* Daily-insight push notifications */}
       <PushToggle lang={lang} />
 
-      {/* Data export */}
-      <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-          {t(lang, "profile_export_title")}
-        </h2>
-        <p className="text-xs text-white/55">{t(lang, "profile_export_desc")}</p>
-        <div className="grid grid-cols-2 gap-2">
-          <a
-            href="/api/export?type=meals"
-            download
-            className="rounded-xl bg-bg-elev border border-border py-3 text-center text-sm font-medium text-white/80 hover:text-white"
-          >
-            {t(lang, "profile_export_meals")}
-          </a>
-          <a
-            href="/api/export?type=weight"
-            download
-            className="rounded-xl bg-bg-elev border border-border py-3 text-center text-sm font-medium text-white/80 hover:text-white"
-          >
-            {t(lang, "profile_export_weight")}
-          </a>
-        </div>
-      </section>
-
       {/* Text size picker */}
       <section className="card p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "profile_text_size")}</h2>
@@ -505,10 +485,67 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* --- CSV BACKFILL --- */}
+      {/* --- EXTRA (collapsible): data export + CSV backfill --- */}
       <section className="card p-5 space-y-4">
+        <button
+          type="button"
+          onClick={() => setExtraOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3"
+          aria-expanded={extraOpen}
+        >
+          <div className="text-start">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+              {t(lang, "profile_extra_title")}
+            </h2>
+            <p className="text-xs text-white/45 mt-1">{t(lang, "profile_extra_desc")}</p>
+          </div>
+          <ChevronIcon
+            className={`h-5 w-5 text-white/40 shrink-0 transition-transform ${extraOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+      {extraOpen && (
+        <div className="space-y-5 pt-1">
+          {/* Export */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/40">
+              {t(lang, "profile_export_title")}
+            </h3>
+            <div>
+              <div className="text-[11px] text-white/50 mb-1.5">{t(lang, "profile_export_meals")}</div>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "7d", days: 7 },
+                  { label: "14d", days: 14 },
+                  { label: "30d", days: 30 },
+                  { label: t(lang, "profile_export_all"), days: 0 },
+                ].map((r) => (
+                  <a
+                    key={r.label}
+                    href={`/api/export?type=meals${r.days ? `&days=${r.days}` : ""}`}
+                    download
+                    className="rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors"
+                  >
+                    {r.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+            <a
+              href="/api/export?type=weight"
+              download
+              className="block rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors"
+            >
+              {t(lang, "profile_export_weight")}
+            </a>
+          </div>
+
+          <div className="border-t border-border" />
+
+          {/* Import / backfill */}
+          <div className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Backfill nutrition from CSV</h2>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-white/40">Backfill nutrition from CSV</h3>
           <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
             Upload a CSV with columns <span className="font-mono">date, calories, protein, carbs, fat, description</span>.
             Daily summary rows (סה״כ / סיכום) are skipped. Missing carbs are derived from the kcal balance when possible;
@@ -679,10 +716,21 @@ export default function ProfilePage() {
             <Row k="AI-filled" v={String(backfillResult.summary.aiFilledCount)} />
           </div>
         )}
+          </div>
+        </div>
+      )}
       </section>
         </>
       )}
     </div>
+  );
+}
+
+function ChevronIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 
@@ -903,31 +951,35 @@ function CurrentUserCard() {
   const isAdmin = (session as any)?.isAdmin === true;
 
   return (
-    <section className="card p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-full bg-bg-elev border border-border flex items-center justify-center text-sm font-semibold">
-        {name ? name[0].toUpperCase() : "?"}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-white/40">
-          {t(lang, "profile_signed_in")}
+    <section className="card p-4 space-y-3">
+      {/* Identity row */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-bg-elev border border-border flex items-center justify-center text-sm font-semibold shrink-0">
+          {name ? name[0].toUpperCase() : "?"}
         </div>
-        <div className="text-sm font-semibold truncate">{name || "—"}</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-white/40">
+            {t(lang, "profile_signed_in")}
+          </div>
+          <div className="text-sm font-semibold truncate">{name || "—"}</div>
+        </div>
       </div>
-      <div className="flex flex-col items-end gap-3">
+      {/* Actions row — separated from identity so they don't crowd the name */}
+      <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+        <button
+          onClick={() => signOut({ callbackUrl: "/signin" })}
+          className="text-xs font-medium text-white/50 hover:text-white/80 transition-colors"
+        >
+          {t(lang, "profile_sign_out")}
+        </button>
         {isAdmin && (
           <Link
             href="/admin"
-            className="text-xs font-medium text-accent-brand rounded-full border border-accent-brand/30 px-3 py-1"
+            className="text-xs font-medium text-accent-brand rounded-full border border-accent-brand/30 px-3 py-1.5 hover:border-accent-brand/60 transition-colors"
           >
             {t(lang, "profile_manage_users")}
           </Link>
         )}
-        <button
-          onClick={() => signOut({ callbackUrl: "/signin" })}
-          className="text-xs font-medium text-white/50"
-        >
-          {t(lang, "profile_sign_out")}
-        </button>
       </div>
     </section>
   );
