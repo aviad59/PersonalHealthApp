@@ -134,6 +134,10 @@ const COLUMN_ADDS: { sql: string }[] = [
   { sql: "ALTER TABLE meals ADD COLUMN photo_thumb TEXT" },
   // Optional icon id shown in lists for meals with no photo.
   { sql: "ALTER TABLE meals ADD COLUMN icon TEXT" },
+  // The user's own free-text note/description/hint given at log time, kept
+  // verbatim alongside the AI-generated `description` so the coach can read
+  // what the user actually said about the meal.
+  { sql: "ALTER TABLE meals ADD COLUMN user_note TEXT" },
   // Optional second photo (e.g. the back of a packaged product, or a
   // second angle of a plate) for meals where one photo isn't enough
   // for an accurate read.
@@ -616,6 +620,9 @@ export type Meal = {
   // Optional chosen icon id (see components/MealIcon) shown in lists when
   // the meal has no photo.
   icon: string | null;
+  // The user's own note/description entered at log time (verbatim), separate
+  // from the AI-generated `description`.
+  user_note: string | null;
   created_at: string;
 };
 
@@ -654,7 +661,7 @@ export type MealLite = Omit<Meal, "photo_path" | "photo_path_2"> & {
 };
 
 const MEAL_LITE_COLUMNS =
-  "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, icon, created_at, " +
+  "id, date, description, calories, protein_g, fat_g, carbs_g, items_json, ai_tip, confidence, icon, user_note, created_at, " +
   "photo_thumb, photo_thumb_2, " +
   "(CASE WHEN photo_path IS NULL OR photo_path = '' THEN 0 ELSE 1 END) AS has_photo, " +
   "(CASE WHEN photo_path_2 IS NULL OR photo_path_2 = '' THEN 0 ELSE 1 END) AS has_photo_2";

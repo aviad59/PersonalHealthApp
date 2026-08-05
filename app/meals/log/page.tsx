@@ -687,6 +687,8 @@ export default function LogMealPage() {
           body: JSON.stringify({
             date,
             description: it.analysis.description,
+            // The user's per-photo note (hint), kept verbatim for the coach.
+            note: it.hint.trim() || undefined,
             calories: it.editing.calories,
             protein_g: it.editing.protein_g,
             fat_g: it.editing.fat_g,
@@ -819,6 +821,9 @@ export default function LogMealPage() {
           body: JSON.stringify({
             date,
             description: analysis.description,
+            // Keep the user's own note/description verbatim so the coach can
+            // read what they actually said, not just the AI's description.
+            note: text.trim() || undefined,
             calories: editing.calories,
             protein_g: editing.protein_g,
             fat_g: editing.fat_g,

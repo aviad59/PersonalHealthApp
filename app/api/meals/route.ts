@@ -19,6 +19,8 @@ const SaveSchema = z.object({
   items: z.array(z.any()).optional(),
   confidence: z.string().optional(),
   icon: z.string().optional(),
+  // The user's own note/description/hint at log time, kept verbatim.
+  note: z.string().optional(),
   photo_base64: z.string().optional(),
   // Tiny inlineable thumbnail (~5–10 KB JPEG) generated client-side.
   photo_thumb_base64: z.string().optional(),
@@ -115,8 +117,8 @@ export async function POST(req: NextRequest) {
 
   const ins = await db.execute({
     sql: `INSERT INTO meals (
-        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence, icon
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence, icon, user_note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       userId,
       date,
@@ -134,6 +136,7 @@ export async function POST(req: NextRequest) {
       // An explicit icon from the client (e.g. the creatine shortcut) wins;
       // otherwise inherit from a prior meal with the same description.
       m.icon ?? inheritedIcon,
+      m.note?.trim() ? m.note.trim() : null,
     ],
   });
   const mealId = Number(ins.lastInsertRowid ?? 0);

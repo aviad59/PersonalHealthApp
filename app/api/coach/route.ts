@@ -141,6 +141,8 @@ async function executeTool(
       if (m.items_json) { try { items = JSON.parse(m.items_json); } catch {} }
       return {
         description: m.description,
+        // The user's own note about this meal (what they typed), if any.
+        ...(m.user_note ? { user_note: m.user_note } : {}),
         time: m.created_at,
         calories: m.calories,
         protein_g: m.protein_g,
@@ -390,6 +392,8 @@ async function buildContext(userId: UserId): Promise<any> {
         if (m.items_json) { try { items = JSON.parse(m.items_json); } catch {} }
         return {
           description: m.description,
+          // The user's own note about this meal (what they typed), if any.
+          ...(m.user_note ? { user_note: m.user_note } : {}),
           time: m.created_at,
           calories: m.calories,
           protein_g: m.protein_g,
