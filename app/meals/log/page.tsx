@@ -975,14 +975,14 @@ export default function LogMealPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           date,
-          description: "קריאטין",
+          description: t(lang, "meal_creatine"),
           calories: 0,
           protein_g: 0,
           fat_g: 0,
           carbs_g: 0,
           confidence: "high",
           icon: "shake",
-          items: [{ type: "creatine", name: "קריאטין", portion: "5g" }],
+          items: [{ type: "creatine", name: t(lang, "meal_creatine"), portion: "5g" }],
         }),
       });
       await loadExisting(date);
@@ -1203,7 +1203,7 @@ export default function LogMealPage() {
               className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors"
             >
               <ShakerIcon className="h-4 w-4 text-white/55" />
-              <span className="whitespace-nowrap">אבקת חלבון</span>
+              <span className="whitespace-nowrap">{t(lang, "meal_protein_powder")}</span>
             </button>
             <button
               type="button"
@@ -1212,7 +1212,7 @@ export default function LogMealPage() {
               className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
             >
               <CreatineIcon className="h-4 w-4 text-white/55" />
-              <span className="whitespace-nowrap">קריאטין</span>
+              <span className="whitespace-nowrap">{t(lang, "meal_creatine")}</span>
               {creatineBusy && (
                 <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
               )}

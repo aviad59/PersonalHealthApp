@@ -236,7 +236,6 @@ export default function HomeClient({
             <span className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center">
               <PulseLogo className="h-5 w-5 text-white" />
             </span>
-            <span className="text-lg font-bold tracking-tight text-white">Health</span>
           </div>
           <Link
             href="/profile"
@@ -259,13 +258,13 @@ export default function HomeClient({
       <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
         <div className="space-y-5">
           <section className="card p-5">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_macros")}</h2>
               <Link href="/meals/log" className="text-xs text-accent-brand font-medium">
                 {t(lang, "home_log_meal")}
               </Link>
             </div>
-            <div className="grid grid-cols-2 gap-y-4 place-items-center">
+            <div className="grid grid-cols-2 gap-y-1 place-items-center">
               <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" warnOnOver />
               <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" warnOnOver={false} />
               <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" warnOnOver={false} />

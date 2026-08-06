@@ -34,7 +34,7 @@ export default function MacroRing({
   target,
   unit,
   color,
-  size = 92,
+  size = 78,
   warnOnOver = true,
 }: Props) {
   const safeTarget = target > 0 ? target : 0;
@@ -43,9 +43,9 @@ export default function MacroRing({
   const over = warnOnOver ? Math.max(0, ratio - 1) : 0;
   const overPct = Math.min(1, over); // visually cap at +100% past target
 
-  const stroke = 12;
+  const stroke = 11;
   const overStroke = 5;
-  const overGap = 4; // px between base ring and overage ring
+  const overGap = 3; // px between base ring and overage ring
   const baseR = (size - stroke) / 2;
   const baseC = 2 * Math.PI * baseR;
   const baseDash = baseC * basePct;
@@ -55,7 +55,7 @@ export default function MacroRing({
   const overDash = overC * overPct;
 
   // SVG must be large enough to contain the overage ring + glow.
-  const svgSize = size + (overGap + overStroke + 6) * 2;
+  const svgSize = size + (overGap + overStroke + 2) * 2;
   const center = svgSize / 2;
 
   const hasOver = over > 0;
@@ -64,7 +64,7 @@ export default function MacroRing({
   const innerId = `inner-${safeLabel}`;
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center">
       <div className="relative" style={{ width: svgSize, height: svgSize }}>
         <svg width={svgSize} height={svgSize} className="-rotate-90">
           <defs>
@@ -153,7 +153,10 @@ export default function MacroRing({
           </div>
         </div>
       </div>
-      <div className="text-[11px] uppercase tracking-wide text-white/60">{label}</div>
+      {/* Negative margin pulls the label up over the SVG's transparent
+          padding (reserved for the rarely-shown overage ring) so it sits
+          right under the ring instead of floating far below. */}
+      <div className="-mt-2 text-[11px] uppercase tracking-wide text-white/60">{label}</div>
     </div>
   );
 }
