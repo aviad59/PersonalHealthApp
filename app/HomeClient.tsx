@@ -228,30 +228,32 @@ export default function HomeClient({
     <div className={`px-5 pt-6 pb-6 space-y-5 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
       {/* Branded top header — gradient rounded-bottom rectangle with the app
           logo, a profile avatar, and a greeting (inspired by the reference). */}
-      <div className="-mx-5 -mt-6 px-5 pt-7 pb-6 rounded-b-[28px] bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] relative overflow-hidden shadow-[0_10px_30px_-12px_rgba(14,165,233,0.5)]">
+      <div className="-mx-5 -mt-6 px-5 pt-6 pb-6 rounded-b-[28px] bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] relative overflow-hidden shadow-[0_10px_30px_-12px_rgba(14,165,233,0.5)]">
         {/* soft decorative glow, top-right */}
         <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-        <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center">
-              <PulseLogo className="h-5 w-5 text-white" />
+        <div className="relative flex items-center justify-between gap-3">
+          {/* Logo + greeting/date on one line */}
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+              <PulseLogo className="h-6 w-6 text-white" />
             </span>
+            <div className="min-w-0">
+              <div className="text-[11px] uppercase tracking-wider text-white/70">
+                {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+              </div>
+              <div className="text-xl font-bold text-white leading-tight truncate">
+                {t(lang, "home_greeting")} {userDisplayName}
+              </div>
+            </div>
           </div>
+          {/* Profile avatar — ringed so it stands out on the gradient */}
           <Link
             href="/profile"
             aria-label={userDisplayName}
-            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 transition-colors flex items-center justify-center text-white text-sm font-semibold"
+            className="w-10 h-10 shrink-0 rounded-full bg-white/25 ring-2 ring-white/70 hover:bg-white/35 transition-colors flex items-center justify-center text-white text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.25)]"
           >
             {userDisplayName.slice(0, 1).toUpperCase()}
           </Link>
-        </div>
-        <div className="relative mt-4">
-          <div className="text-[11px] uppercase tracking-wider text-white/70">
-            {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
-          </div>
-          <div className="text-xl font-bold text-white mt-0.5">
-            {t(lang, "home_greeting")} {userDisplayName}
-          </div>
         </div>
       </div>
 
