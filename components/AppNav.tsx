@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { useLang } from "@/components/LangProvider";
 import { t } from "@/lib/i18n";
 
@@ -30,7 +31,35 @@ const items: NavItem[] = [
  */
 export default function AppNav() {
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const lang = useLang();
+
+  // useTransition lets us flip an "is navigating" flag the *instant* a tab is
+  // tapped — before the new route's data has loaded. On a slow/spotty
+  // connection this is what makes a tap feel responsive: we can immediately
+  // light up the tapped tab and show a top progress bar instead of leaving
+  // the old page frozen with no feedback (which reads as "the tap did nothing").
+  const [isPending, startTransition] = useTransition();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  // Once the URL actually changes to the destination, the navigation is done —
+  // drop the pending marker so the real active-state styling takes over.
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  const go = (e: React.MouseEvent, href: string) => {
+    // Respect modifier clicks (open-in-new-tab etc.) and taps on the current
+    // tab — let the browser / Link handle those normally.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    if (href === pathname) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    setPendingHref(href);
+    startTransition(() => router.push(href));
+  };
 
   if (pathname.startsWith("/onboarding")) return null;
   if (pathname.startsWith("/signin")) return null;
@@ -40,15 +69,26 @@ export default function AppNav() {
 
   return (
     <>
+      {/* Global navigation progress bar — visible only while a tab tap is in
+          flight. Guarantees immediate feedback even before any data arrives. */}
+      {isPending && (
+        <div className="nav-progress-track" role="progressbar" aria-label="Loading page">
+          <span />
+        </div>
+      )}
       {/* Desktop navigation rail (M3-flavored sidebar) */}
       <nav className="hidden md:flex md:flex-col md:w-56 md:shrink-0 md:h-dvh md:sticky md:top-0 border-e border-border bg-bg-card/40 px-3 py-6 gap-1">
         <div className="px-3 mb-6 text-lg font-bold tracking-tight">Health</div>
         {visible.map((it) => {
-          const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+          const onRoute = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+          // While a tap is pending, treat the tapped tab as active so it lights
+          // up instantly; ignore the old route's active tab during that window.
+          const active = pendingHref ? pendingHref === it.href : onRoute;
           return (
             <Link
               key={it.href}
               href={it.href}
+              onClick={(e) => go(e, it.href)}
               className={`state-layer flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? "text-accent-on-sec-container bg-accent-sec-container"
@@ -69,11 +109,13 @@ export default function AppNav() {
         <div className="absolute -top-10 -left-8 w-36 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="relative mx-auto w-full max-w-md sm:max-w-lg flex justify-between items-center px-1.5 h-[var(--nav-h)]">
           {visible.map((it) => {
-            const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+            const onRoute = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+            const active = pendingHref ? pendingHref === it.href : onRoute;
             return (
               <Link
                 key={it.href}
                 href={it.href}
+                onClick={(e) => go(e, it.href)}
                 aria-current={active ? "page" : undefined}
                 className="flex-1 min-w-0 flex flex-col items-center gap-1 py-1"
               >
