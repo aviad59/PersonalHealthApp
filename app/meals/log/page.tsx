@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
@@ -203,6 +203,30 @@ export default function LogMealPage() {
   // Granular step label, surfaced in the action button so the user knows
   // which stage is taking time. Cleared back to null when idle.
   const [progress, setProgress] = useState<string | null>(null);
+  // Staged pipeline labels for the analyze call. The request itself is a single
+  // (non-streaming) POST, so we advance through the phases on a timer — the
+  // early phases (upload / reading) are genuinely accurate, and the later ones
+  // describe what the model is doing while we wait. Photo and text modes have
+  // slightly different pipelines, so the stage list depends on whether a photo
+  // is attached at the moment analysis starts.
+  const analyzeStages = useMemo(
+    () =>
+      photoPreview
+        ? [
+            { after: 0, label: t(lang, "meal_stage_upload") },
+            { after: 1200, label: t(lang, "meal_stage_reading_photo") },
+            { after: 4500, label: t(lang, "meal_stage_items") },
+            { after: 9000, label: t(lang, "meal_stage_macros") },
+            { after: 14000, label: t(lang, "meal_stage_finishing") },
+          ]
+        : [
+            { after: 0, label: t(lang, "meal_stage_reading_text") },
+            { after: 3500, label: t(lang, "meal_stage_macros") },
+            { after: 8000, label: t(lang, "meal_stage_finishing") },
+          ],
+    [lang, photoPreview],
+  );
+  const analyzeStageLabel = useStagedLabel(analyzing, analyzeStages);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [editing, setEditing] = useState<{
     calories: number;
@@ -1489,7 +1513,7 @@ export default function LogMealPage() {
             className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
           >
             {analyzing ? (
-              <AiThinkingPill label={progress || t(lang, "meal_analyzing")} />
+              <AiThinkingPill label={progress || analyzeStageLabel} />
             ) : progress ? (
               progress
             ) : photoPreview ? (
@@ -2369,6 +2393,35 @@ function BatchMealCard({
 
 /** Sparkle icon + three breathing dots, used wherever we want to say
  *  "the model is thinking" instead of a static "Loading…" label. */
+/**
+ * Advances a label through a sequence of timed stages while `active` is true,
+ * so a long single request can still show which step of the pipeline is
+ * running. Each stage fires at its `after` offset (ms) from when `active`
+ * flips true; the label holds on the final stage until `active` goes false.
+ * The stage list is captured at activation (read via a ref) so re-renders
+ * don't restart the timers.
+ */
+function useStagedLabel(
+  active: boolean,
+  stages: { after: number; label: string }[],
+): string {
+  const stagesRef = useRef(stages);
+  stagesRef.current = stages;
+  const [label, setLabel] = useState(stages[0]?.label ?? "");
+
+  useEffect(() => {
+    if (!active) return;
+    const s = stagesRef.current;
+    setLabel(s[0]?.label ?? "");
+    const timers = s
+      .filter((st) => st.after > 0)
+      .map((st) => setTimeout(() => setLabel(st.label), st.after));
+    return () => timers.forEach(clearTimeout);
+  }, [active]);
+
+  return label;
+}
+
 function AiThinkingPill({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-2">
