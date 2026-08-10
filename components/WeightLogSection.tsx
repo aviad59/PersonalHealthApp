@@ -42,6 +42,11 @@ export default function WeightLogSection({
   const [input, setInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState<{ kcal: number; carbs: number } | null>(null);
+  // Inline edit of an existing entry (fix a mistyped weight) — holds the date
+  // being edited and its working value.
+  const [editDate, setEditDate] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const [rowBusy, setRowBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -86,6 +91,64 @@ export default function WeightLogSection({
       setErr(e.message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function startEdit(e: Entry) {
+    setEditDate(e.date);
+    setEditVal(String(e.weight_kg));
+    setErr(null);
+  }
+
+  async function saveEdit() {
+    if (editDate == null) return;
+    const weight_kg = Number(editVal);
+    if (!Number.isFinite(weight_kg) || weight_kg <= 0) {
+      setErr("enter a valid weight");
+      return;
+    }
+    setRowBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/weight", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // Editing today's entry also refreshes profile weight; a past date only
+        // fixes the log row (the API syncs profile only when date === today).
+        body: JSON.stringify({ date: editDate, weight_kg, sync_profile: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "save failed");
+      setEditDate(null);
+      setEditVal("");
+      await load();
+      onProfileMaybeChanged?.();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setRowBusy(false);
+    }
+  }
+
+  async function removeEntry(date: string) {
+    if (!confirm(t(lang, "weight_delete_confirm"))) return;
+    setRowBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/weight", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "delete failed");
+      if (editDate === date) setEditDate(null);
+      await load();
+      onProfileMaybeChanged?.();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setRowBusy(false);
     }
   }
 
@@ -175,6 +238,62 @@ export default function WeightLogSection({
       {/* Sparkline */}
       {log.length >= 2 && <WeightSpark entries={log} />}
 
+      {/* Recent entries — tap edit to fix a mistyped weight, or delete it. */}
+      {log.length > 0 && (
+        <div className="divide-y divide-border">
+          {[...log].reverse().slice(0, 10).map((e) => (
+            <div key={e.date} className="flex items-center justify-between py-2.5 gap-3">
+              <div className="text-sm font-medium text-white/70 w-28 shrink-0">
+                {e.date === data?.today ? t(lang, "weight_today") : e.date}
+              </div>
+              {editDate === e.date ? (
+                <div className="flex items-center gap-2 flex-1 justify-end">
+                  <input
+                    inputMode="decimal"
+                    value={editVal}
+                    autoFocus
+                    onChange={(ev) => setEditVal(ev.target.value.replace(/[^\d.]/g, ""))}
+                    className="w-20 rounded-lg bg-bg-elev border border-accent-brand px-2.5 py-1.5 text-sm nums focus:outline-none"
+                  />
+                  <span className="text-xs text-white/40">kg</span>
+                  <button
+                    onClick={saveEdit}
+                    disabled={rowBusy}
+                    className="rounded-full bg-accent-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  >
+                    {t(lang, "weight_save")}
+                  </button>
+                  <button
+                    onClick={() => setEditDate(null)}
+                    className="text-xs text-white/40 px-1"
+                  >
+                    {t(lang, "weight_cancel")}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 flex-1 justify-end">
+                  <span className="text-sm font-semibold nums">{e.weight_kg} kg</span>
+                  <button
+                    onClick={() => startEdit(e)}
+                    className="text-white/35 hover:text-accent-brand p-1"
+                    aria-label={t(lang, "weight_edit")}
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => removeEntry(e.date)}
+                    className="text-white/30 hover:text-red-400 text-base leading-none px-1"
+                    aria-label="Delete"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Trend suggestion */}
       {trend?.suggestion && !applied && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
@@ -212,6 +331,15 @@ export default function WeightLogSection({
         </div>
       )}
     </section>
+  );
+}
+
+function PencilIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
   );
 }
 

@@ -28,6 +28,15 @@ const FIELDS = [
 
 type FieldKey = (typeof FIELDS)[number]["key"];
 
+function PencilIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 export default function MeasurementsSection() {
   const lang = useLang();
   const [log, setLog] = useState<Entry[]>([]);
@@ -43,6 +52,9 @@ export default function MeasurementsSection() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // When set, the form is editing an existing entry (this date) instead of
+  // logging a new one for today — so a mistyped measurement can be fixed.
+  const [editDate, setEditDate] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -72,6 +84,8 @@ export default function MeasurementsSection() {
       return;
     }
     if (note.trim()) body.note = note.trim();
+    // Editing an existing entry: target that date (upsert overwrites it).
+    if (editDate) body.date = editDate;
     setBusy(true);
     setErr(null);
     try {
@@ -85,11 +99,34 @@ export default function MeasurementsSection() {
       setLog(j.log || []);
       setValues({ waist_cm: "", neck_cm: "", hips_cm: "", chest_cm: "", arm_cm: "", thigh_cm: "" });
       setNote("");
+      setEditDate(null);
     } catch (e: any) {
       setErr(e.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  function startEdit(e: Entry) {
+    setValues({
+      waist_cm: e.waist_cm != null ? String(e.waist_cm) : "",
+      neck_cm: e.neck_cm != null ? String(e.neck_cm) : "",
+      hips_cm: e.hips_cm != null ? String(e.hips_cm) : "",
+      chest_cm: e.chest_cm != null ? String(e.chest_cm) : "",
+      arm_cm: e.arm_cm != null ? String(e.arm_cm) : "",
+      thigh_cm: e.thigh_cm != null ? String(e.thigh_cm) : "",
+    });
+    setNote(e.note ?? "");
+    setEditDate(e.date);
+    setErr(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditDate(null);
+    setValues({ waist_cm: "", neck_cm: "", hips_cm: "", chest_cm: "", arm_cm: "", thigh_cm: "" });
+    setNote("");
+    setErr(null);
   }
 
   async function remove(date: string) {
@@ -142,12 +179,20 @@ export default function MeasurementsSection() {
         placeholder={t(lang, "measure_note_placeholder")}
         className="w-full rounded-xl bg-bg-elev border border-border px-3 py-2.5 text-[14px] focus:outline-none focus:border-accent-brand"
       />
+      {editDate && (
+        <div className="flex items-center justify-between rounded-lg bg-accent-brand/10 border border-accent-brand/30 px-3 py-2 text-xs">
+          <span className="text-accent-brand">{t(lang, "measure_editing")} {editDate}</span>
+          <button onClick={cancelEdit} className="text-white/50 hover:text-white/80">
+            {t(lang, "measure_cancel")}
+          </button>
+        </div>
+      )}
       <button
         onClick={save}
         disabled={busy}
         className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
       >
-        {busy ? "…" : t(lang, "measure_log_btn")}
+        {busy ? "…" : editDate ? t(lang, "measure_save_edit") : t(lang, "measure_log_btn")}
       </button>
       {err && <div className="text-sm text-red-400">{err}</div>}
 
@@ -167,13 +212,22 @@ export default function MeasurementsSection() {
                 </div>
                 {e.note && <div className="text-[11px] text-white/40 mt-0.5 truncate">{e.note}</div>}
               </div>
-              <button
-                onClick={() => remove(e.date)}
-                className="shrink-0 text-white/30 hover:text-red-400 text-sm leading-none px-1"
-                aria-label="Delete"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => startEdit(e)}
+                  className="text-white/35 hover:text-accent-brand p-1"
+                  aria-label={t(lang, "measure_edit")}
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => remove(e.date)}
+                  className="text-white/30 hover:text-red-400 text-base leading-none px-1"
+                  aria-label="Delete"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           ))}
         </div>
