@@ -210,20 +210,7 @@ export default function LogMealPage() {
   // slightly different pipelines, so the stage list depends on whether a photo
   // is attached at the moment analysis starts.
   const analyzeStages = useMemo(
-    () =>
-      photoPreview
-        ? [
-            { after: 0, label: t(lang, "meal_stage_upload") },
-            { after: 1200, label: t(lang, "meal_stage_reading_photo") },
-            { after: 4500, label: t(lang, "meal_stage_items") },
-            { after: 9000, label: t(lang, "meal_stage_macros") },
-            { after: 14000, label: t(lang, "meal_stage_finishing") },
-          ]
-        : [
-            { after: 0, label: t(lang, "meal_stage_reading_text") },
-            { after: 3500, label: t(lang, "meal_stage_macros") },
-            { after: 8000, label: t(lang, "meal_stage_finishing") },
-          ],
+    () => (photoPreview ? photoAnalyzeStages(lang) : textAnalyzeStages(lang)),
     [lang, photoPreview],
   );
   const analyzeStageLabel = useStagedLabel(analyzing, analyzeStages);
@@ -2256,6 +2243,11 @@ function BatchMealCard({
   onZoom: () => void;
 }) {
   const a = item.analysis;
+  // Per-item staged pipeline label — each batch item analyzes independently,
+  // so its stages advance from the moment that item enters the "analyzing"
+  // state. Batch items are always photo-based.
+  const stages = useMemo(() => photoAnalyzeStages(lang), [lang]);
+  const stageLabel = useStagedLabel(item.status === "analyzing", stages);
   return (
     <div className={`card p-3 ${item.status === "saved" ? "opacity-50" : ""}`}>
       <div className="flex gap-3">
@@ -2283,7 +2275,7 @@ function BatchMealCard({
           )}
           {item.status === "analyzing" && (
             <div className="text-[13px] text-white/50 pt-1.5">
-              <AiThinkingPill label={t(lang, "meal_analyzing")} />
+              <AiThinkingPill label={stageLabel} />
             </div>
           )}
           {item.status === "error" && (
@@ -2393,6 +2385,27 @@ function BatchMealCard({
 
 /** Sparkle icon + three breathing dots, used wherever we want to say
  *  "the model is thinking" instead of a static "Loading…" label. */
+// Pipeline stage lists for the analyze call, shared by the single-photo flow
+// and each batch item. `after` is the ms offset from when analysis starts at
+// which the label switches. Photo and text modes differ (a text-only meal has
+// no upload / vision-reading phase).
+function photoAnalyzeStages(lang: Lang) {
+  return [
+    { after: 0, label: t(lang, "meal_stage_upload") },
+    { after: 1200, label: t(lang, "meal_stage_reading_photo") },
+    { after: 4500, label: t(lang, "meal_stage_items") },
+    { after: 9000, label: t(lang, "meal_stage_macros") },
+    { after: 14000, label: t(lang, "meal_stage_finishing") },
+  ];
+}
+function textAnalyzeStages(lang: Lang) {
+  return [
+    { after: 0, label: t(lang, "meal_stage_reading_text") },
+    { after: 3500, label: t(lang, "meal_stage_macros") },
+    { after: 8000, label: t(lang, "meal_stage_finishing") },
+  ];
+}
+
 /**
  * Advances a label through a sequence of timed stages while `active` is true,
  * so a long single request can still show which step of the pipeline is
