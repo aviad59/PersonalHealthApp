@@ -303,6 +303,27 @@ const PER_USER_TABLES = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+  -- Admin-only analyzer eval harness: labeled test meals with ground-truth
+  -- macros, used to measure the meal analyzer's accuracy across prompt/model
+  -- changes. Global (not per-user) — it's a developer/admin tool. Images are
+  -- stored as base64 here (the set is small) to keep the harness self-contained.
+  CREATE TABLE IF NOT EXISTS analyzer_fixtures (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    mode TEXT NOT NULL,                       -- 'photo' | 'text'
+    photo_base64 TEXT,                        -- full compressed JPEG (photo mode)
+    photo_thumb_base64 TEXT,                  -- small thumb for the fixture list
+    photo_mime TEXT,                          -- e.g. 'image/jpeg'
+    input_text TEXT,                          -- text-mode description or photo note
+    expected_calories REAL NOT NULL,
+    expected_protein_g REAL NOT NULL,
+    expected_fat_g REAL NOT NULL,
+    expected_carbs_g REAL NOT NULL,
+    notes TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;
 
 // One-time copy of the legacy single-row / date-keyed tables into the new
@@ -1316,5 +1337,145 @@ export async function updateUserRow(
   await db.execute({
     sql: `UPDATE users SET ${sets.join(", ")} WHERE id = ?`,
     args: [...args, id],
+  });
+}
+
+// ---------------------------------------------------------------
+// Analyzer eval-harness fixtures (admin-only)
+// ---------------------------------------------------------------
+
+export type AnalyzerFixture = {
+  id: string;
+  label: string;
+  mode: "photo" | "text";
+  photo_base64: string | null;
+  photo_thumb_base64: string | null;
+  photo_mime: string | null;
+  input_text: string | null;
+  expected_calories: number;
+  expected_protein_g: number;
+  expected_fat_g: number;
+  expected_carbs_g: number;
+  notes: string | null;
+  created_at: string;
+};
+
+/** Lightweight fixture row for list views — omits the full-size photo. */
+export type AnalyzerFixtureListItem = Omit<AnalyzerFixture, "photo_base64">;
+
+export type NewAnalyzerFixture = {
+  label: string;
+  mode: "photo" | "text";
+  photo_base64?: string | null;
+  photo_thumb_base64?: string | null;
+  photo_mime?: string | null;
+  input_text?: string | null;
+  expected_calories: number;
+  expected_protein_g: number;
+  expected_fat_g: number;
+  expected_carbs_g: number;
+  notes?: string | null;
+  created_by?: string | null;
+};
+
+/** List all fixtures without the heavy full-size photo column. */
+export async function listAnalyzerFixtures(): Promise<AnalyzerFixtureListItem[]> {
+  const db = await getDb();
+  const r = await db.execute(
+    `SELECT id, label, mode, photo_thumb_base64, photo_mime, input_text,
+            expected_calories, expected_protein_g, expected_fat_g, expected_carbs_g,
+            notes, created_at
+       FROM analyzer_fixtures
+       ORDER BY created_at DESC`,
+  );
+  return r.rows.map((row: any) => ({
+    id: row.id,
+    label: row.label,
+    mode: row.mode,
+    photo_thumb_base64: row.photo_thumb_base64 ?? null,
+    photo_mime: row.photo_mime ?? null,
+    input_text: row.input_text ?? null,
+    expected_calories: Number(row.expected_calories),
+    expected_protein_g: Number(row.expected_protein_g),
+    expected_fat_g: Number(row.expected_fat_g),
+    expected_carbs_g: Number(row.expected_carbs_g),
+    notes: row.notes ?? null,
+    created_at: row.created_at,
+  }));
+}
+
+/** Fetch a single fixture including the full-size photo (for running/editing). */
+export async function getAnalyzerFixture(
+  id: string,
+): Promise<AnalyzerFixture | null> {
+  const db = await getDb();
+  const r = await db.execute({
+    sql: `SELECT * FROM analyzer_fixtures WHERE id = ?`,
+    args: [id],
+  });
+  const row: any = r.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    label: row.label,
+    mode: row.mode,
+    photo_base64: row.photo_base64 ?? null,
+    photo_thumb_base64: row.photo_thumb_base64 ?? null,
+    photo_mime: row.photo_mime ?? null,
+    input_text: row.input_text ?? null,
+    expected_calories: Number(row.expected_calories),
+    expected_protein_g: Number(row.expected_protein_g),
+    expected_fat_g: Number(row.expected_fat_g),
+    expected_carbs_g: Number(row.expected_carbs_g),
+    notes: row.notes ?? null,
+    created_at: row.created_at,
+  };
+}
+
+/** Fetch full fixtures for a run — all, or a specific subset by id. */
+export async function getAnalyzerFixturesForRun(
+  ids?: string[],
+): Promise<AnalyzerFixture[]> {
+  const all = await listAnalyzerFixtures();
+  const wanted = ids && ids.length ? all.filter((f) => ids.includes(f.id)) : all;
+  const full = await Promise.all(wanted.map((f) => getAnalyzerFixture(f.id)));
+  return full.filter((f): f is AnalyzerFixture => !!f);
+}
+
+export async function createAnalyzerFixture(
+  f: NewAnalyzerFixture,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO analyzer_fixtures
+            (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
+             input_text, expected_calories, expected_protein_g, expected_fat_g,
+             expected_carbs_g, notes, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    args: [
+      id,
+      f.label,
+      f.mode,
+      f.photo_base64 ?? null,
+      f.photo_thumb_base64 ?? null,
+      f.photo_mime ?? null,
+      f.input_text ?? null,
+      f.expected_calories,
+      f.expected_protein_g,
+      f.expected_fat_g,
+      f.expected_carbs_g,
+      f.notes ?? null,
+      f.created_by ?? null,
+    ],
+  });
+  return id;
+}
+
+export async function deleteAnalyzerFixture(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `DELETE FROM analyzer_fixtures WHERE id = ?`,
+    args: [id],
   });
 }

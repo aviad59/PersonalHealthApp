@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
-import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
+import { analyzeMeal, type AnalyzeImage, type BaseMeal } from "@/lib/analyze";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-type BaseMeal = {
-  description?: string;
-  calories?: number;
-  protein_g?: number;
-  fat_g?: number;
-  carbs_g?: number;
-};
 
 export async function POST(req: NextRequest) {
   const lang = req.cookies.get("lang")?.value || "en";
@@ -43,73 +34,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // --- PHOTO MODE (with optional hint or text context) ---
-    if (hasPhoto) {
-      const images = await Promise.all(
-        [file as File, file2].filter((f): f is File => f instanceof File).map(async (f) => {
+    // Decode any uploaded files into base64 image blocks for the shared core.
+    const images: AnalyzeImage[] = await Promise.all(
+      [file as File, file2]
+        .filter((f): f is File => f instanceof File)
+        .map(async (f) => {
           const buf = Buffer.from(await f.arrayBuffer());
-          const mediaType = (f.type || "image/jpeg") as
-            | "image/jpeg"
-            | "image/png"
-            | "image/gif"
-            | "image/webp";
-          return {
-            type: "image" as const,
-            source: { type: "base64" as const, media_type: mediaType, data: buf.toString("base64") },
-          };
+          const mediaType = (f.type || "image/jpeg") as AnalyzeImage["mediaType"];
+          return { mediaType, base64: buf.toString("base64") };
         }),
-      );
+    );
 
-      const contextText = [hint, text].filter(Boolean).join(". ");
-      const userText = contextText
-        ? `User context: ${contextText}\n\nAnalyze this meal and return the JSON.${images.length > 1 ? " (Two photos of the same meal are provided — e.g. both sides of a plate or package — use both to refine the estimate.)" : ""}`
-        : `Analyze this meal and return the JSON.${images.length > 1 ? " (Two photos of the same meal are provided — e.g. both sides of a plate or package — use both to refine the estimate.)" : ""}`;
+    const result = await analyzeMeal({
+      images: hasPhoto ? images : undefined,
+      hint,
+      text,
+      base,
+      lang,
+    });
 
-      const resp = await anthropic().messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 800,
-        system: mealVisionPrompt(lang),
-        messages: [
-          {
-            role: "user",
-            content: [...images, { type: "text", text: userText }],
-          },
-        ],
-      });
-
-      const body = resp.content
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
-        .join("\n");
-      const parsed = extractJson<any>(body);
-      return NextResponse.json({ analysis: parsed, mode: "photo" });
+    if (result.parseError || !result.analysis) {
+      throw new Error(result.parseError || "analyze_failed");
     }
 
-    // --- TEXT / REPEAT-WITH-MODIFIER MODE ---
-    let userMessage: string;
-    if (base) {
-      const macros = `calories ${base.calories ?? "?"} kcal, protein ${base.protein_g ?? "?"}g, fat ${base.fat_g ?? "?"}g, carbs ${base.carbs_g ?? "?"}g`;
-      const modifier = text || "same portion";
-      userMessage = `Previously logged meal: "${base.description ?? "(no description)"}" (${macros}).\nUser note for this new logging: "${modifier}".\nApply the modifier to the base meal and return the adjusted JSON.`;
-    } else {
-      userMessage = `Describe-only meal from user:\n"${text}"\n\nEstimate the macros and return the JSON.`;
-    }
-
-    const resp = await anthropic().messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 800,
-      system: mealTextPrompt(lang),
-      messages: [{ role: "user", content: userMessage }],
-    });
-    const body = resp.content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
-      .join("\n");
-    const parsed = extractJson<any>(body);
-    return NextResponse.json({
-      analysis: parsed,
-      mode: base ? "repeat" : "text",
-    });
+    // Preserve the original response shape exactly.
+    return NextResponse.json({ analysis: result.analysis, mode: result.mode });
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message ?? "analyze_failed" },

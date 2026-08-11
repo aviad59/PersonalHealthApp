@@ -75,9 +75,14 @@ export default function AdminUsersClient() {
           <h1 className="text-2xl font-bold">Users</h1>
           <p className="text-sm text-white/60 mt-1">Approve new sign-ins and manage access.</p>
         </div>
-        <Link href="/profile" className="text-[13px] text-accent-brand">
-          Done
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/admin/analyzer" className="text-[13px] text-accent-brand">
+            Analyzer Lab
+          </Link>
+          <Link href="/profile" className="text-[13px] text-accent-brand">
+            Done
+          </Link>
+        </div>
       </div>
 
       {err && (
