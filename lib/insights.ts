@@ -161,11 +161,42 @@ export async function generateDailyInsightForUser(
       date: d,
       calories: totals.calories,
       protein_g: totals.protein_g,
+      fat_g: totals.fat_g,
+      carbs_g: totals.carbs_g,
       meals_logged: totals.meals,
       workouts: ws.map((w) => w.title),
     });
   }
   context.last_7_days = recent;
+
+  // Computed rollups so the model can spot the user's strongest area and the
+  // single highest-leverage gap without re-deriving them from the daily array.
+  // Averaged over LOGGED days only (empty days are usually "not uploaded yet").
+  const loggedDays = recent.filter((r) => r.meals_logged > 0);
+  const avgOf = (sel: (r: any) => number) =>
+    loggedDays.length
+      ? Math.round(loggedDays.reduce((a, r) => a + sel(r), 0) / loggedDays.length)
+      : 0;
+  const proteinTarget = profile.goal_protein_g ?? 0;
+  context.week_summary = {
+    days_logged: loggedDays.length,
+    days_in_window: recent.length,
+    avg_calories: avgOf((r) => r.calories),
+    avg_protein_g: avgOf((r) => r.protein_g),
+    avg_fat_g: avgOf((r) => r.fat_g),
+    avg_carbs_g: avgOf((r) => r.carbs_g),
+    // Share of logged days that hit ≥90% of the protein target.
+    protein_hit_rate_pct:
+      loggedDays.length && proteinTarget
+        ? Math.round(
+            (loggedDays.filter((r) => r.protein_g >= proteinTarget * 0.9).length /
+              loggedDays.length) *
+              100,
+          )
+        : null,
+    workouts_this_week: cfg.hasWorkouts ? weekWorkouts.length : null,
+    weekly_workout_target: profile.weekly_workout_target ?? null,
+  };
   if (morning) {
     context.generated = "early-morning scheduled run, before the user has eaten or uploaded anything today";
   }

@@ -128,30 +128,40 @@ export async function GET(req: NextRequest) {
   const series = fullSeries.slice(-days);
 
   const logged = series.filter((d) => d.meals > 0);
-  const sum = series.reduce(
-    (acc, d) => {
-      acc.calories += d.calories;
-      acc.protein_g += d.protein_g;
-      acc.fat_g += d.fat_g;
-      acc.carbs_g += d.carbs_g;
-      return acc;
-    },
-    { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-  );
 
-  const div = Math.max(1, logged.length);
+  const sumDays = (days: DayBucket[]) =>
+    days.reduce(
+      (acc, d) => {
+        acc.calories += d.calories;
+        acc.protein_g += d.protein_g;
+        acc.fat_g += d.fat_g;
+        acc.carbs_g += d.carbs_g;
+        return acc;
+      },
+      { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+    );
+
+  // Averages exclude today: the current day is usually still being logged, so
+  // counting its partial totals would drag every average down. Only fall back
+  // to including today if it's the sole logged day in the window.
+  const completeLogged = series.filter((d) => d.date !== today && d.meals > 0);
+  const avgDays = completeLogged.length > 0 ? completeLogged : logged;
+  const avgSum = sumDays(avgDays);
+  const div = Math.max(1, avgDays.length);
   const averages = {
-    calories: Math.round(sum.calories / div),
-    protein_g: Math.round(sum.protein_g / div),
-    fat_g: Math.round(sum.fat_g / div),
-    carbs_g: Math.round(sum.carbs_g / div),
+    calories: Math.round(avgSum.calories / div),
+    protein_g: Math.round(avgSum.protein_g / div),
+    fat_g: Math.round(avgSum.fat_g / div),
+    carbs_g: Math.round(avgSum.carbs_g / div),
   };
 
+  // Totals are a running sum over the whole window — today included.
+  const totalSum = sumDays(series);
   const totals = {
-    calories: Math.round(sum.calories),
-    protein_g: Math.round(sum.protein_g),
-    fat_g: Math.round(sum.fat_g),
-    carbs_g: Math.round(sum.carbs_g),
+    calories: Math.round(totalSum.calories),
+    protein_g: Math.round(totalSum.protein_g),
+    fat_g: Math.round(totalSum.fat_g),
+    carbs_g: Math.round(totalSum.carbs_g),
   };
 
   let bestProtein: DayBucket | null = null;
@@ -184,8 +194,8 @@ export async function GET(req: NextRequest) {
   // Protein hit-rate judged against each day's OWN goal, so raising the
   // target today doesn't retroactively mark past hits as misses.
   let proteinHitRate: number | null = null;
-  if (logged.length > 0) {
-    const withGoal = logged.filter((d) => d.goal?.protein_g);
+  if (avgDays.length > 0) {
+    const withGoal = avgDays.filter((d) => d.goal?.protein_g);
     if (withGoal.length > 0) {
       const hits = withGoal.filter((d) => d.protein_g >= d.goal!.protein_g * 0.9).length;
       proteinHitRate = Math.round((hits / withGoal.length) * 100);

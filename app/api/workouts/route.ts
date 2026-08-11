@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  listWorkouts,
+  pullRecentWorkouts,
   summarizeWeek,
   workoutVolumeKg,
   workoutAvgRpe,
@@ -22,9 +22,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const STALE_AFTER_MS = 10 * 60 * 1000; // 10 min
-// Hevy API caps pageSize at 10. Pull this many pages on a refresh.
-const HEVY_PAGE_SIZE = 10;
-const REFRESH_PAGES = 5; // up to 50 most-recent workouts
+// Pages pulled from each end of Hevy's list on a refresh (pageSize is 10).
+const REFRESH_PAGES = 5; // ~50 most-recent workouts
 
 function topSet(sets: any[]) {
   let best: any = null;
@@ -42,15 +41,9 @@ async function refreshCache(userId: string): Promise<{
   error?: string;
 }> {
   try {
-    const collected: HevyWorkout[] = [];
-    for (let page = 1; page <= REFRESH_PAGES; page++) {
-      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
-      const ws = r.workouts ?? [];
-      collected.push(...ws);
-      // Stop early if we've reached the end of history
-      if (ws.length < HEVY_PAGE_SIZE) break;
-      if (r.page_count && page >= r.page_count) break;
-    }
+    // Order-independent pull so a just-finished workout is always captured,
+    // regardless of whether Hevy returns newest- or oldest-first.
+    const collected = await pullRecentWorkouts(REFRESH_PAGES, userId);
     const rows: CachedWorkout[] = collected.map((w) => {
       const t = Date.parse(w.start_time || "");
       return {

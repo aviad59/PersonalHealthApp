@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listWorkouts, workoutDurationMin, hasHevyKey, HevyWorkout } from "@/lib/hevy";
+import {
+  listWorkouts,
+  pullRecentWorkouts,
+  workoutDurationMin,
+  hasHevyKey,
+  HevyWorkout,
+} from "@/lib/hevy";
 import {
   CachedWorkout,
   upsertWorkouts,
@@ -26,15 +32,23 @@ export async function POST(req: NextRequest) {
     );
   }
   const full = new URL(req.url).searchParams.get("full") === "1";
-  const maxPages = full ? BACKFILL_PAGES : REFRESH_PAGES;
   try {
-    const collected: HevyWorkout[] = [];
-    for (let page = 1; page <= maxPages; page++) {
-      const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
-      const ws = r.workouts ?? [];
-      collected.push(...ws);
-      if (ws.length < HEVY_PAGE_SIZE) break;
-      if (r.page_count && page >= r.page_count) break;
+    let collected: HevyWorkout[];
+    if (full) {
+      // Backfill: page forward through the whole history until a partial page
+      // (the end of the list) or the safety cap.
+      collected = [];
+      for (let page = 1; page <= BACKFILL_PAGES; page++) {
+        const r = await listWorkouts({ page, pageSize: HEVY_PAGE_SIZE }, userId);
+        const ws = r.workouts ?? [];
+        collected.push(...ws);
+        if (ws.length < HEVY_PAGE_SIZE) break;
+        if (r.page_count && page >= r.page_count) break;
+      }
+    } else {
+      // Incremental: order-independent pull so the newest workout is always
+      // captured, whichever end of Hevy's list it sits on.
+      collected = await pullRecentWorkouts(REFRESH_PAGES, userId);
     }
     const rows: CachedWorkout[] = collected.map((w) => {
       const t = Date.parse(w.start_time || "");

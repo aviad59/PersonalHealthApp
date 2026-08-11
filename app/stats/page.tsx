@@ -326,15 +326,23 @@ function StatsSkeleton() {
 // Protein targets are a floor — hitting or exceeding it is good, and there's
 // no real downside to going over. Calories/fat/carbs are targets to stay
 // close to in either direction, so running well over isn't "good" either.
+// Color the "% of target" line by how close the average is to the goal.
+// Simple and intuitive: green = on target, amber = somewhat off, red = far off.
+// No neutral/grey middle band (that read as "disabled" and confused the scale).
 function pctColor(pct: number, metric: "calories" | "protein_g" | "fat_g" | "carbs_g") {
   if (metric === "protein_g") {
+    // Protein is one-sided: hitting or exceeding the target is good.
     if (pct >= 95) return "text-green-400";
-    if (pct < 90) return "text-amber-400";
-    return "text-white/50";
+    if (pct >= 80) return "text-amber-400";
+    return "text-red-400";
   }
-  if (pct >= 90 && pct <= 105) return "text-green-400";
-  if (pct < 85 || pct > 115) return "text-amber-400";
-  return "text-white/50";
+  // Calories, fat, carbs are two-sided (over OR under is "off"). Calories get a
+  // tighter tolerance than fat/carbs, which are allowed to swing more.
+  const off = Math.abs(pct - 100);
+  const tol = metric === "calories" ? { good: 10, ok: 20 } : { good: 15, ok: 30 };
+  if (off <= tol.good) return "text-green-400";
+  if (off <= tol.ok) return "text-amber-400";
+  return "text-red-400";
 }
 
 function Stat({

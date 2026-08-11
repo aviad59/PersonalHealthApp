@@ -95,6 +95,44 @@ export async function workoutCount(userId?: string): Promise<{ workout_count: nu
   return get<{ workout_count: number }>(`/workouts/count`, userId);
 }
 
+/**
+ * Pull the most-recent workouts, robust to Hevy's page ordering.
+ *
+ * Hevy's `/v1/workouts` list does NOT document whether page 1 holds the newest
+ * or the oldest workouts, so a fixed "pages 1..N" pull can silently miss a
+ * just-finished workout when the newest entries live on the last page. That's
+ * the classic "my latest workout won't sync even after a manual refresh" bug.
+ *
+ * To be safe regardless of order we fetch up to `maxPages` from BOTH ends of
+ * the list (page 1.. and page_count..) and dedupe by id — whichever end holds
+ * the newest workouts, they're captured. For a small history the two ranges
+ * overlap and we simply fetch every page once.
+ */
+export async function pullRecentWorkouts(
+  maxPages: number,
+  userId?: string,
+): Promise<HevyWorkout[]> {
+  const pageSize = 10;
+  const first = await listWorkouts({ page: 1, pageSize }, userId);
+  const pageCount = Math.max(1, first.page_count ?? 1);
+
+  const byId = new Map<string, HevyWorkout>();
+  for (const w of first.workouts ?? []) byId.set(w.id, w);
+
+  const pages = new Set<number>();
+  // Newest end if the list is newest-first: pages 2..maxPages.
+  for (let p = 2; p <= Math.min(maxPages, pageCount); p++) pages.add(p);
+  // Newest end if the list is oldest-first: the last maxPages pages.
+  for (let p = pageCount; p > Math.max(1, pageCount - maxPages); p--) pages.add(p);
+  pages.delete(1); // already fetched
+
+  for (const p of pages) {
+    const r = await listWorkouts({ page: p, pageSize }, userId);
+    for (const w of r.workouts ?? []) byId.set(w.id, w);
+  }
+  return [...byId.values()];
+}
+
 // --- Lightweight derivations ---
 
 /** Total volume (weight * reps summed across all working sets) of a workout. */
