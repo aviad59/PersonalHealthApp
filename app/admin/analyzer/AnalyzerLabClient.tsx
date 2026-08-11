@@ -5,24 +5,20 @@ import Link from "next/link";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import {
   MACRO_KEYS,
+  crossModelSpread,
   type MacroKey,
-  type FixtureScore,
-  type Aggregate,
-} from "@/lib/analyzer-score";
+  type RunAttempt,
+  type CellSummary,
+} from "@/lib/analyzer-variance";
 
-// ---- types mirroring the API responses ----
+// ---- types ----
 
 type FixtureListItem = {
   id: string;
   label: string;
   mode: "photo" | "text";
   photo_thumb_base64: string | null;
-  photo_mime: string | null;
   input_text: string | null;
-  expected_calories: number;
-  expected_protein_g: number;
-  expected_fat_g: number;
-  expected_carbs_g: number;
   notes: string | null;
   created_at: string;
 };
@@ -34,10 +30,12 @@ type Config = {
   models: { id: string; label: string }[];
 };
 
-type RunResponse = {
-  scores: FixtureScore[];
-  summary: Aggregate;
-  ran: { model: string; withinPct: number; count: number; customPrompt: boolean };
+type CellResult = {
+  fixtureId: string;
+  model: string;
+  label: string;
+  attempts: RunAttempt[];
+  summary: CellSummary;
 };
 
 const MACRO_LABEL: Record<MacroKey, string> = {
@@ -47,7 +45,19 @@ const MACRO_LABEL: Record<MacroKey, string> = {
   carbs_g: "C",
 };
 
-const emptyExpected = { calories: "", protein_g: "", fat_g: "", carbs_g: "" };
+// Concurrent (fixture, model) cells. Each cell itself fires `runs` calls, so
+// keep this low to avoid a burst of model requests.
+const CELL_CONCURRENCY = 2;
+
+const cellKey = (fixtureId: string, model: string) => `${fixtureId}::${model}`;
+
+// Jitter coloring: a coefficient of variation under ~8% is tight, under ~15%
+// is tolerable, above that the estimate is unstable.
+function cvClass(cv: number) {
+  if (cv <= 8) return "text-emerald-400";
+  if (cv <= 15) return "text-amber-400";
+  return "text-red-400";
+}
 
 export default function AnalyzerLabClient() {
   const [config, setConfig] = useState<Config | null>(null);
@@ -58,27 +68,20 @@ export default function AnalyzerLabClient() {
   const [mode, setMode] = useState<"photo" | "text">("photo");
   const [label, setLabel] = useState("");
   const [inputText, setInputText] = useState("");
-  const [expected, setExpected] = useState<Record<MacroKey, string>>({
-    ...emptyExpected,
-  });
   const [notes, setNotes] = useState("");
-  const [photo, setPhoto] = useState<{
-    base64: string;
-    thumb: string;
-    dataUri: string;
-    mime: string;
-  } | null>(null);
+  const [photo, setPhoto] = useState<{ base64: string; thumb: string; dataUri: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // --- run config ---
-  const [model, setModel] = useState<string>("");
+  const [models, setModels] = useState<Set<string>>(new Set());
+  const [runs, setRuns] = useState("5");
   const [systemVision, setSystemVision] = useState("");
   const [systemText, setSystemText] = useState("");
   const [promptTab, setPromptTab] = useState<"vision" | "text">("vision");
-  const [withinPct, setWithinPct] = useState("15");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<RunResponse | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [results, setResults] = useState<Map<string, CellResult>>(new Map());
 
   async function loadFixtures() {
     try {
@@ -97,9 +100,11 @@ export default function AnalyzerLabClient() {
         if (!r.ok) throw new Error("config load failed");
         const c: Config = await r.json();
         setConfig(c);
-        setModel(c.defaultModel);
         setSystemVision(c.visionPrompt);
         setSystemText(c.textPrompt);
+        // Default to comparing the fast model against the production default.
+        const fast = c.models[0]?.id;
+        setModels(new Set([c.defaultModel, fast].filter(Boolean) as string[]));
       } catch (e: any) {
         setErr(e?.message || "config load failed");
       }
@@ -116,12 +121,7 @@ export default function AnalyzerLabClient() {
         compressImageFile(file),
         compressImageThumb(file),
       ]);
-      setPhoto({
-        base64: full.base64,
-        thumb: thumb.dataUri,
-        dataUri: full.dataUri,
-        mime: "image/jpeg",
-      });
+      setPhoto({ base64: full.base64, thumb: thumb.dataUri, dataUri: full.dataUri });
     } catch {
       setErr("Could not read that image");
     }
@@ -130,16 +130,15 @@ export default function AnalyzerLabClient() {
   function resetForm() {
     setLabel("");
     setInputText("");
-    setExpected({ ...emptyExpected });
     setNotes("");
     setPhoto(null);
   }
 
   async function saveFixture() {
     setErr(null);
-    if (!label.trim()) return setErr("Give the fixture a label");
+    if (!label.trim()) return setErr("Give the test meal a label");
     if (mode === "photo" && !photo) return setErr("Add a photo (or switch to text mode)");
-    if (mode === "text" && !inputText.trim()) return setErr("Add a description for the text fixture");
+    if (mode === "text" && !inputText.trim()) return setErr("Add a description for the text meal");
     setSaving(true);
     try {
       const r = await fetch("/api/admin/analyzer/fixtures", {
@@ -150,12 +149,8 @@ export default function AnalyzerLabClient() {
           mode,
           photo_base64: mode === "photo" ? photo?.base64 : undefined,
           photo_thumb_base64: mode === "photo" ? photo?.thumb : undefined,
-          photo_mime: mode === "photo" ? photo?.mime : undefined,
+          photo_mime: mode === "photo" ? "image/jpeg" : undefined,
           input_text: inputText.trim() || undefined,
-          expected_calories: Number(expected.calories) || 0,
-          expected_protein_g: Number(expected.protein_g) || 0,
-          expected_fat_g: Number(expected.fat_g) || 0,
-          expected_carbs_g: Number(expected.carbs_g) || 0,
           notes: notes.trim() || undefined,
         }),
       });
@@ -170,13 +165,13 @@ export default function AnalyzerLabClient() {
   }
 
   async function deleteFixture(id: string) {
-    if (!confirm("Delete this fixture?")) return;
+    if (!confirm("Delete this test meal?")) return;
     try {
       const r = await fetch(`/api/admin/analyzer/fixtures?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
       if (!r.ok) throw new Error("delete failed");
-      setSelected((s) => {
+      setSelectedFixtures((s) => {
         const n = new Set(s);
         n.delete(id);
         return n;
@@ -187,47 +182,89 @@ export default function AnalyzerLabClient() {
     }
   }
 
-  function toggleSelected(id: string) {
-    setSelected((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+  function toggle(set: Set<string>, id: string, setter: (s: Set<string>) => void) {
+    const n = new Set(set);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setter(n);
   }
 
   async function run() {
     setErr(null);
-    setResult(null);
-    if (!fixtures?.length) return setErr("Add at least one fixture first");
-    setRunning(true);
-    try {
-      const ids = selected.size ? Array.from(selected) : undefined;
-      const r = await fetch("/api/admin/analyzer/run", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model,
-          systemVision: config && systemVision !== config.visionPrompt ? systemVision : undefined,
-          systemText: config && systemText !== config.textPrompt ? systemText : undefined,
-          fixtureIds: ids,
-          withinPct: Number(withinPct) || 15,
-        }),
-      });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "run failed");
-      setResult(await r.json());
-    } catch (e: any) {
-      setErr(e?.message || "run failed");
-    } finally {
-      setRunning(false);
+    if (!fixtures?.length) return setErr("Add at least one test meal first");
+    if (!models.size) return setErr("Pick at least one model");
+
+    const targetFixtures = selectedFixtures.size
+      ? fixtures.filter((f) => selectedFixtures.has(f.id))
+      : fixtures;
+    const modelList = Array.from(models);
+    const nRuns = Math.max(1, Math.min(8, Number(runs) || 5));
+
+    // Build the full grid of (fixture, model) cells.
+    const cells: { fixtureId: string; model: string }[] = [];
+    for (const f of targetFixtures) {
+      for (const m of modelList) cells.push({ fixtureId: f.id, model: m });
     }
+
+    setResults(new Map());
+    setRunning(true);
+    setProgress({ done: 0, total: cells.length });
+
+    let done = 0;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < cells.length) {
+        const cell = cells[cursor++];
+        try {
+          const r = await fetch("/api/admin/analyzer/run", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              fixtureId: cell.fixtureId,
+              model: cell.model,
+              runs: nRuns,
+              systemVision:
+                config && systemVision !== config.visionPrompt ? systemVision : undefined,
+              systemText:
+                config && systemText !== config.textPrompt ? systemText : undefined,
+            }),
+          });
+          if (r.ok) {
+            const cr: CellResult = await r.json();
+            setResults((prev) => {
+              const n = new Map(prev);
+              n.set(cellKey(cell.fixtureId, cell.model), cr);
+              return n;
+            });
+          }
+        } catch {
+          /* leave the cell missing; surfaced as a gap in the grid */
+        } finally {
+          done++;
+          setProgress({ done, total: cells.length });
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(CELL_CONCURRENCY, cells.length) }, () => worker()),
+    );
+    setRunning(false);
   }
 
   const promptEdited = useMemo(
-    () =>
-      !!config &&
-      (systemVision !== config.visionPrompt || systemText !== config.textPrompt),
+    () => !!config && (systemVision !== config.visionPrompt || systemText !== config.textPrompt),
     [config, systemVision, systemText],
   );
+
+  const modelLabel = (id: string) => config?.models.find((m) => m.id === id)?.label || id;
+
+  // Fixtures that have at least one result, in list order.
+  const resultFixtures = useMemo(() => {
+    if (!fixtures) return [];
+    return fixtures.filter((f) =>
+      Array.from(models).some((m) => results.has(cellKey(f.id, m))),
+    );
+  }, [fixtures, models, results]);
 
   return (
     <div className="p-4 space-y-6 max-w-5xl mx-auto">
@@ -235,7 +272,7 @@ export default function AnalyzerLabClient() {
         <div>
           <h1 className="text-xl font-bold">Analyzer Lab</h1>
           <p className="text-xs text-white/50">
-            Admin-only eval harness for the meal analyzer.
+            Consistency checker — run the same meal repeatedly and see how much the estimate jitters.
           </p>
         </div>
         <Link href="/admin" className="text-sm text-accent-brand">
@@ -244,14 +281,15 @@ export default function AnalyzerLabClient() {
       </header>
 
       {err && (
-        <div className="rounded-lg bg-red-500/15 text-red-300 text-sm px-3 py-2">
-          {err}
-        </div>
+        <div className="rounded-lg bg-red-500/15 text-red-300 text-sm px-3 py-2">{err}</div>
       )}
 
-      {/* ---------- ADD FIXTURE ---------- */}
+      {/* ---------- ADD TEST MEAL ---------- */}
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold">Add test meal (ground truth)</h2>
+        <h2 className="font-semibold">Add a test meal</h2>
+        <p className="text-[11px] text-white/45 -mt-1">
+          No macros to enter — just a photo or description. We measure how stable the AI’s answers are.
+        </p>
         <div className="flex gap-2 text-sm">
           {(["photo", "text"] as const).map((m) => (
             <button
@@ -273,11 +311,11 @@ export default function AnalyzerLabClient() {
           className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
         />
 
-        {mode === "photo" ? (
+        {mode === "photo" && (
           <div className="flex items-center gap-3">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={photo.dataUri} alt="fixture" className="w-20 h-20 rounded-xl object-cover border border-border" />
+              <img src={photo.dataUri} alt="test meal" className="w-20 h-20 rounded-xl object-cover border border-border" />
             ) : (
               <div className="w-20 h-20 rounded-xl bg-bg-elev border border-dashed border-border" />
             )}
@@ -286,7 +324,7 @@ export default function AnalyzerLabClient() {
               <input type="file" accept="image/*" onChange={onPickPhoto} className="hidden" />
             </label>
           </div>
-        ) : null}
+        )}
 
         <textarea
           value={inputText}
@@ -300,23 +338,6 @@ export default function AnalyzerLabClient() {
           className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm resize-none"
         />
 
-        <div className="grid grid-cols-4 gap-2">
-          {MACRO_KEYS.map((k) => (
-            <label key={k} className="block">
-              <span className="block text-[10px] uppercase tracking-wide text-white/40 mb-0.5">
-                {MACRO_LABEL[k]}
-              </span>
-              <input
-                type="number"
-                value={expected[k]}
-                onChange={(e) => setExpected((x) => ({ ...x, [k]: e.target.value }))}
-                placeholder="0"
-                className="w-full rounded-lg bg-bg-elev border border-border px-2 py-1.5 text-sm text-center"
-              />
-            </label>
-          ))}
-        </div>
-
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -329,50 +350,47 @@ export default function AnalyzerLabClient() {
           disabled={saving}
           className="rounded-full bg-accent-brand px-5 py-2 text-sm font-semibold disabled:opacity-40"
         >
-          {saving ? "Saving…" : "Add fixture"}
+          {saving ? "Saving…" : "Add test meal"}
         </button>
       </section>
 
       {/* ---------- FIXTURE LIST ---------- */}
       <section className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">
-            Fixtures {fixtures ? `(${fixtures.length})` : ""}
-          </h2>
+          <h2 className="font-semibold">Test meals {fixtures ? `(${fixtures.length})` : ""}</h2>
           {fixtures && fixtures.length > 0 && (
             <button
               onClick={() =>
-                setSelected((s) =>
+                setSelectedFixtures((s) =>
                   s.size === fixtures.length ? new Set() : new Set(fixtures.map((f) => f.id)),
                 )
               }
               className="text-xs text-accent-brand"
             >
-              {selected.size === fixtures.length ? "Clear selection" : "Select all"}
+              {selectedFixtures.size === fixtures.length ? "Clear selection" : "Select all"}
             </button>
           )}
         </div>
+        <p className="text-[11px] text-white/40 -mt-1">
+          Leave all unchecked to run every meal, or check specific ones.
+        </p>
         {!fixtures ? (
           <p className="text-sm text-white/40">Loading…</p>
         ) : fixtures.length === 0 ? (
-          <p className="text-sm text-white/40">No fixtures yet. Add one above.</p>
+          <p className="text-sm text-white/40">No test meals yet. Add one above.</p>
         ) : (
           <ul className="space-y-2">
             {fixtures.map((f) => (
               <li key={f.id} className="flex items-center gap-3 rounded-lg bg-bg-elev p-2">
                 <input
                   type="checkbox"
-                  checked={selected.has(f.id)}
-                  onChange={() => toggleSelected(f.id)}
+                  checked={selectedFixtures.has(f.id)}
+                  onChange={() => toggle(selectedFixtures, f.id, setSelectedFixtures)}
                   className="shrink-0"
                 />
                 {f.photo_thumb_base64 ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={f.photo_thumb_base64}
-                    alt=""
-                    className="w-12 h-12 rounded-lg object-cover shrink-0"
-                  />
+                  <img src={f.photo_thumb_base64} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-lg bg-white/5 shrink-0 flex items-center justify-center text-[10px] text-white/40">
                     TEXT
@@ -380,14 +398,11 @@ export default function AnalyzerLabClient() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{f.label}</div>
-                  <div className="text-[11px] text-white/45">
-                    {f.expected_calories} kcal · P{f.expected_protein_g} · F{f.expected_fat_g} · C{f.expected_carbs_g}
-                  </div>
+                  {f.input_text && (
+                    <div className="text-[11px] text-white/45 truncate">{f.input_text}</div>
+                  )}
                 </div>
-                <button
-                  onClick={() => deleteFixture(f.id)}
-                  className="text-xs text-red-400/80 shrink-0"
-                >
+                <button onClick={() => deleteFixture(f.id)} className="text-xs text-red-400/80 shrink-0">
                   Delete
                 </button>
               </li>
@@ -399,28 +414,32 @@ export default function AnalyzerLabClient() {
       {/* ---------- RUN CONFIG ---------- */}
       <section className="card p-4 space-y-3">
         <h2 className="font-semibold">Run</h2>
-        <div className="flex flex-wrap gap-3 items-end">
-          <label className="block">
-            <span className="block text-[11px] text-white/50 mb-1">Model</span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
-            >
+        <div className="flex flex-wrap gap-4 items-end">
+          <div>
+            <span className="block text-[11px] text-white/50 mb-1">Models to compare</span>
+            <div className="flex flex-wrap gap-2">
               {config?.models.map((m) => (
-                <option key={m.id} value={m.id}>
+                <button
+                  key={m.id}
+                  onClick={() => toggle(models, m.id, setModels)}
+                  className={`px-3 py-1.5 rounded-full text-xs ${
+                    models.has(m.id) ? "bg-accent-brand text-white" : "bg-bg-elev text-white/55"
+                  }`}
+                >
                   {m.label}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           <label className="block">
-            <span className="block text-[11px] text-white/50 mb-1">Within %</span>
+            <span className="block text-[11px] text-white/50 mb-1">Repeats each</span>
             <input
               type="number"
-              value={withinPct}
-              onChange={(e) => setWithinPct(e.target.value)}
-              className="w-24 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
+              min={1}
+              max={8}
+              value={runs}
+              onChange={(e) => setRuns(e.target.value)}
+              className="w-20 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
             />
           </label>
           <button
@@ -428,11 +447,9 @@ export default function AnalyzerLabClient() {
             disabled={running}
             className="rounded-full bg-accent-brand px-6 py-2.5 text-sm font-semibold disabled:opacity-40"
           >
-            {running
-              ? "Running…"
-              : selected.size
-                ? `Run ${selected.size} selected`
-                : "Run all"}
+            {running && progress
+              ? `Running… ${progress.done}/${progress.total}`
+              : "Run consistency check"}
           </button>
         </div>
 
@@ -450,9 +467,7 @@ export default function AnalyzerLabClient() {
                 {tabKey === "vision" ? "Vision prompt" : "Text prompt"}
               </button>
             ))}
-            {promptEdited && (
-              <span className="text-[10px] text-amber-400">edited</span>
-            )}
+            {promptEdited && <span className="text-[10px] text-amber-400">edited</span>}
             {promptEdited && config && (
               <button
                 onClick={() => {
@@ -468,9 +483,7 @@ export default function AnalyzerLabClient() {
           <textarea
             value={promptTab === "vision" ? systemVision : systemText}
             onChange={(e) =>
-              promptTab === "vision"
-                ? setSystemVision(e.target.value)
-                : setSystemText(e.target.value)
+              promptTab === "vision" ? setSystemVision(e.target.value) : setSystemText(e.target.value)
             }
             rows={8}
             spellCheck={false}
@@ -480,95 +493,84 @@ export default function AnalyzerLabClient() {
       </section>
 
       {/* ---------- RESULTS ---------- */}
-      {result && <Results result={result} />}
-    </div>
-  );
-}
+      {resultFixtures.length > 0 && (
+        <section className="card p-4 space-y-5">
+          <h2 className="font-semibold">Consistency report</h2>
+          <p className="text-[11px] text-white/45 -mt-2">
+            Each cell shows the mean estimate and its jitter (CV%). Green ≤8% (tight),
+            amber ≤15%, red above. Compare models down each column; big gaps between
+            models mean they disagree.
+          </p>
 
-function pct(n: number) {
-  return `${Math.round(n * 100)}%`;
-}
-
-function Results({ result }: { result: RunResponse }) {
-  const { scores, summary, ran } = result;
-  return (
-    <section className="card p-4 space-y-4">
-      <h2 className="font-semibold">
-        Results · {ran.model}
-        {ran.customPrompt && (
-          <span className="text-amber-400 text-xs font-normal"> · custom prompt</span>
-        )}
-      </h2>
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-        <div className="rounded-lg bg-bg-elev p-2">
-          <div className="text-lg font-bold">{pct(summary.passRate)}</div>
-          <div className="text-[10px] text-white/45">all-macros pass</div>
-        </div>
-        {MACRO_KEYS.map((k) => (
-          <div key={k} className="rounded-lg bg-bg-elev p-2">
-            <div className="text-lg font-bold">{pct(summary.perMacro[k].withinRate)}</div>
-            <div className="text-[10px] text-white/45">
-              {MACRO_LABEL[k]} within · {Math.round(summary.perMacro[k].mape)}% err
-            </div>
-          </div>
-        ))}
-      </div>
-      {summary.errored > 0 && (
-        <p className="text-xs text-amber-400">
-          {summary.errored} fixture(s) failed to analyze.
-        </p>
-      )}
-
-      {/* Per-fixture table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-[11px]">
-          <thead className="text-white/40">
-            <tr className="text-left">
-              <th className="py-1 pr-2">Fixture</th>
-              {MACRO_KEYS.map((k) => (
-                <th key={k} className="py-1 px-2 text-center">
-                  {MACRO_LABEL[k]}
-                </th>
-              ))}
-              <th className="py-1 px-2 text-center">conf</th>
-              <th className="py-1 px-2 text-center">ms</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scores.map((s) => (
-              <tr key={s.fixtureId} className="border-t border-border/50">
-                <td className="py-1.5 pr-2 max-w-[10rem]">
-                  <div className="truncate font-medium">{s.label}</div>
-                  {s.error && <div className="text-red-400 text-[10px]">{s.error}</div>}
-                </td>
-                {MACRO_KEYS.map((k) => {
-                  const cell = s.macros.find((m) => m.key === k);
-                  if (!cell) return <td key={k} className="text-center text-white/25">—</td>;
-                  return (
-                    <td
-                      key={k}
-                      className={`py-1.5 px-2 text-center ${
-                        cell.within ? "text-emerald-400" : "text-red-400"
+          {resultFixtures.map((f) => {
+            const cells = Array.from(models)
+              .map((m) => results.get(cellKey(f.id, m)))
+              .filter((c): c is CellResult => !!c);
+            const spread = crossModelSpread(cells.map((c) => c.summary.perMacro.calories.mean));
+            return (
+              <div key={f.id} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  {f.photo_thumb_base64 && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={f.photo_thumb_base64} alt="" className="w-8 h-8 rounded object-cover" />
+                  )}
+                  <span className="text-sm font-medium">{f.label}</span>
+                  {cells.length > 1 && (
+                    <span
+                      className={`text-[10px] ml-auto ${
+                        spread.spreadPct <= 15 ? "text-emerald-400" : "text-amber-400"
                       }`}
                     >
-                      <div className="nums">{Math.round(cell.predicted)}</div>
-                      <div className="text-white/35 text-[9px]">
-                        /{Math.round(cell.expected)} · {Math.round(cell.pctError)}%
-                      </div>
-                    </td>
-                  );
-                })}
-                <td className="py-1.5 px-2 text-center text-white/50">{s.confidence ?? "—"}</td>
-                <td className="py-1.5 px-2 text-center text-white/40">
-                  {s.latencyMs ? Math.round(s.latencyMs) : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+                      model agreement: {Math.round(spread.spreadPct)}% spread on kcal
+                    </span>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead className="text-white/40">
+                      <tr className="text-left">
+                        <th className="py-1 pr-2">Model</th>
+                        {MACRO_KEYS.map((k) => (
+                          <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
+                        ))}
+                        <th className="py-1 px-2 text-center">jitter</th>
+                        <th className="py-1 px-2 text-center">ms</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cells.map((c) => (
+                        <tr key={c.model} className="border-t border-border/50">
+                          <td className="py-1.5 pr-2 font-medium">
+                            {modelLabel(c.model)}
+                            {c.summary.failedRuns > 0 && (
+                              <span className="text-red-400 text-[9px]"> · {c.summary.failedRuns} failed</span>
+                            )}
+                          </td>
+                          {MACRO_KEYS.map((k) => {
+                            const s = c.summary.perMacro[k];
+                            return (
+                              <td key={k} className="py-1.5 px-2 text-center">
+                                <div className="nums">{Math.round(s.mean)}</div>
+                                <div className={`text-[9px] ${cvClass(s.cv)}`}>±{Math.round(s.cv)}%</div>
+                              </td>
+                            );
+                          })}
+                          <td className={`py-1.5 px-2 text-center font-semibold ${cvClass(c.summary.avgCv)}`}>
+                            {Math.round(c.summary.avgCv)}%
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-white/40">
+                            {Math.round(c.summary.meanLatencyMs)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+    </div>
   );
 }
