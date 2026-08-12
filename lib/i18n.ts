@@ -181,7 +181,7 @@ const en = {
   stats_no_meals: "No meals logged",
   stats_of_target: "of target",
   stats_per_day: "per day",
-  stats_trend_avg: "7-day avg",
+  stats_trend_avg: "range avg",
   // Profile
   profile_title: "Profile",
   profile_no_profile: "You haven't set up your profile yet.",
@@ -477,7 +477,7 @@ const he: typeof en = {
   stats_no_meals: "לא תועדו ארוחות",
   stats_of_target: "מהיעד",
   stats_per_day: "ליום",
-  stats_trend_avg: "ממוצע 7 ימים",
+  stats_trend_avg: "ממוצע טווח",
   // Profile
   profile_title: "פרופיל",
   profile_no_profile: "עדיין לא הגדרת פרופיל.",

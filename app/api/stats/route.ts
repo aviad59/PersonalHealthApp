@@ -52,20 +52,16 @@ function goalForDate(
   return current;
 }
 
-// Trailing window (in days, inclusive of the day itself) used for the
-// rolling-average trend line shown alongside the bar chart.
-const TREND_WINDOW = 7;
-
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const daysParam = parseInt(url.searchParams.get("days") || "14", 10);
   const days = Math.max(1, Math.min(60, Number.isFinite(daysParam) ? daysParam : 14));
 
-  // Fetch extra lookback days so the trend line has a full window for every
-  // visible day, including the leftmost one.
-  const lookbackDays = days + (TREND_WINDOW - 1);
+  // The visible window IS the analysis window now — the average line is a flat
+  // reference over the selected range, so no extra lookback is needed.
+  const lookbackDays = days;
   const since = daysAgoStr(days - 1);
-  const lookbackSince = daysAgoStr(lookbackDays - 1);
+  const lookbackSince = since;
   const today = todayStr();
 
   const userId = await getCurrentUserIdOrDefault();
@@ -102,29 +98,6 @@ export async function GET(req: NextRequest) {
 
   const fullSeries = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-  // Trailing rolling average for each day, over up to TREND_WINDOW days
-  // (including days before `since`, used only for this calculation).
-  for (let i = 0; i < fullSeries.length; i++) {
-    const start = Math.max(0, i - (TREND_WINDOW - 1));
-    const slice = fullSeries.slice(start, i + 1);
-    const sum = slice.reduce(
-      (acc, d) => {
-        acc.calories += d.calories;
-        acc.protein_g += d.protein_g;
-        acc.fat_g += d.fat_g;
-        acc.carbs_g += d.carbs_g;
-        return acc;
-      },
-      { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-    );
-    fullSeries[i].trend = {
-      calories: Math.round(sum.calories / slice.length),
-      protein_g: Math.round(sum.protein_g / slice.length),
-      fat_g: Math.round(sum.fat_g / slice.length),
-      carbs_g: Math.round(sum.carbs_g / slice.length),
-    };
-  }
-
   const series = fullSeries.slice(-days);
 
   const logged = series.filter((d) => d.meals > 0);
@@ -154,6 +127,15 @@ export async function GET(req: NextRequest) {
     fat_g: Math.round(avgSum.fat_g / div),
     carbs_g: Math.round(avgSum.carbs_g / div),
   };
+
+  // The chart's average line reflects the SELECTED range: a flat reference at
+  // the range's average (the same value as the summary card), rather than a
+  // fixed 7-day rolling average. Every visible day carries that reference so
+  // the polyline is a straight line and the tapped-day readout compares the
+  // day against the range average.
+  for (const d of series) {
+    d.trend = { ...averages };
+  }
 
   // Totals are a running sum over the whole window — today included.
   const totalSum = sumDays(series);
