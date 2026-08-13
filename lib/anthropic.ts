@@ -38,6 +38,86 @@ export function imageBlockFromDataUri(dataUri: string | null | undefined) {
   return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType as any, data: base64 } };
 }
 
+/**
+ * Best-effort recovery of TRUNCATED JSON — the shape you get when a reply hits
+ * max_tokens mid-array and the closing brackets never arrive.
+ *
+ * Scans once (string/escape aware) collecting positions where a value just
+ * completed, then walks those candidate cut points backwards: trim there, drop
+ * any dangling comma, close the still-open brackets, and try to parse. The
+ * first prefix that parses wins, so we keep every complete element and discard
+ * only the half-written tail. Returns null if nothing salvageable.
+ */
+function repairTruncatedJson(text: string): unknown | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.search(/[{[]/);
+  if (start === -1) return null;
+  const s = candidate.slice(start);
+
+  const stack: string[] = [];
+  const cuts: { index: number; stack: string[] }[] = [];
+  let inStr = false;
+  let esc = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') {
+        inStr = false;
+        cuts.push({ index: i + 1, stack: [...stack] });
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+    } else if (ch === "{" || ch === "[") {
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      stack.pop();
+      cuts.push({ index: i + 1, stack: [...stack] });
+    } else if (/[0-9a-zA-Z.+-]/.test(ch)) {
+      // End of a scalar (number / true / false / null) when a delimiter follows.
+      const next = s[i + 1];
+      if (next === undefined || /[\s,\]}]/.test(next)) {
+        cuts.push({ index: i + 1, stack: [...stack] });
+      }
+    }
+  }
+
+  // Newest cut points first; cap the attempts so a huge blob can't spin.
+  const limit = Math.max(0, cuts.length - 500);
+  for (let k = cuts.length - 1; k >= limit; k--) {
+    const { index, stack: open } = cuts[k];
+    if (open.length === 0) continue; // balanced already — extractJson would have won
+    let out = s.slice(0, index).replace(/,\s*$/, "");
+    for (let j = open.length - 1; j >= 0; j--) out += open[j] === "{" ? "}" : "]";
+    try {
+      return JSON.parse(out);
+    } catch {
+      // keep walking back
+    }
+  }
+  return null;
+}
+
+/**
+ * Like extractJson, but falls back to salvaging a truncated reply instead of
+ * throwing. Use for calls whose output length scales with user data (e.g. one
+ * array entry per meal), where a partial result beats a hard failure.
+ */
+export function extractJsonLoose<T = unknown>(text: string): { value: T; truncated: boolean } {
+  try {
+    return { value: extractJson<T>(text), truncated: false };
+  } catch (err) {
+    const repaired = repairTruncatedJson(text);
+    if (repaired !== null) return { value: repaired as T, truncated: true };
+    throw err;
+  }
+}
+
 /** Pull a top-level JSON object out of Claude's text reply. */
 export function extractJson<T = unknown>(text: string): T {
   // Try fenced block first
