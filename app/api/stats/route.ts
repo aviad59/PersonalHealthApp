@@ -57,11 +57,17 @@ export async function GET(req: NextRequest) {
   const daysParam = parseInt(url.searchParams.get("days") || "14", 10);
   const days = Math.max(1, Math.min(60, Number.isFinite(daysParam) ? daysParam : 14));
 
-  // The visible window IS the analysis window now — the average line is a flat
-  // reference over the selected range, so no extra lookback is needed.
-  const lookbackDays = days;
+  // The rolling-average line's window scales with the selected range, so the
+  // line reflects the period you're looking at instead of a fixed 7 days:
+  // 7d → 4-day, 14d → 7-day, 30d → 15-day. It stays a moving line (that's the
+  // point of a trend) rather than a flat average.
+  const trendWindow = Math.max(2, Math.round(days / 2));
+
+  // Fetch extra lookback days so the trend line has a full window for every
+  // visible day, including the leftmost one.
+  const lookbackDays = days + (trendWindow - 1);
   const since = daysAgoStr(days - 1);
-  const lookbackSince = since;
+  const lookbackSince = daysAgoStr(lookbackDays - 1);
   const today = todayStr();
 
   const userId = await getCurrentUserIdOrDefault();
@@ -98,6 +104,29 @@ export async function GET(req: NextRequest) {
 
   const fullSeries = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 
+  // Trailing rolling average for each day over `trendWindow` days (including
+  // days before `since`, used only for this calculation).
+  for (let i = 0; i < fullSeries.length; i++) {
+    const start = Math.max(0, i - (trendWindow - 1));
+    const slice = fullSeries.slice(start, i + 1);
+    const sum = slice.reduce(
+      (acc, d) => {
+        acc.calories += d.calories;
+        acc.protein_g += d.protein_g;
+        acc.fat_g += d.fat_g;
+        acc.carbs_g += d.carbs_g;
+        return acc;
+      },
+      { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+    );
+    fullSeries[i].trend = {
+      calories: Math.round(sum.calories / slice.length),
+      protein_g: Math.round(sum.protein_g / slice.length),
+      fat_g: Math.round(sum.fat_g / slice.length),
+      carbs_g: Math.round(sum.carbs_g / slice.length),
+    };
+  }
+
   const series = fullSeries.slice(-days);
 
   const logged = series.filter((d) => d.meals > 0);
@@ -127,15 +156,6 @@ export async function GET(req: NextRequest) {
     fat_g: Math.round(avgSum.fat_g / div),
     carbs_g: Math.round(avgSum.carbs_g / div),
   };
-
-  // The chart's average line reflects the SELECTED range: a flat reference at
-  // the range's average (the same value as the summary card), rather than a
-  // fixed 7-day rolling average. Every visible day carries that reference so
-  // the polyline is a straight line and the tapped-day readout compares the
-  // day against the range average.
-  for (const d of series) {
-    d.trend = { ...averages };
-  }
 
   // Totals are a running sum over the whole window — today included.
   const totalSum = sumDays(series);
@@ -188,6 +208,7 @@ export async function GET(req: NextRequest) {
     today,
     since,
     days,
+    trendWindow,
     series,
     averages,
     totals,

@@ -17,6 +17,8 @@ type Stats = {
   today: string;
   since: string;
   days: number;
+  /** Window (in days) behind the rolling-average line; scales with `days`. */
+  trendWindow?: number;
   series: DayBucket[];
   averages: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
   totals: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
@@ -75,7 +77,7 @@ export default function StatsPage() {
     // yesterday's series (with yesterday's "today" bar still painted in
     // the rightmost slot) for the duration of the refresh round-trip.
     const today = localToday();
-    const cached = lsGet<Stats>(`stats-v2-${days}`);
+    const cached = lsGet<Stats>(`stats-v3-${days}`);
     const cachedIsToday = cached && cached.today === today;
     if (cachedIsToday) {
       setData(cached);
@@ -91,7 +93,7 @@ export default function StatsPage() {
         if (!r.ok) throw new Error(j.error || "stats failed");
         if (!dead) {
           setData(j);
-          lsSet(`stats-v2-${days}`, j);
+          lsSet(`stats-v3-${days}`, j);
         }
       } catch (e: any) {
         if (!dead && !cachedIsToday) setErr(e.message);
@@ -235,6 +237,7 @@ export default function StatsPage() {
               target={target ?? null}
               unit={metricUnit[metric]}
               lang={lang}
+              trendWindow={data.trendWindow ?? Math.max(2, Math.round(data.days / 2))}
             />
           </section>
 
@@ -384,6 +387,7 @@ function BarChart({
   target,
   unit,
   lang,
+  trendWindow,
 }: {
   series: DayBucket[];
   metric: "calories" | "protein_g" | "fat_g" | "carbs_g";
@@ -391,9 +395,12 @@ function BarChart({
   target: number | null;
   unit: string;
   lang: Lang;
+  trendWindow: number;
 }) {
   // Render up to ~30 bars. Container height ~120px.
   const HEIGHT = 120;
+  // "{n}-day avg" — the window scales with the selected range.
+  const trendLabel = t(lang, "stats_trend_avg").replace("{n}", String(trendWindow));
   const [selected, setSelected] = useState<string | null>(null);
 
   // Clear the selection when the date range changes (new series).
@@ -411,7 +418,7 @@ function BarChart({
           <span className="text-[11px] text-white bg-bg-elev border border-accent-brand/40 rounded-full px-2.5 py-0.5">
             {formatDay(selectedDay.date, lang)} · {selectedDay[metric]} {unit}
             {selectedDay.meals === 0 ? ` · ${t(lang, "stats_no_meals")}` : ""}
-            {selectedDay.trend ? ` · ${t(lang, "stats_trend_avg")} ${selectedDay.trend[metric]}` : ""}
+            {selectedDay.trend ? ` · ${trendLabel} ${selectedDay.trend[metric]}` : ""}
           </span>
         )}
       </div>
@@ -517,7 +524,7 @@ function BarChart({
       {/* Legend for the trend line */}
       <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[9px] text-white/40">
         <span className="inline-block w-3 h-[2px] rounded-full bg-[#f5a623]" />
-        {t(lang, "stats_trend_avg")}
+        {trendLabel}
       </div>
     </div>
   );
