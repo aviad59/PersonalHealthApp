@@ -88,6 +88,90 @@ export function summarizeCell(attempts: RunAttempt[]): CellSummary {
   };
 }
 
+// ---------------------------------------------------------------
+// Accuracy vs ground truth (fixtures imported from Nutrition5k)
+// ---------------------------------------------------------------
+
+// "Within 15%" matches the tolerance the coach prompts already treat as
+// on-target, so the harness and the app judge closeness the same way.
+export const DEFAULT_WITHIN_PCT = 15;
+
+export type MacroAccuracy = {
+  predicted: number;
+  expected: number;
+  /** Signed error: positive = the model over-estimated. */
+  error: number;
+  /** Absolute percent error vs the expected value. */
+  pctError: number;
+  within: boolean;
+};
+
+export type CellAccuracy = {
+  perMacro: Record<MacroKey, MacroAccuracy>;
+  /** Mean absolute percent error across the four macros. */
+  mape: number;
+  /** True when every macro lands inside the tolerance. */
+  passed: boolean;
+};
+
+/**
+ * Score a cell's MEAN prediction (averaged over the repeats) against the
+ * fixture's known macros. Using the mean rather than a single run separates
+ * accuracy from run-to-run jitter, which `summarizeCell` reports separately.
+ */
+export function scoreAgainstTruth(
+  summary: CellSummary,
+  expected: Macros,
+  withinPct: number = DEFAULT_WITHIN_PCT,
+): CellAccuracy {
+  const perMacro = {} as Record<MacroKey, MacroAccuracy>;
+  for (const key of MACRO_KEYS) {
+    const p = summary.perMacro[key].mean;
+    const e = Number(expected[key]) || 0;
+    const pctError = e === 0 ? (p === 0 ? 0 : 100) : (Math.abs(p - e) / e) * 100;
+    perMacro[key] = {
+      predicted: p,
+      expected: e,
+      error: p - e,
+      pctError,
+      within: pctError <= withinPct,
+    };
+  }
+  const mape =
+    MACRO_KEYS.reduce((a, k) => a + perMacro[k].pctError, 0) / MACRO_KEYS.length;
+  return { perMacro, mape, passed: MACRO_KEYS.every((k) => perMacro[k].within) };
+}
+
+/** Roll several scored cells (one model across many dishes) into headline numbers. */
+export function aggregateAccuracy(cells: CellAccuracy[]): {
+  n: number;
+  passRate: number;
+  mape: number;
+  perMacro: Record<MacroKey, { withinRate: number; mape: number; bias: number }>;
+} {
+  const n = cells.length;
+  const perMacro = {} as Record<
+    MacroKey,
+    { withinRate: number; mape: number; bias: number }
+  >;
+  for (const key of MACRO_KEYS) {
+    const cs = cells.map((c) => c.perMacro[key]);
+    const d = cs.length || 1;
+    perMacro[key] = {
+      withinRate: cs.filter((c) => c.within).length / d,
+      mape: cs.reduce((a, c) => a + c.pctError, 0) / d,
+      // Mean signed error — reveals a systematic over/under-estimate.
+      bias: cs.reduce((a, c) => a + c.error, 0) / d,
+    };
+  }
+  return {
+    n,
+    passRate: n ? cells.filter((c) => c.passed).length / n : 0,
+    mape: n ? cells.reduce((a, c) => a + c.mape, 0) / n : 0,
+    perMacro,
+  };
+}
+
 /**
  * Cross-model agreement for one fixture: how far apart are the different
  * models' mean calorie estimates, relative to their average? High spread means

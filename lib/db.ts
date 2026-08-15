@@ -153,6 +153,12 @@ const COLUMN_ADDS: { sql: string }[] = [
   // Per-user scoping for the Hevy workout cache. Existing rows default to
   // 'idan' since he was the only user with workouts pre-migration.
   { sql: "ALTER TABLE workouts_cache ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
+  // Analyzer fixtures imported from a public dataset (Nutrition5k) reference
+  // their image by URL instead of embedding base64 — the ground-truth set is
+  // large and the bucket is public, so storing bytes per fixture would bloat
+  // the DB for no benefit. Fetched server-side at run time.
+  { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN source_url TEXT" },
+  { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN source TEXT" },
 ];
 
 // Indexes that reference columns added by COLUMN_ADDS — they MUST run after
@@ -322,6 +328,8 @@ const PER_USER_TABLES = `
     expected_carbs_g REAL NOT NULL,
     notes TEXT,
     created_by TEXT,
+    source TEXT,                              -- e.g. 'nutrition5k' | null (manual)
+    source_url TEXT,                          -- public image URL, fetched at run time
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
@@ -1357,6 +1365,12 @@ export type AnalyzerFixture = {
   expected_fat_g: number;
   expected_carbs_g: number;
   notes: string | null;
+  /** Origin of the fixture, e.g. 'nutrition5k'. Null for manually added ones. */
+  source: string | null;
+  /** Public image URL used instead of embedded base64 (dataset imports). */
+  source_url: string | null;
+  /** True when this fixture carries real ground-truth macros to score against. */
+  has_ground_truth: boolean;
   created_at: string;
 };
 
@@ -1376,6 +1390,8 @@ export type NewAnalyzerFixture = {
   expected_carbs_g: number;
   notes?: string | null;
   created_by?: string | null;
+  source?: string | null;
+  source_url?: string | null;
 };
 
 /** List all fixtures without the heavy full-size photo column. */
@@ -1384,24 +1400,42 @@ export async function listAnalyzerFixtures(): Promise<AnalyzerFixtureListItem[]>
   const r = await db.execute(
     `SELECT id, label, mode, photo_thumb_base64, photo_mime, input_text,
             expected_calories, expected_protein_g, expected_fat_g, expected_carbs_g,
-            notes, created_at
+            notes, source, source_url, created_at
        FROM analyzer_fixtures
        ORDER BY created_at DESC`,
   );
-  return r.rows.map((row: any) => ({
+  return r.rows.map((row: any) => rowToFixtureCommon(row));
+}
+
+/** Shared row → fixture mapping for the list/detail queries. */
+function rowToFixtureCommon(row: any): AnalyzerFixtureListItem {
+  const expected = {
+    expected_calories: Number(row.expected_calories),
+    expected_protein_g: Number(row.expected_protein_g),
+    expected_fat_g: Number(row.expected_fat_g),
+    expected_carbs_g: Number(row.expected_carbs_g),
+  };
+  return {
     id: row.id,
     label: row.label,
     mode: row.mode,
     photo_thumb_base64: row.photo_thumb_base64 ?? null,
     photo_mime: row.photo_mime ?? null,
     input_text: row.input_text ?? null,
-    expected_calories: Number(row.expected_calories),
-    expected_protein_g: Number(row.expected_protein_g),
-    expected_fat_g: Number(row.expected_fat_g),
-    expected_carbs_g: Number(row.expected_carbs_g),
+    ...expected,
     notes: row.notes ?? null,
+    source: row.source ?? null,
+    source_url: row.source_url ?? null,
+    // Manually added fixtures default every expected macro to 0 (the
+    // consistency-only flow doesn't collect them) — treat an all-zero row as
+    // "no ground truth" so accuracy scoring only runs where it's meaningful.
+    has_ground_truth:
+      expected.expected_calories > 0 ||
+      expected.expected_protein_g > 0 ||
+      expected.expected_fat_g > 0 ||
+      expected.expected_carbs_g > 0,
     created_at: row.created_at,
-  }));
+  };
 }
 
 /** Fetch a single fixture including the full-size photo (for running/editing). */
@@ -1416,19 +1450,8 @@ export async function getAnalyzerFixture(
   const row: any = r.rows[0];
   if (!row) return null;
   return {
-    id: row.id,
-    label: row.label,
-    mode: row.mode,
+    ...rowToFixtureCommon(row),
     photo_base64: row.photo_base64 ?? null,
-    photo_thumb_base64: row.photo_thumb_base64 ?? null,
-    photo_mime: row.photo_mime ?? null,
-    input_text: row.input_text ?? null,
-    expected_calories: Number(row.expected_calories),
-    expected_protein_g: Number(row.expected_protein_g),
-    expected_fat_g: Number(row.expected_fat_g),
-    expected_carbs_g: Number(row.expected_carbs_g),
-    notes: row.notes ?? null,
-    created_at: row.created_at,
   };
 }
 
@@ -1451,8 +1474,8 @@ export async function createAnalyzerFixture(
     sql: `INSERT INTO analyzer_fixtures
             (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
              input_text, expected_calories, expected_protein_g, expected_fat_g,
-             expected_carbs_g, notes, created_by, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+             expected_carbs_g, notes, created_by, source, source_url, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [
       id,
       f.label,
@@ -1467,9 +1490,58 @@ export async function createAnalyzerFixture(
       f.expected_carbs_g,
       f.notes ?? null,
       f.created_by ?? null,
+      f.source ?? null,
+      f.source_url ?? null,
     ],
   });
   return id;
+}
+
+/** Insert many fixtures in one round trip (dataset imports). Returns the ids. */
+export async function createAnalyzerFixtures(
+  rows: NewAnalyzerFixture[],
+): Promise<string[]> {
+  if (rows.length === 0) return [];
+  const db = await getDb();
+  const ids = rows.map(() => crypto.randomUUID());
+  await db.batch(
+    rows.map((f, i) => ({
+      sql: `INSERT INTO analyzer_fixtures
+              (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
+               input_text, expected_calories, expected_protein_g, expected_fat_g,
+               expected_carbs_g, notes, created_by, source, source_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      args: [
+        ids[i],
+        f.label,
+        f.mode,
+        f.photo_base64 ?? null,
+        f.photo_thumb_base64 ?? null,
+        f.photo_mime ?? null,
+        f.input_text ?? null,
+        f.expected_calories,
+        f.expected_protein_g,
+        f.expected_fat_g,
+        f.expected_carbs_g,
+        f.notes ?? null,
+        f.created_by ?? null,
+        f.source ?? null,
+        f.source_url ?? null,
+      ] as any[],
+    })),
+    "write",
+  );
+  return ids;
+}
+
+/** Dataset dish ids already imported, so a re-import doesn't duplicate them. */
+export async function existingAnalyzerSourceUrls(source: string): Promise<Set<string>> {
+  const db = await getDb();
+  const r = await db.execute({
+    sql: `SELECT source_url FROM analyzer_fixtures WHERE source = ? AND source_url IS NOT NULL`,
+    args: [source],
+  });
+  return new Set(r.rows.map((row: any) => String(row.source_url)));
 }
 
 export async function deleteAnalyzerFixture(id: string): Promise<void> {

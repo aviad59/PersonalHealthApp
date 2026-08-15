@@ -4,9 +4,12 @@ import { getAnalyzerFixture } from "@/lib/db";
 import { analyzeMeal, type AnalyzeImage } from "@/lib/analyze";
 import {
   summarizeCell,
+  scoreAgainstTruth,
+  DEFAULT_WITHIN_PCT,
   type RunAttempt,
   type Macros,
 } from "@/lib/analyzer-variance";
+import { fetchDishImageBase64 } from "@/lib/nutrition5k";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,15 +60,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "fixture not found" }, { status: 404 });
   }
 
-  const images: AnalyzeImage[] | undefined =
-    fx.mode === "photo" && fx.photo_base64
-      ? [
-          {
-            mediaType: (fx.photo_mime as AnalyzeImage["mediaType"]) || "image/jpeg",
-            base64: fx.photo_base64,
-          },
-        ]
-      : undefined;
+  // Fixtures either embed their photo (manually added) or reference a public
+  // dataset URL (imported). Resolve once here and reuse across every repeat.
+  let images: AnalyzeImage[] | undefined;
+  if (fx.mode === "photo") {
+    if (fx.photo_base64) {
+      images = [
+        {
+          mediaType: (fx.photo_mime as AnalyzeImage["mediaType"]) || "image/jpeg",
+          base64: fx.photo_base64,
+        },
+      ];
+    } else if (fx.source_url) {
+      try {
+        const img = await fetchDishImageBase64(fx.source_url);
+        images = [{ mediaType: img.mediaType, base64: img.base64 }];
+      } catch (e: any) {
+        return NextResponse.json(
+          { error: `could not load fixture image: ${e?.message ?? "fetch failed"}` },
+          { status: 502 },
+        );
+      }
+    }
+  }
 
   const doOne = async (): Promise<RunAttempt> => {
     try {
@@ -109,12 +126,32 @@ export async function POST(req: NextRequest) {
 
   // Repeats run concurrently — they're independent and we want the cell fast.
   const attempts = await Promise.all(Array.from({ length: runs }, () => doOne()));
+  const summary = summarizeCell(attempts);
+
+  // Score the mean prediction against known macros when the fixture carries
+  // them (dataset imports). Manual fixtures have none — consistency only.
+  const withinPct =
+    Number.isFinite(body?.withinPct) && body.withinPct > 0
+      ? Number(body.withinPct)
+      : DEFAULT_WITHIN_PCT;
+  const expected: Macros = {
+    calories: fx.expected_calories,
+    protein_g: fx.expected_protein_g,
+    fat_g: fx.expected_fat_g,
+    carbs_g: fx.expected_carbs_g,
+  };
+  const accuracy =
+    fx.has_ground_truth && summary.okRuns > 0
+      ? scoreAgainstTruth(summary, expected, withinPct)
+      : null;
 
   return NextResponse.json({
     fixtureId,
     model: model || "default",
     label: fx.label,
     attempts,
-    summary: summarizeCell(attempts),
+    summary,
+    accuracy,
+    expected: fx.has_ground_truth ? expected : null,
   });
 }

@@ -6,9 +6,11 @@ import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import {
   MACRO_KEYS,
   crossModelSpread,
+  aggregateAccuracy,
   type MacroKey,
   type RunAttempt,
   type CellSummary,
+  type CellAccuracy,
 } from "@/lib/analyzer-variance";
 
 // ---- types ----
@@ -20,6 +22,13 @@ type FixtureListItem = {
   photo_thumb_base64: string | null;
   input_text: string | null;
   notes: string | null;
+  source: string | null;
+  source_url: string | null;
+  has_ground_truth: boolean;
+  expected_calories: number;
+  expected_protein_g: number;
+  expected_fat_g: number;
+  expected_carbs_g: number;
   created_at: string;
 };
 
@@ -36,6 +45,8 @@ type CellResult = {
   label: string;
   attempts: RunAttempt[];
   summary: CellSummary;
+  accuracy: CellAccuracy | null;
+  expected: Record<MacroKey, number> | null;
 };
 
 const MACRO_LABEL: Record<MacroKey, string> = {
@@ -71,6 +82,11 @@ export default function AnalyzerLabClient() {
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<{ base64: string; thumb: string; dataUri: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // --- Nutrition5k import ---
+  const [importCount, setImportCount] = useState("20");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   // --- run config ---
   const [models, setModels] = useState<Set<string>>(new Set());
@@ -161,6 +177,27 @@ export default function AnalyzerLabClient() {
       setErr(e?.message || "save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function importN5k() {
+    setErr(null);
+    setImportMsg(null);
+    setImporting(true);
+    try {
+      const r = await fetch("/api/admin/analyzer/import-n5k", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ count: Number(importCount) || 20, split: "test" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "import failed");
+      setImportMsg(`Imported ${j.imported} dishes · ${j.remaining} more available.`);
+      await loadFixtures();
+    } catch (e: any) {
+      setErr(e?.message || "import failed");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -284,6 +321,38 @@ export default function AnalyzerLabClient() {
         <div className="rounded-lg bg-red-500/15 text-red-300 text-sm px-3 py-2">{err}</div>
       )}
 
+      {/* ---------- IMPORT GROUND TRUTH ---------- */}
+      <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">Import from Nutrition5k</h2>
+        <p className="text-[11px] text-white/45 -mt-1">
+          Google Research’s public dataset of real plated dishes weighed on a scale —
+          so we know the true macros. Imports from the held-out <strong>test</strong> split
+          (507 dishes with overhead photos). Photos stay in the public bucket and are
+          fetched at run time, so importing costs no storage.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="block text-[11px] text-white/50 mb-1">Dishes</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={importCount}
+              onChange={(e) => setImportCount(e.target.value)}
+              className="w-24 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
+            />
+          </label>
+          <button
+            onClick={importN5k}
+            disabled={importing}
+            className="rounded-full bg-accent-brand px-5 py-2 text-sm font-semibold disabled:opacity-40"
+          >
+            {importing ? "Importing…" : "Import dishes"}
+          </button>
+          {importMsg && <span className="text-[11px] text-emerald-400">{importMsg}</span>}
+        </div>
+      </section>
+
       {/* ---------- ADD TEST MEAL ---------- */}
       <section className="card p-4 space-y-3">
         <h2 className="font-semibold">Add a test meal</h2>
@@ -388,9 +457,14 @@ export default function AnalyzerLabClient() {
                   onChange={() => toggle(selectedFixtures, f.id, setSelectedFixtures)}
                   className="shrink-0"
                 />
-                {f.photo_thumb_base64 ? (
+                {f.photo_thumb_base64 || f.source_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={f.photo_thumb_base64} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  <img
+                    src={f.photo_thumb_base64 || f.source_url!}
+                    alt=""
+                    loading="lazy"
+                    className="w-12 h-12 rounded-lg object-cover shrink-0 bg-white/5"
+                  />
                 ) : (
                   <div className="w-12 h-12 rounded-lg bg-white/5 shrink-0 flex items-center justify-center text-[10px] text-white/40">
                     TEXT
@@ -398,8 +472,15 @@ export default function AnalyzerLabClient() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{f.label}</div>
-                  {f.input_text && (
+                  {f.has_ground_truth ? (
+                    <div className="text-[11px] text-emerald-400/80">
+                      truth: {f.expected_calories} kcal · P{f.expected_protein_g} · F
+                      {f.expected_fat_g} · C{f.expected_carbs_g}
+                    </div>
+                  ) : f.input_text ? (
                     <div className="text-[11px] text-white/45 truncate">{f.input_text}</div>
+                  ) : (
+                    <div className="text-[11px] text-white/35">no ground truth</div>
                   )}
                 </div>
                 <button onClick={() => deleteFixture(f.id)} className="text-xs text-red-400/80 shrink-0">
@@ -495,12 +576,18 @@ export default function AnalyzerLabClient() {
       {/* ---------- RESULTS ---------- */}
       {resultFixtures.length > 0 && (
         <section className="card p-4 space-y-5">
-          <h2 className="font-semibold">Consistency report</h2>
+          <h2 className="font-semibold">Report</h2>
           <p className="text-[11px] text-white/45 -mt-2">
             Each cell shows the mean estimate and its jitter (CV%). Green ≤8% (tight),
-            amber ≤15%, red above. Compare models down each column; big gaps between
-            models mean they disagree.
+            amber ≤15%, red above. Where a dish has known macros, accuracy vs that
+            truth is scored too.
           </p>
+
+          <AccuracyScorecard
+            models={Array.from(models)}
+            results={results}
+            modelLabel={modelLabel}
+          />
 
           {resultFixtures.map((f) => {
             const cells = Array.from(models)
@@ -515,6 +602,11 @@ export default function AnalyzerLabClient() {
                     <img src={f.photo_thumb_base64} alt="" className="w-8 h-8 rounded object-cover" />
                   )}
                   <span className="text-sm font-medium">{f.label}</span>
+                  {cells[0]?.expected && (
+                    <span className="text-[10px] text-emerald-400/80 shrink-0">
+                      truth {Math.round(cells[0].expected.calories)} kcal
+                    </span>
+                  )}
                   {cells.length > 1 && (
                     <span
                       className={`text-[10px] ml-auto ${
@@ -548,10 +640,22 @@ export default function AnalyzerLabClient() {
                           </td>
                           {MACRO_KEYS.map((k) => {
                             const s = c.summary.perMacro[k];
+                            const acc = c.accuracy?.perMacro[k];
                             return (
                               <td key={k} className="py-1.5 px-2 text-center">
                                 <div className="nums">{Math.round(s.mean)}</div>
                                 <div className={`text-[9px] ${cvClass(s.cv)}`}>±{Math.round(s.cv)}%</div>
+                                {acc && (
+                                  <div
+                                    className={`text-[9px] ${
+                                      acc.within ? "text-emerald-400" : "text-red-400"
+                                    }`}
+                                    title={`truth ${Math.round(acc.expected)}`}
+                                  >
+                                    {acc.error >= 0 ? "+" : ""}
+                                    {Math.round(acc.pctError)}% off
+                                  </div>
+                                )}
                               </td>
                             );
                           })}
@@ -571,6 +675,90 @@ export default function AnalyzerLabClient() {
           })}
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * Headline accuracy per model, across every dish that has known macros.
+ * This is the number that answers "can I trust the analyzer, and can I switch
+ * to the cheaper/faster model?" — hidden entirely when nothing scored.
+ */
+function AccuracyScorecard({
+  models,
+  results,
+  modelLabel,
+}: {
+  models: string[];
+  results: Map<string, CellResult>;
+  modelLabel: (id: string) => string;
+}) {
+  const perModel = models
+    .map((m) => {
+      const cells = Array.from(results.values()).filter(
+        (c) => c.model === m && c.accuracy,
+      );
+      if (cells.length === 0) return null;
+      const agg = aggregateAccuracy(cells.map((c) => c.accuracy!));
+      const meanLatency =
+        cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length;
+      return { model: m, agg, meanLatency };
+    })
+    .filter(Boolean) as {
+    model: string;
+    agg: ReturnType<typeof aggregateAccuracy>;
+    meanLatency: number;
+  }[];
+
+  if (perModel.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border p-3 space-y-2">
+      <div className="text-[11px] uppercase tracking-wider text-white/50">
+        Accuracy vs ground truth · {perModel[0].agg.n} dishes
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="text-white/40">
+            <tr className="text-left">
+              <th className="py-1 pr-2">Model</th>
+              <th className="py-1 px-2 text-center">all-macro pass</th>
+              <th className="py-1 px-2 text-center">avg error</th>
+              {MACRO_KEYS.map((k) => (
+                <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]} within</th>
+              ))}
+              <th className="py-1 px-2 text-center">ms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {perModel.map(({ model, agg, meanLatency }) => (
+              <tr key={model} className="border-t border-border/50">
+                <td className="py-1.5 pr-2 font-medium">{modelLabel(model)}</td>
+                <td className="py-1.5 px-2 text-center font-semibold">
+                  {Math.round(agg.passRate * 100)}%
+                </td>
+                <td className={`py-1.5 px-2 text-center ${cvClass(agg.mape)}`}>
+                  {Math.round(agg.mape)}%
+                </td>
+                {MACRO_KEYS.map((k) => (
+                  <td key={k} className="py-1.5 px-2 text-center">
+                    <div>{Math.round(agg.perMacro[k].withinRate * 100)}%</div>
+                    {/* Mean signed error — a consistent sign means the model
+                        systematically over- or under-estimates that macro. */}
+                    <div className="text-[9px] text-white/35">
+                      {agg.perMacro[k].bias >= 0 ? "+" : ""}
+                      {Math.round(agg.perMacro[k].bias)} bias
+                    </div>
+                  </td>
+                ))}
+                <td className="py-1.5 px-2 text-center text-white/40">
+                  {Math.round(meanLatency)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
