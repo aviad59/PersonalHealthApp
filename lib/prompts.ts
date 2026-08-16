@@ -44,20 +44,36 @@ function mealJsonSchema(lang: string): string {
 
 // Shared reference values, so every analyzer path (single-call and two-stage)
 // costs food from the same table rather than from guesswork.
-const MACRO_ANCHORS = `CALORIE ANCHORS — derive from these known values, not guesswork:
-- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
-- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
-- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
-- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
-- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
-- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
-- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
-- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
-- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
-- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
-- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
-- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
-- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs`;
+//
+// Stated PER 100 g throughout. The previous table mixed units — it labelled
+// USDA per-100g figures for chicken as "150 g" portions, which told the model
+// that 150 g of chicken breast was 165 kcal / 31 g protein when it is really
+// 248 kcal / 46.5 g. Per-100g everywhere removes that ambiguity and matches
+// how the quantify stage reasons.
+const MACRO_ANCHORS = `NUTRIENT ANCHORS — PER 100 g, cooked unless stated. Derive from these known values, not guesswork:
+- Chicken breast: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
+- Chicken thigh (skinless): 209 kcal, 26 g protein, 10.9 g fat, 0 g carbs
+- Beef mince 80/20: 254 kcal, 26 g protein, 16 g fat, 0 g carbs
+- Salmon: 206 kcal, 22 g protein, 12 g fat, 0 g carbs
+- Tuna canned in water, drained: 116 kcal, 26 g protein, 0.8 g fat, 0 g carbs
+- Egg, whole: 143 kcal, 12.6 g protein, 9.5 g fat, 0.7 g carbs
+- White rice: 130 kcal, 2.7 g protein, 0.3 g fat, 28 g carbs
+- Pasta: 158 kcal, 5.8 g protein, 0.9 g fat, 31 g carbs
+- Potato, boiled: 87 kcal, 2 g protein, 0.1 g fat, 20 g carbs
+- Lentils: 116 kcal, 9 g protein, 0.4 g fat, 20 g carbs
+- Whole-wheat bread: 247 kcal, 13 g protein, 3.4 g fat, 41 g carbs
+- Pita: 275 kcal, 9 g protein, 1.2 g fat, 55 g carbs
+- Cottage cheese 5%: 98 kcal, 11 g protein, 4.3 g fat, 3.4 g carbs
+- Greek yoghurt 5%: 97 kcal, 9 g protein, 5 g fat, 3.6 g carbs
+- Hard cheese (cheddar/gouda): 403 kcal, 25 g protein, 33 g fat, 1.3 g carbs
+- Hummus: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
+- Mixed salad leaves, undressed: 20 kcal, 2 g protein, 0.2 g fat, 3.5 g carbs
+- Olive oil: 884 kcal, 0 g protein, 100 g fat, 0 g carbs
+
+COMMON UNITS (for converting what you see into grams):
+- Large egg = 50 g · slice of sandwich bread = 30 g · pita = 60 g
+- 1 tbsp oil = 14 g · 1 tsp oil = 5 g
+- 1 cup cooked rice = 160 g · 1 cup cooked pasta = 140 g · 1 cup milk = 240 g`;
 
 export function mealVisionPrompt(lang = "en"): string {
   return `You are a precise nutrition analyst with deep knowledge of food composition databases (USDA, Israeli Ministry of Health).
@@ -68,20 +84,7 @@ PORTION ESTIMATION:
 - If no reference is visible, default to a typical single-person restaurant serving.
 - Err on the side of the portion you can actually see — don't inflate.
 
-CALORIE ANCHORS — derive from these known values, not guesswork:
-- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
-- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
-- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
-- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
-- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
-- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
-- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
-- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
-- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
-- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
-- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
-- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
-- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs
+${MACRO_ANCHORS}
 
 RULES:
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
@@ -101,20 +104,7 @@ export function mealTextPrompt(lang = "en"): string {
 The user will describe a meal in words, or provide a base meal + modifier to adjust (e.g. "same but smaller", "without the rice", "double the chicken").
 Return ONE JSON object immediately — no prose, no fences.
 
-CALORIE ANCHORS — use these as ground truth for common items:
-- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
-- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
-- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
-- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
-- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
-- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
-- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
-- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
-- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
-- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
-- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
-- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
-- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs
+${MACRO_ANCHORS}
 
 RULES:
 - Default to 150 g portions when not stated; apply size words ("small"=0.7×, "large"=1.3×, "double"=2×, "half"=0.5×).
@@ -143,21 +133,49 @@ ${mealJsonSchema(lang)}`;
 // mis-costed it.
 // ---------------------------------------------------------------
 
+// Stage 1 is deliberately a MASS-estimation task, not a nutrition task.
+// The Nutrition5k paper (arXiv 2103.03375) found that predicting calories
+// per gram is ~3x more accurate than predicting calories directly
+// (9.5% vs 26.1% MAE) — i.e. recognising the food is close to solved, and
+// almost all remaining error comes from judging portion size. They also
+// showed that feeding an explicit VOLUME estimate into mass regression cut
+// mass error from 29.5% to 13.7%. So this stage spends its whole budget on
+// geometry: dimensions → volume → density → grams.
 export function mealPerceivePrompt(lang = "en"): string {
-  return `You are a food-identification specialist. Your ONLY job is to describe WHAT is in the photo and HOW MUCH of it. You do NOT estimate calories or macros — a second specialist does that from your reading.
+  return `You are a portion-estimation specialist. Your ONLY job is to identify each food on the plate and estimate ITS MASS IN GRAMS. You do NOT compute calories or macros — a second specialist does that.
 
-Be exhaustive and concrete about the things a nutrition estimate depends on:
-- Every distinct food item, including sauces, dressings, oil sheen, butter, toppings and garnishes.
-- Preparation method for each item (raw / grilled / fried / roasted / breaded / boiled / sauteed), since this drives added fat.
-- Portion size in grams or common units. Use the container and any visible reference (fork, plate rim, standard 26cm dinner plate ≈ the width of the plate) to anchor scale.
-- Note visible fat: pooled oil, glossy coating, visible marbling, cheese melt, cream.
+Portion size is the hardest and most error-prone part of nutrition estimation, so spend your effort there. Work through it explicitly, item by item:
 
-PORTION ESTIMATION:
-- Judge the depth of food, not just its footprint — a flat smear and a mound differ several-fold.
-- Anchor to the container: a standard dinner plate is ~26cm, a cereal bowl holds ~400ml, a mug ~250ml.
-- Err toward the portion you can actually see. Do not inflate.
+STEP 1 — ANCHOR THE SCALE.
+Find a reference of known size and state it. In order of reliability:
+- Packaging or labels with stated weights
+- Cutlery: a dinner fork is ~19 cm, a teaspoon bowl ~2.5 cm wide
+- Dinnerware: standard dinner plate ~26 cm across, side plate ~20 cm, cereal bowl ~15 cm across and ~400 ml, mug ~250 ml
+- A slice of sandwich bread is ~10x10 cm
+If nothing is visible, say so and assume a standard 26 cm dinner plate.
 
-If a "user context" note is supplied, treat it as authoritative for identifying items — but still judge portions from the image.
+STEP 2 — ESTIMATE GEOMETRY, NOT JUST FOOTPRINT.
+For each item give rough dimensions (length x width x height, or diameter x height) in cm. Height/depth is the most commonly ignored dimension and the biggest source of error — a flat smear and a heaped mound can differ 5x with the same footprint. State the height explicitly.
+
+STEP 3 — VOLUME → MASS.
+Convert dimensions to an approximate volume in ml, then to grams using food density:
+- Leafy greens / popcorn: ~0.1-0.2 g/ml
+- Cooked rice, pasta, grains, chopped vegetables: ~0.6-0.8 g/ml
+- Meat, fish, cheese, dense bread: ~1.0-1.1 g/ml
+- Soups, sauces, milk, yoghurt: ~1.0 g/ml
+- Oils: ~0.9 g/ml
+Account for packing: loose salad is mostly air, a pressed rice scoop is not.
+
+STEP 4 — SANITY CHECK.
+Typical single servings: chicken breast 120-180 g, cooked rice 150-250 g per scoop, a slice of bread 30 g, an egg 50 g, a tablespoon of oil 14 g. If your estimate is far outside a typical serving, re-check the height.
+Err toward the portion you can actually SEE. Do not inflate.
+
+Also record, for each item:
+- Preparation (raw / grilled / fried / roasted / breaded / boiled / sauteed / baked), since it drives added fat.
+- Visible fat: pooled oil, glossy coating, marbling, melted cheese, cream.
+- Hidden extras a nutrition analyst would miss: cooking oil, butter, dressing, sauce, syrup.
+
+If a "user context" note is supplied, treat it as authoritative for WHAT the items are — but still judge mass yourself from the image.
 
 ${mealLangInstruction(lang)}
 
@@ -165,42 +183,65 @@ Return STRICT JSON only, no prose:
 {
   "dish": "short natural description of the whole plate",
   "container": "plate | bowl | tray | package | other",
-  "scale_reference": "what you used to judge size",
+  "scale_reference": "the known-size object you anchored to",
   "items": [
     {
       "name": "food item",
       "preparation": "raw | grilled | fried | roasted | breaded | boiled | sauteed | baked | other",
-      "portion": "estimate with unit, e.g. '150 g' or '1 cup'",
+      "dimensions_cm": "e.g. '12 x 8 x 2' or 'diameter 9, height 3'",
+      "volume_ml": number,
+      "density_g_per_ml": number,
+      "mass_g": number,
       "visible_fat": "none | light | moderate | heavy",
-      "notes": "anything affecting the estimate (sauce, skin, breading)"
+      "notes": "anything affecting the estimate (sauce, skin, breading, hidden oil)"
     }
   ],
+  "total_mass_g": number,
   "confidence": "low | medium | high"
 }`;
 }
 
+// Stage 2 is the "portion independent" half of the paper's factorization: it
+// only has to name a per-100g nutrient density for each identified food, which
+// their results show models do well (9.5% MAE). It deliberately does NOT do the
+// mass x density arithmetic — we do that in code, so totals are exact and
+// internally consistent by construction.
 export function mealQuantifyPrompt(lang = "en"): string {
-  return `You are a precise nutrition analyst. A food-identification specialist has already read the photo and given you a structured description of the plate. The photo is included as well so you can sanity-check portions — but trust the specialist's item identification.
+  return `You are a nutrition-density specialist. A portion-estimation specialist has already read the photo and given you each food item with its estimated mass in grams. The photo is included so you can sanity-check, but trust their item identification.
 
-Your job: convert that reading into per-item and total macros.
+Your job is NARROW: for each item, state its nutrient density PER 100 GRAMS. Do not compute totals — the caller does that arithmetic from your densities and the masses.
 
 ${MACRO_ANCHORS}
 
 RULES:
-- Use the specialist's items and portions. If a portion looks clearly impossible against the photo, adjust it and say so in "notes".
-- Account for the stated preparation: frying/sauteing adds ~5-10 g fat per serving; breading adds carbs and fat; roasting with oil adds ~5 g fat.
-- Account for "visible_fat": moderate/heavy means added oil, cheese or cream is present — include it.
-- Derive macros from the anchors above or standard nutritional data — do NOT invent numbers.
-- Total kcal must equal the sum of all items (no rounding errors >5 kcal).
-- Cross-check: 4 kcal/g protein, 4 kcal/g carbs, 9 kcal/g fat. Your total kcal must be consistent with your macro grams.
-- Carry the specialist's confidence forward unless the photo makes you more or less certain.
+- Give per-100g values for the food AS PREPARED. Frying, breading, roasting in oil and dressings raise fat/carb density substantially versus the raw item — reflect that in the density rather than inventing a separate item, unless the fat is a distinct visible pool.
+- If "visible_fat" is moderate or heavy, raise the fat density accordingly (a sauteed vegetable carries ~5-8 g fat per 100 g; a dry-roasted one does not).
+- Densities must be internally consistent: kcal_per_100g should be close to 4*protein + 4*carbs + 9*fat per 100 g. Check this before answering.
+- Use the anchors above or standard USDA values. Do NOT invent numbers.
+- Keep each item's mass_g as given, UNLESS the photo makes it clearly impossible — if you change one, say so in "notes".
+- Add an item the specialist missed only if it is clearly visible and nutritionally significant (e.g. a pool of oil, a dressing).
 
 ${CLARIFYING_QUESTION_GUIDANCE}
 
 ${mealLangInstruction(lang)}
 
-JSON schema (output only this, nothing else):
-${mealJsonSchema(lang)}`;
+Return STRICT JSON only, no prose:
+{
+  "description": ${lang === "he" ? '"תיאור קצר של הארוחה בעברית"' : '"short meal description in English"'},
+  "items": [
+    {
+      "name": ${lang === "he" ? '"שם המאכל בעברית"' : '"food item name in English"'},
+      "mass_g": number,
+      "kcal_per_100g": number,
+      "protein_per_100g": number,
+      "fat_per_100g": number,
+      "carbs_per_100g": number
+    }
+  ],
+  "confidence": "low" | "medium" | "high",
+  "notes": ${lang === "he" ? '"משפט קצר בעברית או מחרוזת ריקה"' : '"one short sentence or empty string"'},
+  "clarifying_question": ${lang === "he" ? '"שאלת המשך קצרה בעברית או מחרוזת ריקה"' : '"short follow-up question or empty string"'}
+}`;
 }
 
 export const DAILY_INSIGHT_SYSTEM = `You are an encouraging, evidence-aware fitness coach producing ONE daily insight.

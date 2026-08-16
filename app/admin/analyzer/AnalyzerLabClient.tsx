@@ -872,16 +872,22 @@ export default function AnalyzerLabClient() {
                               {c.pipeline === "two-stage" ? "two-stage" : "single"}
                             </span>
                             {c.perception?.parsed?.items && (
-                              // Surface what stage 1 actually saw — the whole point
-                              // of splitting the pipeline is being able to tell a
-                              // mis-identification from a mis-costing.
+                              // Surface stage 1's mass estimate — per the
+                              // Nutrition5k paper, portion size is where nearly
+                              // all the error lives, so it's the number to watch.
                               <span
                                 className="block text-[9px] text-white/35 max-w-[9rem] truncate"
                                 title={c.perception.parsed.items
-                                  .map((i: any) => `${i.name} — ${i.portion}`)
+                                  .map(
+                                    (i: any) =>
+                                      `${i.name} — ${i.mass_g ?? "?"}g (${i.dimensions_cm ?? "?"})`,
+                                  )
                                   .join("\n")}
                               >
-                                saw {c.perception.parsed.items.length} items
+                                {c.perception.parsed.items.length} items
+                                {c.perception.parsed.total_mass_g
+                                  ? ` · ${Math.round(c.perception.parsed.total_mass_g)}g`
+                                  : ""}
                               </span>
                             )}
                           </td>

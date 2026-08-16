@@ -177,6 +177,62 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
   };
 }
 
+/**
+ * Convert stage 2's per-100g densities + masses into the app's Analysis shape,
+ * doing the arithmetic in code rather than in the model.
+ *
+ * This is the "portion independent prediction x mass" factorization from the
+ * Nutrition5k paper. Two benefits over asking the model for totals directly:
+ * the multiplication is exact, and the totals are guaranteed to equal the sum
+ * of the items (models routinely emit totals that don't match their own rows).
+ */
+function densitiesToAnalysis(d: any): any {
+  if (!d || !Array.isArray(d.items)) {
+    throw new Error("quantify stage returned no items");
+  }
+  const num = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+
+  const items = d.items.map((it: any) => {
+    const mass = num(it.mass_g);
+    const per = (v: any) => (num(v) * mass) / 100;
+    return {
+      name: it.name ?? "item",
+      portion: `${Math.round(mass)} g`,
+      calories: Math.round(per(it.kcal_per_100g)),
+      protein_g: Math.round(per(it.protein_per_100g) * 10) / 10,
+      fat_g: Math.round(per(it.fat_per_100g) * 10) / 10,
+      carbs_g: Math.round(per(it.carbs_per_100g) * 10) / 10,
+    };
+  });
+
+  const total = items.reduce(
+    (a: any, it: any) => ({
+      calories: a.calories + it.calories,
+      protein_g: a.protein_g + it.protein_g,
+      fat_g: a.fat_g + it.fat_g,
+      carbs_g: a.carbs_g + it.carbs_g,
+    }),
+    { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  );
+
+  return {
+    description: d.description ?? "",
+    items,
+    total: {
+      calories: Math.round(total.calories),
+      protein_g: Math.round(total.protein_g),
+      fat_g: Math.round(total.fat_g),
+      carbs_g: Math.round(total.carbs_g),
+    },
+    confidence: d.confidence ?? "medium",
+    notes: d.notes ?? "",
+    clarifying_question: d.clarifying_question ?? "",
+  };
+}
+
 /** Build the base64 image content blocks shared by both stages. */
 function imageBlocks(images: AnalyzeImage[]) {
   return images.map((img) => ({
@@ -287,7 +343,7 @@ async function analyzeTwoStage(
   let analysis: any = null;
   let parseError: string | undefined;
   try {
-    analysis = extractJson<any>(raw);
+    analysis = densitiesToAnalysis(extractJson<any>(raw));
   } catch (e: any) {
     parseError = e?.message ?? "Could not parse JSON from model output";
   }
