@@ -1526,8 +1526,15 @@ export async function createAnalyzerFixtures(
   if (rows.length === 0) return [];
   const db = await getDb();
   const ids = rows.map(() => crypto.randomUUID());
-  await db.batch(
-    rows.map((f, i) => ({
+  // Chunked so importing the whole dataset split doesn't send one enormous
+  // batch to Turso.
+  const CHUNK = 100;
+  for (let start = 0; start < rows.length; start += CHUNK) {
+    const slice = rows.slice(start, start + CHUNK);
+    await db.batch(
+      slice.map((f, j) => {
+        const i = start + j;
+        return {
       sql: `INSERT INTO analyzer_fixtures
               (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
                input_text, expected_calories, expected_protein_g, expected_fat_g,
@@ -1551,9 +1558,11 @@ export async function createAnalyzerFixtures(
         f.source ?? null,
         f.source_url ?? null,
       ] as any[],
-    })),
-    "write",
-  );
+        };
+      }),
+      "write",
+    );
+  }
   return ids;
 }
 

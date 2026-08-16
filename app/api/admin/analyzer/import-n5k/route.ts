@@ -18,7 +18,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const SOURCE = "nutrition5k";
-const MAX_IMPORT = 100;
+// High enough to take the entire filtered test split in one call — the work is
+// a couple of cached metadata fetches plus a chunked insert, no image traffic.
+const MAX_IMPORT = 1000;
 
 /**
  * Import test dishes from Nutrition5k as fixtures with real ground-truth
@@ -32,7 +34,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const count = Math.max(1, Math.min(MAX_IMPORT, Number(body?.count) || 20));
+  // `all: true` takes every remaining eligible dish.
+  const wantAll = body?.all === true;
+  const count = wantAll
+    ? MAX_IMPORT
+    : Math.max(1, Math.min(MAX_IMPORT, Number(body?.count) || 20));
   const split: "test" | "train" = body?.split === "train" ? "train" : "test";
   // The dataset includes a few degenerate plates (0 kcal garnish, one outlier
   // near 9,500 kcal). Percent error on a ~15 kcal dish is meaningless — being

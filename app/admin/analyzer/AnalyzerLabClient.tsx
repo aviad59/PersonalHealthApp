@@ -112,6 +112,10 @@ const MACRO_LABEL: Record<MacroKey, string> = {
 // keep this low to avoid a burst of model requests.
 const CELL_CONCURRENCY = 2;
 
+// The pool can hold hundreds of dishes; rendering every remote thumbnail would
+// fire hundreds of image requests for a list nobody needs to scroll.
+const LIST_PREVIEW = 40;
+
 const cellKey = (
   fixtureId: string,
   model: string,
@@ -167,7 +171,10 @@ export default function AnalyzerLabClient() {
   >("vision");
   // Fixture list collapsed by default once a set has been imported.
   const [listOpen, setListOpen] = useState(false);
-  const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(new Set());
+  // How many dishes to sample at random for each run. Hand-picking from a
+  // few hundred imported dishes was unusable; a count + random draw is both
+  // easier and a less biased sample.
+  const [sampleSize, setSampleSize] = useState("10");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<Map<string, CellResult>>(new Map());
@@ -270,7 +277,7 @@ export default function AnalyzerLabClient() {
     }
   }
 
-  async function importN5k() {
+  async function importN5k(all = false) {
     setErr(null);
     setImportMsg(null);
     setImporting(true);
@@ -278,11 +285,17 @@ export default function AnalyzerLabClient() {
       const r = await fetch("/api/admin/analyzer/import-n5k", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ count: Number(importCount) || 20, split: "test" }),
+        body: JSON.stringify(
+          all
+            ? { all: true, split: "test" }
+            : { count: Number(importCount) || 20, split: "test" },
+        ),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "import failed");
-      setImportMsg(`Imported ${j.imported} dishes · ${j.remaining} more available.`);
+      setImportMsg(
+        `Imported ${j.imported} dishes${j.remaining ? ` · ${j.remaining} more available` : " · full split loaded"}.`,
+      );
       await loadFixtures();
     } catch (e: any) {
       setErr(e?.message || "import failed");
@@ -319,11 +332,6 @@ export default function AnalyzerLabClient() {
         method: "DELETE",
       });
       if (!r.ok) throw new Error("delete failed");
-      setSelectedFixtures((s) => {
-        const n = new Set(s);
-        n.delete(id);
-        return n;
-      });
       await loadFixtures();
     } catch (e: any) {
       setErr(e?.message || "delete failed");
@@ -341,9 +349,16 @@ export default function AnalyzerLabClient() {
     if (!fixtures?.length) return setErr("Add at least one test meal first");
     if (!models.size) return setErr("Pick at least one model");
 
-    const targetFixtures = selectedFixtures.size
-      ? fixtures.filter((f) => selectedFixtures.has(f.id))
-      : fixtures;
+    // Draw a fresh random sample for this run. Every model/pipeline/variant
+    // in the run sees the SAME dishes, so comparisons within a run are fair;
+    // across runs the sample differs, which is why the dish ids are saved.
+    const n = Math.max(1, Math.min(fixtures.length, Number(sampleSize) || 10));
+    const shuffled = [...fixtures];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const targetFixtures = shuffled.slice(0, n);
     const modelList = Array.from(models);
 
     const variantList = VARIANTS.filter((v) =>
@@ -441,6 +456,7 @@ export default function AnalyzerLabClient() {
         variants: variantList.map((v) => v.label),
         pipelines: pipelineList.map((p) => p.label),
         dishes: targetFixtures.length,
+        dishIds: targetFixtures.map((f) => f.id),
         promptEdited,
       });
       return finalResults;
@@ -566,11 +582,19 @@ export default function AnalyzerLabClient() {
             />
           </label>
           <button
-            onClick={importN5k}
+            onClick={() => importN5k(false)}
             disabled={importing}
             className="rounded-full bg-accent-brand px-5 py-2 text-sm font-semibold disabled:opacity-40"
           >
             {importing ? "Importing…" : "Import dishes"}
+          </button>
+          <button
+            onClick={() => importN5k(true)}
+            disabled={importing}
+            title="Load every eligible dish from the held-out test split into the pool"
+            className="rounded-full border border-accent-brand/50 px-5 py-2 text-sm font-semibold text-accent-primary disabled:opacity-40"
+          >
+            Import all
           </button>
           <button
             onClick={backfillTruth}
@@ -675,30 +699,14 @@ export default function AnalyzerLabClient() {
             <span className="font-semibold">
               Test meals {fixtures ? `(${fixtures.length})` : ""}
             </span>
-            {selectedFixtures.size > 0 && (
-              <span className="text-[10px] text-accent-primary">
-                {selectedFixtures.size} selected
-              </span>
-            )}
             <span className="text-white/40 text-sm ml-auto">{listOpen ? "▲" : "▼"}</span>
           </button>
-          {listOpen && fixtures && fixtures.length > 0 && (
-            <button
-              onClick={() =>
-                setSelectedFixtures((s) =>
-                  s.size === fixtures.length ? new Set() : new Set(fixtures.map((f) => f.id)),
-                )
-              }
-              className="text-xs text-accent-brand shrink-0"
-            >
-              {selectedFixtures.size === fixtures.length ? "Clear selection" : "Select all"}
-            </button>
-          )}
         </div>
         {listOpen && (
         <>
         <p className="text-[11px] text-white/40 -mt-1">
-          Leave all unchecked to run every meal, or check specific ones.
+          The full pool a run samples from. Each run draws its dishes at random —
+          nothing to pick here.
         </p>
         {!fixtures ? (
           <p className="text-sm text-white/40">Loading…</p>
@@ -706,14 +714,8 @@ export default function AnalyzerLabClient() {
           <p className="text-sm text-white/40">No test meals yet. Add one above.</p>
         ) : (
           <ul className="space-y-2">
-            {fixtures.map((f) => (
+            {fixtures.slice(0, LIST_PREVIEW).map((f) => (
               <li key={f.id} className="flex items-center gap-3 rounded-lg bg-bg-elev p-2">
-                <input
-                  type="checkbox"
-                  checked={selectedFixtures.has(f.id)}
-                  onChange={() => toggle(selectedFixtures, f.id, setSelectedFixtures)}
-                  className="shrink-0"
-                />
                 {f.photo_thumb_base64 || f.source_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -745,6 +747,11 @@ export default function AnalyzerLabClient() {
                 </button>
               </li>
             ))}
+            {fixtures.length > LIST_PREVIEW && (
+              <li className="text-[11px] text-white/40 px-2 pt-1">
+                …and {fixtures.length - LIST_PREVIEW} more in the pool.
+              </li>
+            )}
           </ul>
         )}
         </>
@@ -820,6 +827,17 @@ export default function AnalyzerLabClient() {
               })}
             </div>
           </div>
+          <label className="block">
+            <span className="block text-[11px] text-white/50 mb-1">Dishes (random)</span>
+            <input
+              type="number"
+              min={1}
+              max={fixtures?.length || 500}
+              value={sampleSize}
+              onChange={(e) => setSampleSize(e.target.value)}
+              className="w-24 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
+            />
+          </label>
           <button
             onClick={run}
             disabled={running}
@@ -827,7 +845,7 @@ export default function AnalyzerLabClient() {
           >
             {running && progress
               ? `Running… ${progress.done}/${progress.total}`
-              : "Run consistency check"}
+              : `Run on ${Math.min(Number(sampleSize) || 10, fixtures?.length || 0)} random dishes`}
           </button>
         </div>
 
