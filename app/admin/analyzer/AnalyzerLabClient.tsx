@@ -42,12 +42,21 @@ type Config = {
 type CellResult = {
   fixtureId: string;
   model: string;
+  /** false = photo only; true = photo + its description. */
+  includeText: boolean;
   label: string;
   attempts: RunAttempt[];
   summary: CellSummary;
   accuracy: CellAccuracy | null;
   expected: Record<MacroKey, number> | null;
 };
+
+/** Which input variants to run — answers "does the description help?". */
+type Variant = { includeText: boolean; label: string };
+const VARIANTS: Variant[] = [
+  { includeText: false, label: "photo only" },
+  { includeText: true, label: "photo + text" },
+];
 
 const MACRO_LABEL: Record<MacroKey, string> = {
   calories: "kcal",
@@ -60,7 +69,14 @@ const MACRO_LABEL: Record<MacroKey, string> = {
 // keep this low to avoid a burst of model requests.
 const CELL_CONCURRENCY = 2;
 
-const cellKey = (fixtureId: string, model: string) => `${fixtureId}::${model}`;
+const cellKey = (fixtureId: string, model: string, includeText: boolean) =>
+  `${fixtureId}::${model}::${includeText ? "txt" : "img"}`;
+
+/** Always-signed percentage, so over- vs under-estimate is never ambiguous. */
+function signedPct(error: number, pctError: number): string {
+  const sign = error >= 0 ? "+" : "−";
+  return `${sign}${Math.round(pctError)}%`;
+}
 
 // Jitter coloring: a coefficient of variation under ~8% is tight, under ~15%
 // is tolerable, above that the estimate is unstable.
@@ -75,7 +91,8 @@ export default function AnalyzerLabClient() {
   const [fixtures, setFixtures] = useState<FixtureListItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // --- add-fixture form ---
+  // --- add-fixture form (collapsed by default; imports are the main path) ---
+  const [addOpen, setAddOpen] = useState(false);
   const [mode, setMode] = useState<"photo" | "text">("photo");
   const [label, setLabel] = useState("");
   const [inputText, setInputText] = useState("");
@@ -91,6 +108,8 @@ export default function AnalyzerLabClient() {
   // --- run config ---
   const [models, setModels] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState("5");
+  // Which input variants to include in the run.
+  const [variants, setVariants] = useState<Set<string>>(new Set(["img"]));
   const [systemVision, setSystemVision] = useState("");
   const [systemText, setSystemText] = useState("");
   const [promptTab, setPromptTab] = useState<"vision" | "text">("vision");
@@ -236,10 +255,19 @@ export default function AnalyzerLabClient() {
     const modelList = Array.from(models);
     const nRuns = Math.max(1, Math.min(8, Number(runs) || 5));
 
-    // Build the full grid of (fixture, model) cells.
-    const cells: { fixtureId: string; model: string }[] = [];
+    const variantList = VARIANTS.filter((v) =>
+      variants.has(v.includeText ? "txt" : "img"),
+    );
+    if (variantList.length === 0) return setErr("Pick at least one input variant");
+
+    // Build the full grid of (fixture, model, variant) cells.
+    const cells: { fixtureId: string; model: string; includeText: boolean }[] = [];
     for (const f of targetFixtures) {
-      for (const m of modelList) cells.push({ fixtureId: f.id, model: m });
+      for (const m of modelList) {
+        for (const v of variantList) {
+          cells.push({ fixtureId: f.id, model: m, includeText: v.includeText });
+        }
+      }
     }
 
     setResults(new Map());
@@ -258,6 +286,7 @@ export default function AnalyzerLabClient() {
             body: JSON.stringify({
               fixtureId: cell.fixtureId,
               model: cell.model,
+              includeText: cell.includeText,
               runs: nRuns,
               systemVision:
                 config && systemVision !== config.visionPrompt ? systemVision : undefined,
@@ -269,7 +298,7 @@ export default function AnalyzerLabClient() {
             const cr: CellResult = await r.json();
             setResults((prev) => {
               const n = new Map(prev);
-              n.set(cellKey(cell.fixtureId, cell.model), cr);
+              n.set(cellKey(cell.fixtureId, cell.model, cell.includeText), cr);
               return n;
             });
           }
@@ -298,10 +327,9 @@ export default function AnalyzerLabClient() {
   // Fixtures that have at least one result, in list order.
   const resultFixtures = useMemo(() => {
     if (!fixtures) return [];
-    return fixtures.filter((f) =>
-      Array.from(models).some((m) => results.has(cellKey(f.id, m))),
-    );
-  }, [fixtures, models, results]);
+    const ids = new Set(Array.from(results.values()).map((c) => c.fixtureId));
+    return fixtures.filter((f) => ids.has(f.id));
+  }, [fixtures, results]);
 
   return (
     <div className="p-4 space-y-6 max-w-5xl mx-auto">
@@ -353,11 +381,20 @@ export default function AnalyzerLabClient() {
         </div>
       </section>
 
-      {/* ---------- ADD TEST MEAL ---------- */}
+      {/* ---------- ADD TEST MEAL (collapsible) ---------- */}
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold">Add a test meal</h2>
+        <button
+          onClick={() => setAddOpen((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <span className="font-semibold">Add a test meal manually</span>
+          <span className="text-white/40 text-sm">{addOpen ? "▲" : "▼"}</span>
+        </button>
+        {addOpen && (
+        <>
         <p className="text-[11px] text-white/45 -mt-1">
-          No macros to enter — just a photo or description. We measure how stable the AI’s answers are.
+          No macros to enter — just a photo or description. Manual meals have no ground
+          truth, so they’re measured for consistency only.
         </p>
         <div className="flex gap-2 text-sm">
           {(["photo", "text"] as const).map((m) => (
@@ -421,6 +458,8 @@ export default function AnalyzerLabClient() {
         >
           {saving ? "Saving…" : "Add test meal"}
         </button>
+        </>
+        )}
       </section>
 
       {/* ---------- FIXTURE LIST ---------- */}
@@ -512,6 +551,30 @@ export default function AnalyzerLabClient() {
               ))}
             </div>
           </div>
+          <div>
+            <span className="block text-[11px] text-white/50 mb-1">Input variant</span>
+            <div className="flex flex-wrap gap-2">
+              {VARIANTS.map((v) => {
+                const key = v.includeText ? "txt" : "img";
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggle(variants, key, setVariants)}
+                    className={`px-3 py-1.5 rounded-full text-xs ${
+                      variants.has(key) ? "bg-accent-brand text-white" : "bg-bg-elev text-white/55"
+                    }`}
+                    title={
+                      v.includeText
+                        ? "Send the photo together with its description"
+                        : "Send the photo alone, no text context"
+                    }
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="block">
             <span className="block text-[11px] text-white/50 mb-1">Repeats each</span>
             <input
@@ -573,33 +636,44 @@ export default function AnalyzerLabClient() {
         </div>
       </section>
 
-      {/* ---------- RESULTS ---------- */}
+      {/* ---------- HEADLINE SUMMARY (updates live during a run) ---------- */}
+      <AccuracyScorecard
+        models={Array.from(models)}
+        results={results}
+        modelLabel={modelLabel}
+        running={running}
+      />
+
+      {/* ---------- PER-DISH RESULTS ---------- */}
       {resultFixtures.length > 0 && (
         <section className="card p-4 space-y-5">
-          <h2 className="font-semibold">Report</h2>
+          <h2 className="font-semibold">Per-dish detail</h2>
           <p className="text-[11px] text-white/45 -mt-2">
-            Each cell shows the mean estimate and its jitter (CV%). Green ≤8% (tight),
-            amber ≤15%, red above. Where a dish has known macros, accuracy vs that
-            truth is scored too.
+            <strong className="text-white/70">mean</strong> is the average estimate ·{" "}
+            <strong className="text-white/70">±n%</strong> is jitter (how much the answer
+            wobbles across repeats) ·{" "}
+            <strong className="text-white/70">+/−n% vs truth</strong> is the error against
+            the known value, signed (+ = over-estimate).
           </p>
-
-          <AccuracyScorecard
-            models={Array.from(models)}
-            results={results}
-            modelLabel={modelLabel}
-          />
 
           {resultFixtures.map((f) => {
             const cells = Array.from(models)
-              .map((m) => results.get(cellKey(f.id, m)))
+              .flatMap((m) =>
+                VARIANTS.map((v) => results.get(cellKey(f.id, m, v.includeText))),
+              )
               .filter((c): c is CellResult => !!c);
             const spread = crossModelSpread(cells.map((c) => c.summary.perMacro.calories.mean));
             return (
               <div key={f.id} className="space-y-2">
                 <div className="flex items-center gap-2">
-                  {f.photo_thumb_base64 && (
+                  {(f.photo_thumb_base64 || f.source_url) && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={f.photo_thumb_base64} alt="" className="w-8 h-8 rounded object-cover" />
+                    <img
+                      src={f.photo_thumb_base64 || f.source_url!}
+                      alt=""
+                      loading="lazy"
+                      className="w-8 h-8 rounded object-cover bg-white/5"
+                    />
                   )}
                   <span className="text-sm font-medium">{f.label}</span>
                   {cells[0]?.expected && (
@@ -622,6 +696,7 @@ export default function AnalyzerLabClient() {
                     <thead className="text-white/40">
                       <tr className="text-left">
                         <th className="py-1 pr-2">Model</th>
+                        <th className="py-1 px-2">Input</th>
                         {MACRO_KEYS.map((k) => (
                           <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
                         ))}
@@ -630,13 +705,34 @@ export default function AnalyzerLabClient() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Ground truth as its own row, so every estimate below can
+                          be compared against it directly instead of by tooltip. */}
+                      {cells[0]?.expected && (
+                        <tr className="border-t border-border/50 text-emerald-400/90">
+                          <td className="py-1.5 pr-2 font-medium">truth</td>
+                          <td className="py-1.5 px-2 text-white/30">—</td>
+                          {MACRO_KEYS.map((k) => (
+                            <td key={k} className="py-1.5 px-2 text-center nums">
+                              {Math.round(cells[0].expected![k])}
+                            </td>
+                          ))}
+                          <td className="py-1.5 px-2 text-center text-white/30">—</td>
+                          <td className="py-1.5 px-2 text-center text-white/30">—</td>
+                        </tr>
+                      )}
                       {cells.map((c) => (
-                        <tr key={c.model} className="border-t border-border/50">
+                        <tr
+                          key={`${c.model}-${c.includeText}`}
+                          className="border-t border-border/50"
+                        >
                           <td className="py-1.5 pr-2 font-medium">
                             {modelLabel(c.model)}
                             {c.summary.failedRuns > 0 && (
                               <span className="text-red-400 text-[9px]"> · {c.summary.failedRuns} failed</span>
                             )}
+                          </td>
+                          <td className="py-1.5 px-2 text-[10px] text-white/45">
+                            {c.includeText ? "photo + text" : "photo only"}
                           </td>
                           {MACRO_KEYS.map((k) => {
                             const s = c.summary.perMacro[k];
@@ -647,13 +743,12 @@ export default function AnalyzerLabClient() {
                                 <div className={`text-[9px] ${cvClass(s.cv)}`}>±{Math.round(s.cv)}%</div>
                                 {acc && (
                                   <div
-                                    className={`text-[9px] ${
+                                    className={`text-[9px] font-medium ${
                                       acc.within ? "text-emerald-400" : "text-red-400"
                                     }`}
-                                    title={`truth ${Math.round(acc.expected)}`}
+                                    title={`predicted ${acc.predicted.toFixed(1)} vs truth ${acc.expected.toFixed(1)}`}
                                   >
-                                    {acc.error >= 0 ? "+" : ""}
-                                    {Math.round(acc.pctError)}% off
+                                    {signedPct(acc.error, acc.pctError)}
                                   </div>
                                 )}
                               </td>
@@ -680,85 +775,156 @@ export default function AnalyzerLabClient() {
 }
 
 /**
- * Headline accuracy per model, across every dish that has known macros.
- * This is the number that answers "can I trust the analyzer, and can I switch
- * to the cheaper/faster model?" — hidden entirely when nothing scored.
+ * Headline accuracy, per model × input variant, across every dish with known
+ * macros. This is the number that answers "can I trust the analyzer, does the
+ * description help, and can I drop to the faster model?" It renders live while
+ * a run is in flight so the picture fills in as cells land.
  */
 function AccuracyScorecard({
   models,
   results,
   modelLabel,
+  running,
 }: {
   models: string[];
   results: Map<string, CellResult>;
   modelLabel: (id: string) => string;
+  running: boolean;
 }) {
-  const perModel = models
-    .map((m) => {
-      const cells = Array.from(results.values()).filter(
-        (c) => c.model === m && c.accuracy,
-      );
-      if (cells.length === 0) return null;
-      const agg = aggregateAccuracy(cells.map((c) => c.accuracy!));
-      const meanLatency =
-        cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length;
-      return { model: m, agg, meanLatency };
-    })
+  const rows = models
+    .flatMap((m) =>
+      VARIANTS.map((v) => {
+        const cells = Array.from(results.values()).filter(
+          (c) => c.model === m && c.includeText === v.includeText && c.accuracy,
+        );
+        if (cells.length === 0) return null;
+        const agg = aggregateAccuracy(cells.map((c) => c.accuracy!));
+        return {
+          key: `${m}-${v.includeText}`,
+          model: m,
+          variant: v.label,
+          agg,
+          meanLatency:
+            cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length,
+          meanJitter:
+            cells.reduce((a, c) => a + c.summary.avgCv, 0) / cells.length,
+        };
+      }),
+    )
     .filter(Boolean) as {
+    key: string;
     model: string;
+    variant: string;
     agg: ReturnType<typeof aggregateAccuracy>;
     meanLatency: number;
+    meanJitter: number;
   }[];
 
-  if (perModel.length === 0) return null;
+  if (rows.length === 0) return null;
+
+  // Best = lowest average error. Highlighted so the winner is obvious at a glance.
+  const best = rows.reduce((a, b) => (b.agg.mape < a.agg.mape ? b : a));
 
   return (
-    <div className="rounded-xl border border-border p-3 space-y-2">
-      <div className="text-[11px] uppercase tracking-wider text-white/50">
-        Accuracy vs ground truth · {perModel[0].agg.n} dishes
+    <section className="rounded-2xl border border-accent-brand/40 bg-accent-brand/10 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold">
+          Accuracy vs truth
+          <span className="ml-2 text-[11px] font-normal text-white/55">
+            {rows[0].agg.n} dish{rows[0].agg.n === 1 ? "" : "es"} scored
+          </span>
+        </h2>
+        {running && (
+          <span className="text-[11px] text-accent-primary animate-pulse">updating…</span>
+        )}
       </div>
+
+      {/* Big headline tiles for the leading configuration. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="rounded-xl bg-black/30 p-3 text-center">
+          <div className="text-2xl font-extrabold tabular-nums">
+            {Math.round(best.agg.mape)}%
+          </div>
+          <div className="text-[10px] text-white/55 mt-0.5">avg error (best)</div>
+        </div>
+        <div className="rounded-xl bg-black/30 p-3 text-center">
+          <div className="text-2xl font-extrabold tabular-nums">
+            {Math.round(best.agg.perMacro.calories.withinRate * 100)}%
+          </div>
+          <div className="text-[10px] text-white/55 mt-0.5">kcal within 15%</div>
+        </div>
+        <div className="rounded-xl bg-black/30 p-3 text-center">
+          <div className="text-2xl font-extrabold tabular-nums">
+            {best.agg.perMacro.calories.bias >= 0 ? "+" : "−"}
+            {Math.abs(Math.round(best.agg.perMacro.calories.bias))}
+          </div>
+          <div className="text-[10px] text-white/55 mt-0.5">kcal bias</div>
+        </div>
+        <div className="rounded-xl bg-black/30 p-3 text-center">
+          <div className="text-sm font-bold leading-tight mt-1">
+            {modelLabel(best.model)}
+          </div>
+          <div className="text-[10px] text-white/55 mt-0.5">{best.variant}</div>
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead className="text-white/40">
+          <thead className="text-white/50">
             <tr className="text-left">
               <th className="py-1 pr-2">Model</th>
-              <th className="py-1 px-2 text-center">all-macro pass</th>
+              <th className="py-1 px-2">Input</th>
               <th className="py-1 px-2 text-center">avg error</th>
+              <th className="py-1 px-2 text-center">all-macro pass</th>
               {MACRO_KEYS.map((k) => (
-                <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]} within</th>
+                <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
               ))}
+              <th className="py-1 px-2 text-center">jitter</th>
               <th className="py-1 px-2 text-center">ms</th>
             </tr>
           </thead>
           <tbody>
-            {perModel.map(({ model, agg, meanLatency }) => (
-              <tr key={model} className="border-t border-border/50">
-                <td className="py-1.5 pr-2 font-medium">{modelLabel(model)}</td>
-                <td className="py-1.5 px-2 text-center font-semibold">
-                  {Math.round(agg.passRate * 100)}%
+            {rows.map((r) => (
+              <tr
+                key={r.key}
+                className={`border-t border-white/10 ${
+                  r.key === best.key ? "bg-white/10 font-medium" : ""
+                }`}
+              >
+                <td className="py-2 pr-2">{modelLabel(r.model)}</td>
+                <td className="py-2 px-2 text-white/60">{r.variant}</td>
+                <td className={`py-2 px-2 text-center font-bold ${cvClass(r.agg.mape)}`}>
+                  {Math.round(r.agg.mape)}%
                 </td>
-                <td className={`py-1.5 px-2 text-center ${cvClass(agg.mape)}`}>
-                  {Math.round(agg.mape)}%
+                <td className="py-2 px-2 text-center">
+                  {Math.round(r.agg.passRate * 100)}%
                 </td>
                 {MACRO_KEYS.map((k) => (
-                  <td key={k} className="py-1.5 px-2 text-center">
-                    <div>{Math.round(agg.perMacro[k].withinRate * 100)}%</div>
+                  <td key={k} className="py-2 px-2 text-center">
+                    <div>{Math.round(r.agg.perMacro[k].withinRate * 100)}%</div>
                     {/* Mean signed error — a consistent sign means the model
                         systematically over- or under-estimates that macro. */}
-                    <div className="text-[9px] text-white/35">
-                      {agg.perMacro[k].bias >= 0 ? "+" : ""}
-                      {Math.round(agg.perMacro[k].bias)} bias
+                    <div className="text-[9px] text-white/40">
+                      {r.agg.perMacro[k].bias >= 0 ? "+" : "−"}
+                      {Math.abs(Math.round(r.agg.perMacro[k].bias))} bias
                     </div>
                   </td>
                 ))}
-                <td className="py-1.5 px-2 text-center text-white/40">
-                  {Math.round(meanLatency)}
+                <td className={`py-2 px-2 text-center ${cvClass(r.meanJitter)}`}>
+                  {Math.round(r.meanJitter)}%
+                </td>
+                <td className="py-2 px-2 text-center text-white/45">
+                  {Math.round(r.meanLatency)}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
+      <p className="text-[10px] text-white/45">
+        avg error = mean absolute % off across all four macros · bias = mean signed
+        error (+ over-estimates, − under-estimates) · jitter = spread across repeats.
+      </p>
+    </section>
   );
 }

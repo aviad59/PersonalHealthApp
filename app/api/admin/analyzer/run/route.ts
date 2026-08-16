@@ -50,6 +50,10 @@ export async function POST(req: NextRequest) {
     typeof body?.systemText === "string" && body.systemText.trim()
       ? body.systemText
       : undefined;
+  // Variant switch: run the photo with or without its accompanying
+  // description, to measure how much the user's text note actually helps.
+  // Text-mode fixtures always keep their text — it IS the input.
+  const includeText = body?.includeText !== false;
   const lang = req.cookies.get("lang")?.value || "en";
 
   if (!fixtureId) {
@@ -88,7 +92,7 @@ export async function POST(req: NextRequest) {
     try {
       const result = await analyzeMeal({
         images,
-        hint: fx.mode === "photo" ? fx.input_text || "" : "",
+        hint: fx.mode === "photo" && includeText ? fx.input_text || "" : "",
         text: fx.mode === "text" ? fx.input_text || "" : "",
         lang,
         model,
@@ -148,6 +152,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     fixtureId,
     model: model || "default",
+    includeText,
     label: fx.label,
     attempts,
     summary,

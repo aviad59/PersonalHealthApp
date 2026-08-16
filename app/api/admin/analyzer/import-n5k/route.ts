@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
         photo_base64: null,
         photo_thumb_base64: null,
         photo_mime: "image/png",
-        input_text: null,
+        // The ingredient list stands in for a user's own note about the meal.
+        // It is only sent to the model on the "with description" variant, so
+        // the photo-only runs stay honest.
+        input_text: d.ingredients.length ? d.ingredients.join(", ") : null,
         expected_calories: Math.round(d.calories),
         expected_protein_g: Math.round(d.protein_g),
         expected_fat_g: Math.round(d.fat_g),
