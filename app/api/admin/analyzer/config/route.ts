@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId, isCurrentUserAdmin } from "@/lib/user-server";
-import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
+import {
+  mealVisionPrompt,
+  mealTextPrompt,
+  mealPerceivePrompt,
+  mealQuantifyPrompt,
+} from "@/lib/prompts";
 import {
   CLAUDE_MODEL,
   CLAUDE_OPUS_MODEL,
@@ -26,6 +31,8 @@ export async function GET(req: NextRequest) {
     defaultModel: DEFAULT_ANALYZE_MODEL,
     visionPrompt: mealVisionPrompt(lang),
     textPrompt: mealTextPrompt(lang),
+    perceivePrompt: mealPerceivePrompt(lang),
+    quantifyPrompt: mealQuantifyPrompt(lang),
     models: [
       { id: CLAUDE_FAST_MODEL, label: "Haiku 4.5 (fast)" },
       { id: CLAUDE_MODEL, label: "Sonnet 4.6 (default)" },

@@ -36,14 +36,33 @@ type Config = {
   defaultModel: string;
   visionPrompt: string;
   textPrompt: string;
+  perceivePrompt: string;
+  quantifyPrompt: string;
   models: { id: string; label: string }[];
 };
+
+type Pipeline = "single" | "two-stage";
+const PIPELINES: { id: Pipeline; label: string; hint: string }[] = [
+  {
+    id: "single",
+    label: "single call",
+    hint: "One call sees the food and computes macros together (production today).",
+  },
+  {
+    id: "two-stage",
+    label: "two-stage",
+    hint: "Stage 1 identifies items and portions; stage 2 turns that reading into macros.",
+  },
+];
 
 type CellResult = {
   fixtureId: string;
   model: string;
   /** false = photo only; true = photo + its description. */
   includeText: boolean;
+  pipeline: Pipeline;
+  /** Stage-1 reading from the first repeat (two-stage runs only). */
+  perception: { raw: string; parsed: any; latencyMs: number } | null;
   label: string;
   attempts: RunAttempt[];
   summary: CellSummary;
@@ -69,8 +88,12 @@ const MACRO_LABEL: Record<MacroKey, string> = {
 // keep this low to avoid a burst of model requests.
 const CELL_CONCURRENCY = 2;
 
-const cellKey = (fixtureId: string, model: string, includeText: boolean) =>
-  `${fixtureId}::${model}::${includeText ? "txt" : "img"}`;
+const cellKey = (
+  fixtureId: string,
+  model: string,
+  includeText: boolean,
+  pipeline: Pipeline,
+) => `${fixtureId}::${model}::${includeText ? "txt" : "img"}::${pipeline}`;
 
 /** Always-signed percentage, so over- vs under-estimate is never ambiguous. */
 function signedPct(error: number, pctError: number): string {
@@ -110,9 +133,17 @@ export default function AnalyzerLabClient() {
   const [runs, setRuns] = useState("5");
   // Which input variants to include in the run.
   const [variants, setVariants] = useState<Set<string>>(new Set(["img"]));
+  // Which pipelines to run — selecting both A/Bs them head to head.
+  const [pipelines, setPipelines] = useState<Set<Pipeline>>(new Set(["single"]));
   const [systemVision, setSystemVision] = useState("");
   const [systemText, setSystemText] = useState("");
-  const [promptTab, setPromptTab] = useState<"vision" | "text">("vision");
+  const [systemPerceive, setSystemPerceive] = useState("");
+  const [systemQuantify, setSystemQuantify] = useState("");
+  const [promptTab, setPromptTab] = useState<
+    "vision" | "text" | "perceive" | "quantify"
+  >("vision");
+  // Fixture list collapsed by default once a set has been imported.
+  const [listOpen, setListOpen] = useState(false);
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -137,6 +168,8 @@ export default function AnalyzerLabClient() {
         setConfig(c);
         setSystemVision(c.visionPrompt);
         setSystemText(c.textPrompt);
+        setSystemPerceive(c.perceivePrompt);
+        setSystemQuantify(c.quantifyPrompt);
         // Default to comparing the fast model against the production default.
         const fast = c.models[0]?.id;
         setModels(new Set([c.defaultModel, fast].filter(Boolean) as string[]));
@@ -260,12 +293,27 @@ export default function AnalyzerLabClient() {
     );
     if (variantList.length === 0) return setErr("Pick at least one input variant");
 
-    // Build the full grid of (fixture, model, variant) cells.
-    const cells: { fixtureId: string; model: string; includeText: boolean }[] = [];
+    const pipelineList = PIPELINES.filter((p) => pipelines.has(p.id));
+    if (pipelineList.length === 0) return setErr("Pick at least one pipeline");
+
+    // Full grid of (fixture × model × variant × pipeline) cells.
+    const cells: {
+      fixtureId: string;
+      model: string;
+      includeText: boolean;
+      pipeline: Pipeline;
+    }[] = [];
     for (const f of targetFixtures) {
       for (const m of modelList) {
         for (const v of variantList) {
-          cells.push({ fixtureId: f.id, model: m, includeText: v.includeText });
+          for (const p of pipelineList) {
+            cells.push({
+              fixtureId: f.id,
+              model: m,
+              includeText: v.includeText,
+              pipeline: p.id,
+            });
+          }
         }
       }
     }
@@ -287,18 +335,30 @@ export default function AnalyzerLabClient() {
               fixtureId: cell.fixtureId,
               model: cell.model,
               includeText: cell.includeText,
+              pipeline: cell.pipeline,
               runs: nRuns,
               systemVision:
                 config && systemVision !== config.visionPrompt ? systemVision : undefined,
               systemText:
                 config && systemText !== config.textPrompt ? systemText : undefined,
+              systemPerceive:
+                config && systemPerceive !== config.perceivePrompt
+                  ? systemPerceive
+                  : undefined,
+              systemQuantify:
+                config && systemQuantify !== config.quantifyPrompt
+                  ? systemQuantify
+                  : undefined,
             }),
           });
           if (r.ok) {
             const cr: CellResult = await r.json();
             setResults((prev) => {
               const n = new Map(prev);
-              n.set(cellKey(cell.fixtureId, cell.model, cell.includeText), cr);
+              n.set(
+                cellKey(cell.fixtureId, cell.model, cell.includeText, cell.pipeline),
+                cr,
+              );
               return n;
             });
           }
@@ -318,9 +378,22 @@ export default function AnalyzerLabClient() {
   }
 
   const promptEdited = useMemo(
-    () => !!config && (systemVision !== config.visionPrompt || systemText !== config.textPrompt),
-    [config, systemVision, systemText],
+    () =>
+      !!config &&
+      (systemVision !== config.visionPrompt ||
+        systemText !== config.textPrompt ||
+        systemPerceive !== config.perceivePrompt ||
+        systemQuantify !== config.quantifyPrompt),
+    [config, systemVision, systemText, systemPerceive, systemQuantify],
   );
+
+  const PROMPT_TABS = [
+    { id: "vision" as const, label: "Vision (single)", value: systemVision, set: setSystemVision },
+    { id: "text" as const, label: "Text", value: systemText, set: setSystemText },
+    { id: "perceive" as const, label: "① Perceive", value: systemPerceive, set: setSystemPerceive },
+    { id: "quantify" as const, label: "② Quantify", value: systemQuantify, set: setSystemQuantify },
+  ];
+  const activeTab = PROMPT_TABS.find((t) => t.id === promptTab) ?? PROMPT_TABS[0];
 
   const modelLabel = (id: string) => config?.models.find((m) => m.id === id)?.label || id;
 
@@ -464,21 +537,36 @@ export default function AnalyzerLabClient() {
 
       {/* ---------- FIXTURE LIST ---------- */}
       <section className="card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Test meals {fixtures ? `(${fixtures.length})` : ""}</h2>
-          {fixtures && fixtures.length > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={() => setListOpen((v) => !v)}
+            className="flex-1 flex items-center gap-2 text-left"
+          >
+            <span className="font-semibold">
+              Test meals {fixtures ? `(${fixtures.length})` : ""}
+            </span>
+            {selectedFixtures.size > 0 && (
+              <span className="text-[10px] text-accent-primary">
+                {selectedFixtures.size} selected
+              </span>
+            )}
+            <span className="text-white/40 text-sm ml-auto">{listOpen ? "▲" : "▼"}</span>
+          </button>
+          {listOpen && fixtures && fixtures.length > 0 && (
             <button
               onClick={() =>
                 setSelectedFixtures((s) =>
                   s.size === fixtures.length ? new Set() : new Set(fixtures.map((f) => f.id)),
                 )
               }
-              className="text-xs text-accent-brand"
+              className="text-xs text-accent-brand shrink-0"
             >
               {selectedFixtures.size === fixtures.length ? "Clear selection" : "Select all"}
             </button>
           )}
         </div>
+        {listOpen && (
+        <>
         <p className="text-[11px] text-white/40 -mt-1">
           Leave all unchecked to run every meal, or check specific ones.
         </p>
@@ -529,6 +617,8 @@ export default function AnalyzerLabClient() {
             ))}
           </ul>
         )}
+        </>
+        )}
       </section>
 
       {/* ---------- RUN CONFIG ---------- */}
@@ -547,6 +637,31 @@ export default function AnalyzerLabClient() {
                   }`}
                 >
                   {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="block text-[11px] text-white/50 mb-1">Pipeline</span>
+            <div className="flex flex-wrap gap-2">
+              {PIPELINES.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() =>
+                    setPipelines((s) => {
+                      const n = new Set(s);
+                      n.has(p.id) ? n.delete(p.id) : n.add(p.id);
+                      return n;
+                    })
+                  }
+                  title={p.hint}
+                  className={`px-3 py-1.5 rounded-full text-xs ${
+                    pipelines.has(p.id)
+                      ? "bg-accent-brand text-white"
+                      : "bg-bg-elev text-white/55"
+                  }`}
+                >
+                  {p.label}
                 </button>
               ))}
             </div>
@@ -599,16 +714,16 @@ export default function AnalyzerLabClient() {
 
         {/* Editable system prompts */}
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            {(["vision", "text"] as const).map((tabKey) => (
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            {PROMPT_TABS.map((tab) => (
               <button
-                key={tabKey}
-                onClick={() => setPromptTab(tabKey)}
+                key={tab.id}
+                onClick={() => setPromptTab(tab.id)}
                 className={`text-xs px-2.5 py-1 rounded-full ${
-                  promptTab === tabKey ? "bg-white/15 text-white" : "text-white/45"
+                  promptTab === tab.id ? "bg-white/15 text-white" : "text-white/45"
                 }`}
               >
-                {tabKey === "vision" ? "Vision prompt" : "Text prompt"}
+                {tab.label}
               </button>
             ))}
             {promptEdited && <span className="text-[10px] text-amber-400">edited</span>}
@@ -617,19 +732,28 @@ export default function AnalyzerLabClient() {
                 onClick={() => {
                   setSystemVision(config.visionPrompt);
                   setSystemText(config.textPrompt);
+                  setSystemPerceive(config.perceivePrompt);
+                  setSystemQuantify(config.quantifyPrompt);
                 }}
                 className="text-[10px] text-accent-brand ml-auto"
               >
-                Reset to production
+                Reset all to production
               </button>
             )}
           </div>
+          <p className="text-[10px] text-white/40 mb-1">
+            {promptTab === "perceive"
+              ? "Stage 1 of the two-stage pipeline — identifies items and portions, no macros."
+              : promptTab === "quantify"
+                ? "Stage 2 of the two-stage pipeline — turns stage 1's reading into macros."
+                : promptTab === "vision"
+                  ? "Used by the single-call pipeline for photos."
+                  : "Used for text-only meals."}
+          </p>
           <textarea
-            value={promptTab === "vision" ? systemVision : systemText}
-            onChange={(e) =>
-              promptTab === "vision" ? setSystemVision(e.target.value) : setSystemText(e.target.value)
-            }
-            rows={8}
+            value={activeTab.value}
+            onChange={(e) => activeTab.set(e.target.value)}
+            rows={10}
             spellCheck={false}
             className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] font-mono resize-y"
           />
@@ -659,7 +783,11 @@ export default function AnalyzerLabClient() {
           {resultFixtures.map((f) => {
             const cells = Array.from(models)
               .flatMap((m) =>
-                VARIANTS.map((v) => results.get(cellKey(f.id, m, v.includeText))),
+                VARIANTS.flatMap((v) =>
+                  PIPELINES.map((p) =>
+                    results.get(cellKey(f.id, m, v.includeText, p.id)),
+                  ),
+                ),
               )
               .filter((c): c is CellResult => !!c);
             const spread = crossModelSpread(cells.map((c) => c.summary.perMacro.calories.mean));
@@ -696,6 +824,7 @@ export default function AnalyzerLabClient() {
                     <thead className="text-white/40">
                       <tr className="text-left">
                         <th className="py-1 pr-2">Model</th>
+                        <th className="py-1 px-2">Pipeline</th>
                         <th className="py-1 px-2">Input</th>
                         {MACRO_KEYS.map((k) => (
                           <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
@@ -711,6 +840,7 @@ export default function AnalyzerLabClient() {
                         <tr className="border-t border-border/50 text-emerald-400/90">
                           <td className="py-1.5 pr-2 font-medium">truth</td>
                           <td className="py-1.5 px-2 text-white/30">—</td>
+                          <td className="py-1.5 px-2 text-white/30">—</td>
                           {MACRO_KEYS.map((k) => (
                             <td key={k} className="py-1.5 px-2 text-center nums">
                               {Math.round(cells[0].expected![k])}
@@ -722,13 +852,37 @@ export default function AnalyzerLabClient() {
                       )}
                       {cells.map((c) => (
                         <tr
-                          key={`${c.model}-${c.includeText}`}
+                          key={`${c.model}-${c.includeText}-${c.pipeline}`}
                           className="border-t border-border/50"
                         >
                           <td className="py-1.5 pr-2 font-medium">
                             {modelLabel(c.model)}
                             {c.summary.failedRuns > 0 && (
                               <span className="text-red-400 text-[9px]"> · {c.summary.failedRuns} failed</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2 text-[10px]">
+                            <span
+                              className={
+                                c.pipeline === "two-stage"
+                                  ? "text-accent-primary"
+                                  : "text-white/45"
+                              }
+                            >
+                              {c.pipeline === "two-stage" ? "two-stage" : "single"}
+                            </span>
+                            {c.perception?.parsed?.items && (
+                              // Surface what stage 1 actually saw — the whole point
+                              // of splitting the pipeline is being able to tell a
+                              // mis-identification from a mis-costing.
+                              <span
+                                className="block text-[9px] text-white/35 max-w-[9rem] truncate"
+                                title={c.perception.parsed.items
+                                  .map((i: any) => `${i.name} — ${i.portion}`)
+                                  .join("\n")}
+                              >
+                                saw {c.perception.parsed.items.length} items
+                              </span>
                             )}
                           </td>
                           <td className="py-1.5 px-2 text-[10px] text-white/45">
@@ -793,28 +947,36 @@ function AccuracyScorecard({
 }) {
   const rows = models
     .flatMap((m) =>
-      VARIANTS.map((v) => {
+      VARIANTS.flatMap((v) =>
+        PIPELINES.map((p) => {
         const cells = Array.from(results.values()).filter(
-          (c) => c.model === m && c.includeText === v.includeText && c.accuracy,
+          (c) =>
+            c.model === m &&
+            c.includeText === v.includeText &&
+            c.pipeline === p.id &&
+            c.accuracy,
         );
         if (cells.length === 0) return null;
         const agg = aggregateAccuracy(cells.map((c) => c.accuracy!));
         return {
-          key: `${m}-${v.includeText}`,
+          key: `${m}-${v.includeText}-${p.id}`,
           model: m,
           variant: v.label,
+          pipeline: p.label,
           agg,
           meanLatency:
             cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length,
           meanJitter:
             cells.reduce((a, c) => a + c.summary.avgCv, 0) / cells.length,
         };
-      }),
+        }),
+      ),
     )
     .filter(Boolean) as {
     key: string;
     model: string;
     variant: string;
+    pipeline: string;
     agg: ReturnType<typeof aggregateAccuracy>;
     meanLatency: number;
     meanJitter: number;
@@ -864,7 +1026,9 @@ function AccuracyScorecard({
           <div className="text-sm font-bold leading-tight mt-1">
             {modelLabel(best.model)}
           </div>
-          <div className="text-[10px] text-white/55 mt-0.5">{best.variant}</div>
+          <div className="text-[10px] text-white/55 mt-0.5">
+            {best.pipeline} · {best.variant}
+          </div>
         </div>
       </div>
 
@@ -873,6 +1037,7 @@ function AccuracyScorecard({
           <thead className="text-white/50">
             <tr className="text-left">
               <th className="py-1 pr-2">Model</th>
+              <th className="py-1 px-2">Pipeline</th>
               <th className="py-1 px-2">Input</th>
               <th className="py-1 px-2 text-center">avg error</th>
               <th className="py-1 px-2 text-center">all-macro pass</th>
@@ -892,6 +1057,13 @@ function AccuracyScorecard({
                 }`}
               >
                 <td className="py-2 pr-2">{modelLabel(r.model)}</td>
+                <td
+                  className={`py-2 px-2 ${
+                    r.pipeline === "two-stage" ? "text-accent-primary" : "text-white/60"
+                  }`}
+                >
+                  {r.pipeline}
+                </td>
                 <td className="py-2 px-2 text-white/60">{r.variant}</td>
                 <td className={`py-2 px-2 text-center font-bold ${cvClass(r.agg.mape)}`}>
                   {Math.round(r.agg.mape)}%

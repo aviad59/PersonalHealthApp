@@ -54,6 +54,16 @@ export async function POST(req: NextRequest) {
   // description, to measure how much the user's text note actually helps.
   // Text-mode fixtures always keep their text — it IS the input.
   const includeText = body?.includeText !== false;
+  const pipeline: "single" | "two-stage" =
+    body?.pipeline === "two-stage" ? "two-stage" : "single";
+  const systemPerceive =
+    typeof body?.systemPerceive === "string" && body.systemPerceive.trim()
+      ? body.systemPerceive
+      : undefined;
+  const systemQuantify =
+    typeof body?.systemQuantify === "string" && body.systemQuantify.trim()
+      ? body.systemQuantify
+      : undefined;
   const lang = req.cookies.get("lang")?.value || "en";
 
   if (!fixtureId) {
@@ -88,6 +98,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  let firstPerception:
+    | { raw: string; parsed: any; latencyMs: number }
+    | null = null;
+
   const doOne = async (): Promise<RunAttempt> => {
     try {
       const result = await analyzeMeal({
@@ -97,7 +111,19 @@ export async function POST(req: NextRequest) {
         lang,
         model,
         system: fx.mode === "photo" ? systemVision : systemText,
+        pipeline,
+        systemPerceive,
+        systemQuantify,
       });
+      // Keep the first run's stage-1 reading so the lab can show what the
+      // perceive pass actually saw.
+      if (result.perception && !firstPerception) {
+        firstPerception = {
+          raw: result.perception.raw,
+          parsed: result.perception.parsed,
+          latencyMs: result.perception.latencyMs,
+        };
+      }
       if (result.parseError || !result.analysis?.total) {
         return {
           predicted: null,
@@ -153,6 +179,8 @@ export async function POST(req: NextRequest) {
     fixtureId,
     model: model || "default",
     includeText,
+    pipeline,
+    perception: firstPerception,
     label: fx.label,
     attempts,
     summary,

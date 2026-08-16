@@ -6,7 +6,12 @@
 // production — so everything funnels through analyzeMeal() here.
 
 import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
-import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
+import {
+  mealVisionPrompt,
+  mealTextPrompt,
+  mealPerceivePrompt,
+  mealQuantifyPrompt,
+} from "@/lib/prompts";
 
 export type BaseMeal = {
   description?: string;
@@ -35,6 +40,25 @@ export type AnalyzeInput = {
   model?: string;
   /** Override the system prompt. Defaults to the mode's production prompt. */
   system?: string;
+  /**
+   * "single" (default, production): one call that sees the food and costs it.
+   * "two-stage": a perceive pass (identify items/portions) feeding a quantify
+   * pass (turn that reading into macros). Photo mode only — a text-only meal
+   * has nothing to perceive.
+   */
+  pipeline?: "single" | "two-stage";
+  /** Stage-1 prompt override (two-stage only). */
+  systemPerceive?: string;
+  /** Stage-2 prompt override (two-stage only). */
+  systemQuantify?: string;
+};
+
+/** What stage 1 saw, surfaced so the lab can show where an error came from. */
+export type PerceptionResult = {
+  raw: string;
+  parsed: any;
+  usage: { input_tokens: number; output_tokens: number };
+  latencyMs: number;
 };
 
 export type AnalyzeResult = {
@@ -49,6 +73,9 @@ export type AnalyzeResult = {
   latencyMs: number;
   /** Set when the reply couldn't be parsed into JSON; analysis is null then. */
   parseError?: string;
+  pipeline: "single" | "two-stage";
+  /** Stage-1 output, present only for two-stage runs. */
+  perception?: PerceptionResult;
 };
 
 /** The model production uses for meal analysis today. */
@@ -64,6 +91,11 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
   const lang = input.lang || "en";
   const model = input.model || DEFAULT_ANALYZE_MODEL;
   const hasPhoto = !!input.images && input.images.length > 0;
+
+  // Two-stage only makes sense when there's an image to perceive.
+  if (input.pipeline === "two-stage" && hasPhoto) {
+    return analyzeTwoStage(input, lang, model);
+  }
   const text = (input.text || "").trim();
   const hint = (input.hint || "").trim();
   const base = input.base ?? null;
@@ -132,5 +164,151 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
     parseError = e?.message ?? "Could not parse JSON from model output";
   }
 
-  return { analysis, raw, mode, model, system, usage, latencyMs, parseError };
+  return {
+    analysis,
+    raw,
+    mode,
+    model,
+    system,
+    usage,
+    latencyMs,
+    parseError,
+    pipeline: "single",
+  };
+}
+
+/** Build the base64 image content blocks shared by both stages. */
+function imageBlocks(images: AnalyzeImage[]) {
+  return images.map((img) => ({
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: img.mediaType,
+      data: img.base64,
+    },
+  }));
+}
+
+/**
+ * Two-stage analysis: perceive → quantify.
+ *
+ * Stage 1 answers "what is on this plate and how much of it", with no
+ * nutrition math. Stage 2 receives that structured reading (plus the photo, so
+ * it can sanity-check portions) and produces the macros. Splitting the work
+ * means a wrong answer is attributable: either the food was mis-identified or
+ * it was mis-costed.
+ */
+async function analyzeTwoStage(
+  input: AnalyzeInput,
+  lang: string,
+  model: string,
+): Promise<AnalyzeResult> {
+  const images = input.images!;
+  const hint = (input.hint || "").trim();
+  const text = (input.text || "").trim();
+  const context = [hint, text].filter(Boolean).join(". ");
+
+  const perceiveSystem = input.systemPerceive ?? mealPerceivePrompt(lang);
+  const quantifySystem = input.systemQuantify ?? mealQuantifyPrompt(lang);
+
+  // ---- Stage 1: perceive ----
+  const t1 = Date.now();
+  const perceiveResp = await anthropic().messages.create({
+    model,
+    max_tokens: 1000,
+    system: perceiveSystem,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...imageBlocks(images),
+          {
+            type: "text",
+            text: context
+              ? `User context: ${context}\n\nIdentify the food and portions. Return the JSON.`
+              : "Identify the food and portions. Return the JSON.",
+          },
+        ],
+      },
+    ],
+  });
+  const perceiveLatency = Date.now() - t1;
+  const perceiveRaw = perceiveResp.content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("\n");
+
+  let perceived: any = null;
+  try {
+    perceived = extractJson<any>(perceiveRaw);
+  } catch {
+    // Stage 2 can still work from the raw text, so don't abort here.
+  }
+
+  const perception: PerceptionResult = {
+    raw: perceiveRaw,
+    parsed: perceived,
+    usage: {
+      input_tokens: perceiveResp.usage?.input_tokens ?? 0,
+      output_tokens: perceiveResp.usage?.output_tokens ?? 0,
+    },
+    latencyMs: perceiveLatency,
+  };
+
+  // ---- Stage 2: quantify ----
+  const reading = perceived ? JSON.stringify(perceived, null, 2) : perceiveRaw;
+  const t2 = Date.now();
+  const quantifyResp = await anthropic().messages.create({
+    model,
+    max_tokens: 800,
+    system: quantifySystem,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...imageBlocks(images),
+          {
+            type: "text",
+            text: `Food-identification specialist's reading of this plate:\n${reading}\n\n${
+              context ? `User context: ${context}\n\n` : ""
+            }Convert this into macros and return the JSON.`,
+          },
+        ],
+      },
+    ],
+  });
+  const quantifyLatency = Date.now() - t2;
+
+  const raw = quantifyResp.content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("\n");
+
+  let analysis: any = null;
+  let parseError: string | undefined;
+  try {
+    analysis = extractJson<any>(raw);
+  } catch (e: any) {
+    parseError = e?.message ?? "Could not parse JSON from model output";
+  }
+
+  return {
+    analysis,
+    raw,
+    mode: "photo",
+    model,
+    system: quantifySystem,
+    // Cost and latency are the sum of both stages — that's what the pipeline
+    // actually costs, and what the lab should compare against single-call.
+    usage: {
+      input_tokens:
+        perception.usage.input_tokens + (quantifyResp.usage?.input_tokens ?? 0),
+      output_tokens:
+        perception.usage.output_tokens + (quantifyResp.usage?.output_tokens ?? 0),
+    },
+    latencyMs: perceiveLatency + quantifyLatency,
+    parseError,
+    pipeline: "two-stage",
+    perception,
+  };
 }

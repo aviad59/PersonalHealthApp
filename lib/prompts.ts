@@ -42,6 +42,23 @@ function mealJsonSchema(lang: string): string {
 }`;
 }
 
+// Shared reference values, so every analyzer path (single-call and two-stage)
+// costs food from the same table rather than from guesswork.
+const MACRO_ANCHORS = `CALORIE ANCHORS — derive from these known values, not guesswork:
+- Chicken breast 150 g cooked: 165 kcal, 31 g protein, 3.6 g fat, 0 g carbs
+- Chicken thigh 150 g cooked: 220 kcal, 28 g protein, 11 g fat, 0 g carbs
+- White rice 150 g cooked: 195 kcal, 4 g protein, 0.3 g fat, 43 g carbs
+- Whole-wheat bread slice 30 g: 75 kcal, 3 g protein, 1 g fat, 14 g carbs
+- Pita 60 g: 165 kcal, 5 g protein, 1 g fat, 34 g carbs
+- Egg (large): 78 kcal, 6 g protein, 5 g fat, 0.6 g carbs
+- Olive oil 1 tbsp (14 g): 120 kcal, 0 g protein, 14 g fat, 0 g carbs
+- Cottage cheese 100 g: 98 kcal, 11 g protein, 4 g fat, 3 g carbs
+- Salmon fillet 150 g: 280 kcal, 34 g protein, 15 g fat, 0 g carbs
+- Tuna canned in water 85 g: 100 kcal, 22 g protein, 1 g fat, 0 g carbs
+- Mixed salad (no dressing) 150 g: 30 kcal, 2 g protein, 0 g fat, 5 g carbs
+- Hummus 100 g: 166 kcal, 8 g protein, 10 g fat, 14 g carbs
+- Lentils cooked 150 g: 174 kcal, 13 g protein, 1 g fat, 30 g carbs`;
+
 export function mealVisionPrompt(lang = "en"): string {
   return `You are a precise nutrition analyst with deep knowledge of food composition databases (USDA, Israeli Ministry of Health).
 Analyze the food in this photo and return ONE JSON object immediately — no prose, no fences.
@@ -105,6 +122,78 @@ RULES:
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
 - Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. If your total is outside this, recheck portions.
 - Set confidence "low" if the description is vague (e.g. "some food"), "medium" for named dishes without portions, "high" for named items with stated portions.
+
+${CLARIFYING_QUESTION_GUIDANCE}
+
+${mealLangInstruction(lang)}
+
+JSON schema (output only this, nothing else):
+${mealJsonSchema(lang)}`;
+}
+
+// ---------------------------------------------------------------
+// Two-stage analyzer pipeline
+//
+// Instead of one call that must simultaneously SEE the food and DO the
+// nutrition math, the work is split:
+//   Stage 1 (perceive)  — identify items, portions, preparation. No macros.
+//   Stage 2 (quantify)  — turn that structured reading into macros.
+// Each stage gets one job, which is easier to prompt for and to debug: when
+// a result is wrong you can see whether the model mis-saw the food or
+// mis-costed it.
+// ---------------------------------------------------------------
+
+export function mealPerceivePrompt(lang = "en"): string {
+  return `You are a food-identification specialist. Your ONLY job is to describe WHAT is in the photo and HOW MUCH of it. You do NOT estimate calories or macros — a second specialist does that from your reading.
+
+Be exhaustive and concrete about the things a nutrition estimate depends on:
+- Every distinct food item, including sauces, dressings, oil sheen, butter, toppings and garnishes.
+- Preparation method for each item (raw / grilled / fried / roasted / breaded / boiled / sauteed), since this drives added fat.
+- Portion size in grams or common units. Use the container and any visible reference (fork, plate rim, standard 26cm dinner plate ≈ the width of the plate) to anchor scale.
+- Note visible fat: pooled oil, glossy coating, visible marbling, cheese melt, cream.
+
+PORTION ESTIMATION:
+- Judge the depth of food, not just its footprint — a flat smear and a mound differ several-fold.
+- Anchor to the container: a standard dinner plate is ~26cm, a cereal bowl holds ~400ml, a mug ~250ml.
+- Err toward the portion you can actually see. Do not inflate.
+
+If a "user context" note is supplied, treat it as authoritative for identifying items — but still judge portions from the image.
+
+${mealLangInstruction(lang)}
+
+Return STRICT JSON only, no prose:
+{
+  "dish": "short natural description of the whole plate",
+  "container": "plate | bowl | tray | package | other",
+  "scale_reference": "what you used to judge size",
+  "items": [
+    {
+      "name": "food item",
+      "preparation": "raw | grilled | fried | roasted | breaded | boiled | sauteed | baked | other",
+      "portion": "estimate with unit, e.g. '150 g' or '1 cup'",
+      "visible_fat": "none | light | moderate | heavy",
+      "notes": "anything affecting the estimate (sauce, skin, breading)"
+    }
+  ],
+  "confidence": "low | medium | high"
+}`;
+}
+
+export function mealQuantifyPrompt(lang = "en"): string {
+  return `You are a precise nutrition analyst. A food-identification specialist has already read the photo and given you a structured description of the plate. The photo is included as well so you can sanity-check portions — but trust the specialist's item identification.
+
+Your job: convert that reading into per-item and total macros.
+
+${MACRO_ANCHORS}
+
+RULES:
+- Use the specialist's items and portions. If a portion looks clearly impossible against the photo, adjust it and say so in "notes".
+- Account for the stated preparation: frying/sauteing adds ~5-10 g fat per serving; breading adds carbs and fat; roasting with oil adds ~5 g fat.
+- Account for "visible_fat": moderate/heavy means added oil, cheese or cream is present — include it.
+- Derive macros from the anchors above or standard nutritional data — do NOT invent numbers.
+- Total kcal must equal the sum of all items (no rounding errors >5 kcal).
+- Cross-check: 4 kcal/g protein, 4 kcal/g carbs, 9 kcal/g fat. Your total kcal must be consistent with your macro grams.
+- Carry the specialist's confidence forward unless the photo makes you more or less certain.
 
 ${CLARIFYING_QUESTION_GUIDANCE}
 
