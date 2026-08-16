@@ -159,6 +159,9 @@ const COLUMN_ADDS: { sql: string }[] = [
   // the DB for no benefit. Fetched server-side at run time.
   { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN source_url TEXT" },
   { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN source TEXT" },
+  // Ground-truth total mass. Per the Nutrition5k paper portion estimation is
+  // where nearly all nutrition error originates, so it is scored on its own.
+  { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN expected_mass_g REAL" },
 ];
 
 // Indexes that reference columns added by COLUMN_ADDS — they MUST run after
@@ -330,6 +333,20 @@ const PER_USER_TABLES = `
     created_by TEXT,
     source TEXT,                              -- e.g. 'nutrition5k' | null (manual)
     source_url TEXT,                          -- public image URL, fetched at run time
+    expected_mass_g REAL,                     -- ground-truth total mass, scored separately
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Saved analyzer lab runs, so a report survives a reload and successive
+  -- prompt/model changes can be compared over time rather than lost.
+  CREATE TABLE IF NOT EXISTS analyzer_runs (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    note TEXT,
+    config_json TEXT NOT NULL,                -- models/variants/pipelines, prompt-edited flags
+    rows_json TEXT NOT NULL,                  -- the per-config scorecard rows
+    cells_json TEXT NOT NULL,                 -- per-dish cells (no raw model text)
+    created_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
@@ -1364,6 +1381,8 @@ export type AnalyzerFixture = {
   expected_protein_g: number;
   expected_fat_g: number;
   expected_carbs_g: number;
+  /** Ground-truth total mass in grams, when the source provides it. */
+  expected_mass_g: number | null;
   notes: string | null;
   /** Origin of the fixture, e.g. 'nutrition5k'. Null for manually added ones. */
   source: string | null;
@@ -1388,6 +1407,7 @@ export type NewAnalyzerFixture = {
   expected_protein_g: number;
   expected_fat_g: number;
   expected_carbs_g: number;
+  expected_mass_g?: number | null;
   notes?: string | null;
   created_by?: string | null;
   source?: string | null;
@@ -1400,7 +1420,7 @@ export async function listAnalyzerFixtures(): Promise<AnalyzerFixtureListItem[]>
   const r = await db.execute(
     `SELECT id, label, mode, photo_thumb_base64, photo_mime, input_text,
             expected_calories, expected_protein_g, expected_fat_g, expected_carbs_g,
-            notes, source, source_url, created_at
+            expected_mass_g, notes, source, source_url, created_at
        FROM analyzer_fixtures
        ORDER BY created_at DESC`,
   );
@@ -1423,6 +1443,7 @@ function rowToFixtureCommon(row: any): AnalyzerFixtureListItem {
     photo_mime: row.photo_mime ?? null,
     input_text: row.input_text ?? null,
     ...expected,
+    expected_mass_g: row.expected_mass_g == null ? null : Number(row.expected_mass_g),
     notes: row.notes ?? null,
     source: row.source ?? null,
     source_url: row.source_url ?? null,
@@ -1474,8 +1495,8 @@ export async function createAnalyzerFixture(
     sql: `INSERT INTO analyzer_fixtures
             (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
              input_text, expected_calories, expected_protein_g, expected_fat_g,
-             expected_carbs_g, notes, created_by, source, source_url, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+             expected_carbs_g, expected_mass_g, notes, created_by, source, source_url, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [
       id,
       f.label,
@@ -1488,6 +1509,7 @@ export async function createAnalyzerFixture(
       f.expected_protein_g,
       f.expected_fat_g,
       f.expected_carbs_g,
+      f.expected_mass_g ?? null,
       f.notes ?? null,
       f.created_by ?? null,
       f.source ?? null,
@@ -1509,8 +1531,8 @@ export async function createAnalyzerFixtures(
       sql: `INSERT INTO analyzer_fixtures
               (id, label, mode, photo_base64, photo_thumb_base64, photo_mime,
                input_text, expected_calories, expected_protein_g, expected_fat_g,
-               expected_carbs_g, notes, created_by, source, source_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+               expected_carbs_g, expected_mass_g, notes, created_by, source, source_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       args: [
         ids[i],
         f.label,
@@ -1523,6 +1545,7 @@ export async function createAnalyzerFixtures(
         f.expected_protein_g,
         f.expected_fat_g,
         f.expected_carbs_g,
+        f.expected_mass_g ?? null,
         f.notes ?? null,
         f.created_by ?? null,
         f.source ?? null,
@@ -1550,4 +1573,120 @@ export async function deleteAnalyzerFixture(id: string): Promise<void> {
     sql: `DELETE FROM analyzer_fixtures WHERE id = ?`,
     args: [id],
   });
+}
+
+// ---------------------------------------------------------------
+// Saved analyzer lab runs
+// ---------------------------------------------------------------
+
+export type AnalyzerRunSummary = {
+  id: string;
+  label: string;
+  note: string | null;
+  config: any;
+  rows: any[];
+  created_at: string;
+};
+
+export type AnalyzerRun = AnalyzerRunSummary & { cells: any[] };
+
+/** Persist one lab run. `cells` excludes raw model text to keep rows small. */
+export async function saveAnalyzerRun(r: {
+  label: string;
+  note?: string | null;
+  config: any;
+  rows: any[];
+  cells: any[];
+  created_by?: string | null;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO analyzer_runs
+            (id, label, note, config_json, rows_json, cells_json, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    args: [
+      id,
+      r.label,
+      r.note ?? null,
+      JSON.stringify(r.config ?? {}),
+      JSON.stringify(r.rows ?? []),
+      JSON.stringify(r.cells ?? []),
+      r.created_by ?? null,
+    ],
+  });
+  return id;
+}
+
+/** Past runs, newest first — without the heavy per-dish cells. */
+export async function listAnalyzerRuns(limit = 30): Promise<AnalyzerRunSummary[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT id, label, note, config_json, rows_json, created_at
+            FROM analyzer_runs ORDER BY created_at DESC LIMIT ?`,
+    args: [limit],
+  });
+  return res.rows.map((row: any) => ({
+    id: row.id,
+    label: row.label,
+    note: row.note ?? null,
+    config: safeJson(row.config_json, {}),
+    rows: safeJson(row.rows_json, []),
+    created_at: row.created_at,
+  }));
+}
+
+export async function getAnalyzerRun(id: string): Promise<AnalyzerRun | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT * FROM analyzer_runs WHERE id = ?`,
+    args: [id],
+  });
+  const row: any = res.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    label: row.label,
+    note: row.note ?? null,
+    config: safeJson(row.config_json, {}),
+    rows: safeJson(row.rows_json, []),
+    cells: safeJson(row.cells_json, []),
+    created_at: row.created_at,
+  };
+}
+
+export async function deleteAnalyzerRun(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({ sql: `DELETE FROM analyzer_runs WHERE id = ?`, args: [id] });
+}
+
+function safeJson<T>(s: any, fallback: T): T {
+  try {
+    return JSON.parse(String(s)) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Fill in ground-truth mass for dataset fixtures imported before the column
+ *  existed. Keyed by source_url so it is safe to re-run. */
+export async function backfillAnalyzerMass(
+  massByUrl: Map<string, number>,
+): Promise<number> {
+  if (massByUrl.size === 0) return 0;
+  const db = await getDb();
+  const res = await db.execute(
+    `SELECT id, source_url FROM analyzer_fixtures
+      WHERE source_url IS NOT NULL AND expected_mass_g IS NULL`,
+  );
+  const stmts = res.rows
+    .map((row: any) => ({ id: row.id, mass: massByUrl.get(String(row.source_url)) }))
+    .filter((r) => typeof r.mass === "number")
+    .map((r) => ({
+      sql: `UPDATE analyzer_fixtures SET expected_mass_g = ? WHERE id = ?`,
+      args: [r.mass as number, r.id] as any[],
+    }));
+  if (stmts.length === 0) return 0;
+  await db.batch(stmts, "write");
+  return stmts.length;
 }

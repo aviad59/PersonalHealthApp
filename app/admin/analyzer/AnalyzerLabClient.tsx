@@ -29,6 +29,7 @@ type FixtureListItem = {
   expected_protein_g: number;
   expected_fat_g: number;
   expected_carbs_g: number;
+  expected_mass_g: number | null;
   created_at: string;
 };
 
@@ -68,6 +69,29 @@ type CellResult = {
   summary: CellSummary;
   accuracy: CellAccuracy | null;
   expected: Record<MacroKey, number> | null;
+  expectedMass: number | null;
+};
+
+/** A persisted report, so results survive a reload and can be compared later. */
+type SavedRun = {
+  id: string;
+  label: string;
+  note: string | null;
+  config: any;
+  rows: ScoreRow[];
+  cells?: any[];
+  created_at: string;
+};
+
+/** One line of the accuracy scorecard: a model x pipeline x input config. */
+type ScoreRow = {
+  key: string;
+  model: string;
+  modelLabel: string;
+  variant: string;
+  pipeline: string;
+  agg: ReturnType<typeof aggregateAccuracy>;
+  meanLatency: number;
 };
 
 /** Which input variants to run — answers "does the description help?". */
@@ -130,7 +154,6 @@ export default function AnalyzerLabClient() {
 
   // --- run config ---
   const [models, setModels] = useState<Set<string>>(new Set());
-  const [runs, setRuns] = useState("5");
   // Which input variants to include in the run.
   const [variants, setVariants] = useState<Set<string>>(new Set(["img"]));
   // Which pipelines to run — selecting both A/Bs them head to head.
@@ -148,6 +171,20 @@ export default function AnalyzerLabClient() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<Map<string, CellResult>>(new Map());
+  // --- saved run history ---
+  const [runsList, setRunsList] = useState<SavedRun[] | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [viewingRun, setViewingRun] = useState<SavedRun | null>(null);
+  const [savingRun, setSavingRun] = useState(false);
+
+  async function loadRuns() {
+    try {
+      const r = await fetch("/api/admin/analyzer/runs", { cache: "no-store" });
+      if (r.ok) setRunsList((await r.json()).runs);
+    } catch {
+      /* history is non-critical */
+    }
+  }
 
   async function loadFixtures() {
     try {
@@ -178,6 +215,7 @@ export default function AnalyzerLabClient() {
       }
     })();
     loadFixtures();
+    loadRuns();
   }, []);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -253,6 +291,27 @@ export default function AnalyzerLabClient() {
     }
   }
 
+  /** Re-sync ground truth for dishes imported before mass was tracked. */
+  async function backfillTruth() {
+    setErr(null);
+    setImporting(true);
+    try {
+      const r = await fetch("/api/admin/analyzer/import-n5k", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ backfillOnly: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "backfill failed");
+      setImportMsg(`Ground truth re-synced for ${j.backfilled} dishes.`);
+      await loadFixtures();
+    } catch (e: any) {
+      setErr(e?.message || "backfill failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function deleteFixture(id: string) {
     if (!confirm("Delete this test meal?")) return;
     try {
@@ -286,7 +345,6 @@ export default function AnalyzerLabClient() {
       ? fixtures.filter((f) => selectedFixtures.has(f.id))
       : fixtures;
     const modelList = Array.from(models);
-    const nRuns = Math.max(1, Math.min(8, Number(runs) || 5));
 
     const variantList = VARIANTS.filter((v) =>
       variants.has(v.includeText ? "txt" : "img"),
@@ -336,7 +394,6 @@ export default function AnalyzerLabClient() {
               model: cell.model,
               includeText: cell.includeText,
               pipeline: cell.pipeline,
-              runs: nRuns,
               systemVision:
                 config && systemVision !== config.visionPrompt ? systemVision : undefined,
               systemText:
@@ -375,6 +432,65 @@ export default function AnalyzerLabClient() {
       Array.from({ length: Math.min(CELL_CONCURRENCY, cells.length) }, () => worker()),
     );
     setRunning(false);
+
+    // Persist the finished report so it survives a reload and can be compared
+    // against later prompt/model changes.
+    setResults((finalResults) => {
+      void saveRun(finalResults, {
+        models: modelList,
+        variants: variantList.map((v) => v.label),
+        pipelines: pipelineList.map((p) => p.label),
+        dishes: targetFixtures.length,
+        promptEdited,
+      });
+      return finalResults;
+    });
+  }
+
+  /** Save a completed run's scorecard + per-dish cells to the history. */
+  async function saveRun(finalResults: Map<string, CellResult>, config: any) {
+    const rows = buildScoreRows(Array.from(models), finalResults, modelLabel);
+    if (rows.length === 0) return;
+    setSavingRun(true);
+    try {
+      // Strip raw model text — only what the report renders is kept.
+      const cells = Array.from(finalResults.values()).map((c) => ({
+        fixtureId: c.fixtureId,
+        label: c.label,
+        model: c.model,
+        includeText: c.includeText,
+        pipeline: c.pipeline,
+        accuracy: c.accuracy,
+        expected: c.expected,
+        expectedMass: c.expectedMass,
+        meanLatencyMs: c.summary.meanLatencyMs,
+      }));
+      const stamp = new Date().toLocaleString();
+      await fetch("/api/admin/analyzer/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          label: `${config.dishes} dishes · ${stamp}`,
+          config,
+          rows,
+          cells,
+        }),
+      });
+      await loadRuns();
+    } catch {
+      /* saving history must never break the run */
+    } finally {
+      setSavingRun(false);
+    }
+  }
+
+  async function deleteRun(id: string) {
+    if (!confirm("Delete this saved report?")) return;
+    await fetch(`/api/admin/analyzer/runs?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
+    if (viewingRun?.id === id) setViewingRun(null);
+    await loadRuns();
   }
 
   const promptEdited = useMemo(
@@ -396,6 +512,12 @@ export default function AnalyzerLabClient() {
   const activeTab = PROMPT_TABS.find((t) => t.id === promptTab) ?? PROMPT_TABS[0];
 
   const modelLabel = (id: string) => config?.models.find((m) => m.id === id)?.label || id;
+
+  const scoreRows = useMemo(
+    () => buildScoreRows(Array.from(models), results, modelLabel),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [models, results, config],
+  );
 
   // Fixtures that have at least one result, in list order.
   const resultFixtures = useMemo(() => {
@@ -449,6 +571,14 @@ export default function AnalyzerLabClient() {
             className="rounded-full bg-accent-brand px-5 py-2 text-sm font-semibold disabled:opacity-40"
           >
             {importing ? "Importing…" : "Import dishes"}
+          </button>
+          <button
+            onClick={backfillTruth}
+            disabled={importing}
+            title="Fill in ground-truth mass for dishes imported before mass was tracked"
+            className="rounded-full border border-border px-4 py-2 text-xs text-white/70 disabled:opacity-40"
+          >
+            Re-sync truth
           </button>
           {importMsg && <span className="text-[11px] text-emerald-400">{importMsg}</span>}
         </div>
@@ -690,17 +820,6 @@ export default function AnalyzerLabClient() {
               })}
             </div>
           </div>
-          <label className="block">
-            <span className="block text-[11px] text-white/50 mb-1">Repeats each</span>
-            <input
-              type="number"
-              min={1}
-              max={8}
-              value={runs}
-              onChange={(e) => setRuns(e.target.value)}
-              className="w-20 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
-            />
-          </label>
           <button
             onClick={run}
             disabled={running}
@@ -760,13 +879,83 @@ export default function AnalyzerLabClient() {
         </div>
       </section>
 
+      {/* ---------- SAVED REPORTS ---------- */}
+      <section className="card p-4 space-y-3">
+        <button
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="w-full flex items-center gap-2 text-left"
+        >
+          <span className="font-semibold">
+            Saved reports {runsList ? `(${runsList.length})` : ""}
+          </span>
+          {savingRun && <span className="text-[10px] text-accent-primary">saving…</span>}
+          {viewingRun && (
+            <span className="text-[10px] text-amber-400">viewing a saved report</span>
+          )}
+          <span className="text-white/40 text-sm ml-auto">{historyOpen ? "▲" : "▼"}</span>
+        </button>
+        {historyOpen && (
+          <>
+            <p className="text-[11px] text-white/40 -mt-1">
+              Every run is saved automatically, so reports are never lost and prompt
+              changes can be compared over time.
+            </p>
+            {viewingRun && (
+              <button
+                onClick={() => setViewingRun(null)}
+                className="text-xs text-accent-brand"
+              >
+                ← Back to the latest run
+              </button>
+            )}
+            {!runsList?.length ? (
+              <p className="text-sm text-white/40">No saved reports yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {runsList.map((r) => {
+                  const best = r.rows?.length
+                    ? r.rows.reduce((a, b) => (b.agg.mape < a.agg.mape ? b : a))
+                    : null;
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex items-center gap-3 rounded-lg bg-bg-elev p-2 text-[12px]"
+                    >
+                      <button
+                        onClick={() => setViewingRun(r)}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <div className="truncate font-medium">{r.label}</div>
+                        <div className="text-[10px] text-white/45">
+                          {best
+                            ? `best ${Math.round(best.agg.mape)}% · ${best.modelLabel} · ${best.pipeline} · ${best.variant}`
+                            : "no scored dishes"}
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => deleteRun(r.id)}
+                        className="text-[11px] text-red-400/80 shrink-0"
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
       {/* ---------- HEADLINE SUMMARY (updates live during a run) ---------- */}
-      <AccuracyScorecard
-        models={Array.from(models)}
-        results={results}
-        modelLabel={modelLabel}
-        running={running}
-      />
+      {viewingRun ? (
+        <AccuracyScorecard
+          rows={viewingRun.rows}
+          title={`Saved · ${viewingRun.label}`}
+        />
+      ) : (
+        <AccuracyScorecard rows={scoreRows} running={running} />
+      )}
 
       {/* ---------- PER-DISH RESULTS ---------- */}
       {resultFixtures.length > 0 && (
@@ -829,7 +1018,7 @@ export default function AnalyzerLabClient() {
                         {MACRO_KEYS.map((k) => (
                           <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
                         ))}
-                        <th className="py-1 px-2 text-center">jitter</th>
+                        <th className="py-1 px-2 text-center">mass</th>
                         <th className="py-1 px-2 text-center">ms</th>
                       </tr>
                     </thead>
@@ -846,7 +1035,9 @@ export default function AnalyzerLabClient() {
                               {Math.round(cells[0].expected![k])}
                             </td>
                           ))}
-                          <td className="py-1.5 px-2 text-center text-white/30">—</td>
+                          <td className="py-1.5 px-2 text-center nums">
+                            {cells[0].expectedMass ? `${Math.round(cells[0].expectedMass)} g` : "—"}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-white/30">—</td>
                         </tr>
                       )}
@@ -914,8 +1105,23 @@ export default function AnalyzerLabClient() {
                               </td>
                             );
                           })}
-                          <td className={`py-1.5 px-2 text-center font-semibold ${cvClass(c.summary.avgCv)}`}>
-                            {Math.round(c.summary.avgCv)}%
+                          <td className="py-1.5 px-2 text-center">
+                            {c.accuracy?.mass ? (
+                              <>
+                                <div className="nums">
+                                  {Math.round(c.accuracy.mass.predicted)} g
+                                </div>
+                                <div
+                                  className={`text-[9px] font-medium ${
+                                    c.accuracy.mass.within ? "text-emerald-400" : "text-red-400"
+                                  }`}
+                                >
+                                  {signedPct(c.accuracy.mass.error, c.accuracy.mass.pctError)}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-white/25">—</span>
+                            )}
                           </td>
                           <td className="py-1.5 px-2 text-center text-white/40">
                             {Math.round(c.summary.meanLatencyMs)}
@@ -940,54 +1146,50 @@ export default function AnalyzerLabClient() {
  * description help, and can I drop to the faster model?" It renders live while
  * a run is in flight so the picture fills in as cells land.
  */
-function AccuracyScorecard({
-  models,
-  results,
-  modelLabel,
-  running,
-}: {
-  models: string[];
-  results: Map<string, CellResult>;
-  modelLabel: (id: string) => string;
-  running: boolean;
-}) {
-  const rows = models
+/** Build scorecard rows from live cells. Shared by the live view and the
+ *  persisted run history so both render identically. */
+function buildScoreRows(
+  models: string[],
+  results: Map<string, CellResult>,
+  modelLabel: (id: string) => string,
+): ScoreRow[] {
+  return models
     .flatMap((m) =>
       VARIANTS.flatMap((v) =>
         PIPELINES.map((p) => {
-        const cells = Array.from(results.values()).filter(
-          (c) =>
-            c.model === m &&
-            c.includeText === v.includeText &&
-            c.pipeline === p.id &&
-            c.accuracy,
-        );
-        if (cells.length === 0) return null;
-        const agg = aggregateAccuracy(cells.map((c) => c.accuracy!));
-        return {
-          key: `${m}-${v.includeText}-${p.id}`,
-          model: m,
-          variant: v.label,
-          pipeline: p.label,
-          agg,
-          meanLatency:
-            cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length,
-          meanJitter:
-            cells.reduce((a, c) => a + c.summary.avgCv, 0) / cells.length,
-        };
+          const cells = Array.from(results.values()).filter(
+            (c) =>
+              c.model === m &&
+              c.includeText === v.includeText &&
+              c.pipeline === p.id &&
+              c.accuracy,
+          );
+          if (cells.length === 0) return null;
+          return {
+            key: `${m}-${v.includeText}-${p.id}`,
+            model: m,
+            modelLabel: modelLabel(m),
+            variant: v.label,
+            pipeline: p.label,
+            agg: aggregateAccuracy(cells.map((c) => c.accuracy!)),
+            meanLatency:
+              cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length,
+          };
         }),
       ),
     )
-    .filter(Boolean) as {
-    key: string;
-    model: string;
-    variant: string;
-    pipeline: string;
-    agg: ReturnType<typeof aggregateAccuracy>;
-    meanLatency: number;
-    meanJitter: number;
-  }[];
+    .filter(Boolean) as ScoreRow[];
+}
 
+function AccuracyScorecard({
+  rows,
+  running,
+  title,
+}: {
+  rows: ScoreRow[];
+  running?: boolean;
+  title?: string;
+}) {
   if (rows.length === 0) return null;
 
   // Best = lowest average error. Highlighted so the winner is obvious at a glance.
@@ -997,7 +1199,7 @@ function AccuracyScorecard({
     <section className="rounded-2xl border border-accent-brand/40 bg-accent-brand/10 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold">
-          Accuracy vs truth
+          {title ?? "Accuracy vs truth"}
           <span className="ml-2 text-[11px] font-normal text-white/55">
             {rows[0].agg.n} dish{rows[0].agg.n === 1 ? "" : "es"} scored
           </span>
@@ -1030,7 +1232,7 @@ function AccuracyScorecard({
         </div>
         <div className="rounded-xl bg-black/30 p-3 text-center">
           <div className="text-sm font-bold leading-tight mt-1">
-            {modelLabel(best.model)}
+            {best.modelLabel}
           </div>
           <div className="text-[10px] text-white/55 mt-0.5">
             {best.pipeline} · {best.variant}
@@ -1050,7 +1252,7 @@ function AccuracyScorecard({
               {MACRO_KEYS.map((k) => (
                 <th key={k} className="py-1 px-2 text-center">{MACRO_LABEL[k]}</th>
               ))}
-              <th className="py-1 px-2 text-center">jitter</th>
+              <th className="py-1 px-2 text-center">mass</th>
               <th className="py-1 px-2 text-center">ms</th>
             </tr>
           </thead>
@@ -1062,7 +1264,7 @@ function AccuracyScorecard({
                   r.key === best.key ? "bg-white/10 font-medium" : ""
                 }`}
               >
-                <td className="py-2 pr-2">{modelLabel(r.model)}</td>
+                <td className="py-2 pr-2">{r.modelLabel}</td>
                 <td
                   className={`py-2 px-2 ${
                     r.pipeline === "two-stage" ? "text-accent-primary" : "text-white/60"
@@ -1088,8 +1290,20 @@ function AccuracyScorecard({
                     </div>
                   </td>
                 ))}
-                <td className={`py-2 px-2 text-center ${cvClass(r.meanJitter)}`}>
-                  {Math.round(r.meanJitter)}%
+                <td className="py-2 px-2 text-center">
+                  {r.agg.mass ? (
+                    <>
+                      <div className={cvClass(r.agg.mass.mape)}>
+                        {Math.round(r.agg.mass.mape)}%
+                      </div>
+                      <div className="text-[9px] text-white/40">
+                        {r.agg.mass.bias >= 0 ? "+" : "−"}
+                        {Math.abs(Math.round(r.agg.mass.bias))} g bias
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-white/25">—</span>
+                  )}
                 </td>
                 <td className="py-2 px-2 text-center text-white/45">
                   {Math.round(r.meanLatency)}
@@ -1100,8 +1314,10 @@ function AccuracyScorecard({
         </table>
       </div>
       <p className="text-[10px] text-white/45">
-        avg error = mean absolute % off across all four macros · bias = mean signed
-        error (+ over-estimates, − under-estimates) · jitter = spread across repeats.
+        avg error = mean absolute % off across the scored macros (macros too small
+        for a percentage to be meaningful are skipped) · bias = mean signed error
+        (+ over-estimates, − under-estimates) · mass = portion-size error, the
+        Nutrition5k paper's key diagnostic.
       </p>
     </section>
   );

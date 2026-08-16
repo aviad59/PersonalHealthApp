@@ -3,6 +3,7 @@ import { getCurrentUserId, isCurrentUserAdmin } from "@/lib/user-server";
 import {
   createAnalyzerFixtures,
   existingAnalyzerSourceUrls,
+  backfillAnalyzerMass,
   type NewAnalyzerFixture,
 } from "@/lib/db";
 import {
@@ -49,6 +50,16 @@ export async function POST(req: NextRequest) {
       existingAnalyzerSourceUrls(SOURCE),
     ]);
 
+    // Fixtures imported before ground-truth mass was tracked get it filled in
+    // here, so mass scoring works without re-importing the whole set.
+    const massByUrl = new Map<string, number>();
+    for (const [id, d] of truth) massByUrl.set(dishImageUrl(id), Math.round(d.mass_g));
+    const backfilled = await backfillAnalyzerMass(massByUrl);
+
+    if (body?.backfillOnly) {
+      return NextResponse.json({ imported: 0, backfilled, remaining: 0, split });
+    }
+
     // Only dishes that have both ground truth and an overhead photo, skipping
     // anything already imported so repeat imports extend the set.
     const candidates = ids.filter((id) => {
@@ -81,14 +92,17 @@ export async function POST(req: NextRequest) {
         photo_base64: null,
         photo_thumb_base64: null,
         photo_mime: "image/png",
-        // The ingredient list stands in for a user's own note about the meal.
-        // It is only sent to the model on the "with description" variant, so
-        // the photo-only runs stay honest.
-        input_text: d.ingredients.length ? d.ingredients.join(", ") : null,
+        // A short, user-style note (the top few ingredients) rather than the
+        // full 15+ item list, which no user would ever type and which pushes
+        // the model to enumerate and cost trace ingredients.
+        input_text: d.ingredients.length
+          ? d.ingredients.slice(0, 3).join(", ")
+          : null,
         expected_calories: Math.round(d.calories),
         expected_protein_g: Math.round(d.protein_g),
         expected_fat_g: Math.round(d.fat_g),
         expected_carbs_g: Math.round(d.carbs_g),
+        expected_mass_g: Math.round(d.mass_g),
         notes: `Nutrition5k ${split} · ${id} · ${Math.round(d.mass_g)}g${
           d.ingredients.length ? ` · ${d.ingredients.join(", ")}` : ""
         }`,
@@ -102,6 +116,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       imported: rows.length,
+      backfilled,
       split,
       remaining: candidates.length - rows.length,
     });

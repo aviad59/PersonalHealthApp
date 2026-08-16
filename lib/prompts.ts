@@ -88,7 +88,9 @@ ${MACRO_ANCHORS}
 
 RULES:
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
-- Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. Recheck if outside this range.
+- Judge each portion on its own merits. Do NOT assume a plate must add up to a "normal meal" size:
+  a small side, a single component, or a light snack is often 80–250 kcal and that is a correct answer.
+  Never revise an estimate upward just because the total looks low.
 - Set confidence "high" when portions are clearly visible or labeled, "medium" for visible food with estimated portions, "low" when food is obscured or ambiguous.
 
 ${CLARIFYING_QUESTION_GUIDANCE}
@@ -110,7 +112,9 @@ RULES:
 - Default to 150 g portions when not stated; apply size words ("small"=0.7×, "large"=1.3×, "double"=2×, "half"=0.5×).
 - Derive each item's macros from the anchors above or standard nutritional data — do NOT invent numbers.
 - Total kcal must equal the sum of all items (no rounding errors >5 kcal).
-- Sanity check: light snack 150–400 kcal, normal meal 400–900 kcal, large meal up to 1200 kcal. If your total is outside this, recheck portions.
+- Judge each portion on its own merits. Do NOT assume a plate must add up to a "normal meal" size:
+  a small side, a single component, or a light snack is often 80–250 kcal and that is a correct answer.
+  Never revise an estimate upward just because the total looks low.
 - Set confidence "low" if the description is vague (e.g. "some food"), "medium" for named dishes without portions, "high" for named items with stated portions.
 
 ${CLARIFYING_QUESTION_GUIDANCE}

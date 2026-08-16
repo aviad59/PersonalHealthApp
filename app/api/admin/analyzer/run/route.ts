@@ -15,9 +15,33 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Repeats per request are capped so a single call stays comfortably under the
-// serverless time limit. The client fans out across fixtures/models itself.
-const MAX_RUNS = 8;
+// One model call per (fixture, model, variant, pipeline) cell. Repeats were
+// only useful when there was no ground truth and jitter was the sole signal;
+// with real truth they multiply cost for little added information.
+const RUNS_PER_CELL = 1;
+
+/**
+ * A realistic stand-in for a user's note. Dataset fixtures store the full
+ * ingredient list (often 15+ entries down to salt and parsley); feeding that
+ * verbatim invites the model to enumerate and cost every trace item, which is
+ * nothing like what a user actually types. Keep the first few items.
+ */
+function shortDescription(text: string | null): string {
+  if (!text) return "";
+  const parts = text.split(",").map((s) => s.trim()).filter(Boolean);
+  return parts.slice(0, 3).join(", ");
+}
+
+/** Total grams implied by an analysis, parsed from each item's portion. */
+function massFromAnalysis(a: any): number {
+  if (!a || !Array.isArray(a.items)) return 0;
+  let total = 0;
+  for (const it of a.items) {
+    const m = String(it?.portion ?? "").match(/([\d.]+)\s*g/i);
+    if (m) total += Number(m[1]) || 0;
+  }
+  return total;
+}
 
 async function guard(): Promise<boolean> {
   const userId = await getCurrentUserId();
@@ -41,7 +65,7 @@ export async function POST(req: NextRequest) {
     typeof body?.model === "string" && body.model.trim()
       ? body.model.trim()
       : undefined;
-  const runs = Math.max(1, Math.min(MAX_RUNS, Number(body?.runs) || 3));
+  const runs = RUNS_PER_CELL;
   const systemVision =
     typeof body?.systemVision === "string" && body.systemVision.trim()
       ? body.systemVision
@@ -98,6 +122,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const predictedMasses: number[] = [];
   let firstPerception:
     | { raw: string; parsed: any; latencyMs: number }
     | null = null;
@@ -106,7 +131,10 @@ export async function POST(req: NextRequest) {
     try {
       const result = await analyzeMeal({
         images,
-        hint: fx.mode === "photo" && includeText ? fx.input_text || "" : "",
+        hint:
+          fx.mode === "photo" && includeText
+            ? shortDescription(fx.input_text)
+            : "",
         text: fx.mode === "text" ? fx.input_text || "" : "",
         lang,
         model,
@@ -139,6 +167,8 @@ export async function POST(req: NextRequest) {
         fat_g: Number(t.fat_g) || 0,
         carbs_g: Number(t.carbs_g) || 0,
       };
+      const massG = massFromAnalysis(result.analysis);
+      if (massG > 0) predictedMasses.push(massG);
       return {
         predicted,
         confidence: result.analysis.confidence ?? null,
@@ -170,9 +200,15 @@ export async function POST(req: NextRequest) {
     fat_g: fx.expected_fat_g,
     carbs_g: fx.expected_carbs_g,
   };
+  const meanMass = predictedMasses.length
+    ? predictedMasses.reduce((a, b) => a + b, 0) / predictedMasses.length
+    : 0;
   const accuracy =
     fx.has_ground_truth && summary.okRuns > 0
-      ? scoreAgainstTruth(summary, expected, withinPct)
+      ? scoreAgainstTruth(summary, expected, withinPct, {
+          predicted: meanMass,
+          expected: fx.expected_mass_g ?? 0,
+        })
       : null;
 
   return NextResponse.json({
@@ -186,5 +222,6 @@ export async function POST(req: NextRequest) {
     summary,
     accuracy,
     expected: fx.has_ground_truth ? expected : null,
+    expectedMass: fx.expected_mass_g ?? null,
   });
 }

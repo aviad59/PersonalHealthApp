@@ -96,6 +96,17 @@ export function summarizeCell(attempts: RunAttempt[]): CellSummary {
 // on-target, so the harness and the app judge closeness the same way.
 export const DEFAULT_WITHIN_PCT = 15;
 
+// Percent error explodes when the true value is near zero: a dish with 0.2 g of
+// fat scores a 100% miss for being 0.2 g out, which is nutritionally
+// meaningless but dominates any average. Macros below these floors are still
+// reported but excluded from scoring.
+export const MACRO_FLOORS: Record<MacroKey, number> = {
+  calories: 40, // kcal
+  protein_g: 4, // g
+  fat_g: 4,
+  carbs_g: 4,
+};
+
 export type MacroAccuracy = {
   predicted: number;
   expected: number;
@@ -104,14 +115,30 @@ export type MacroAccuracy = {
   /** Absolute percent error vs the expected value. */
   pctError: number;
   within: boolean;
+  /** False when the true value is too small for percent error to be meaningful. */
+  scored: boolean;
+};
+
+export type MassAccuracy = {
+  predicted: number;
+  expected: number;
+  error: number;
+  pctError: number;
+  within: boolean;
 };
 
 export type CellAccuracy = {
   perMacro: Record<MacroKey, MacroAccuracy>;
-  /** Mean absolute percent error across the four macros. */
+  /** Mean absolute percent error across the SCORED macros. */
   mape: number;
-  /** True when every macro lands inside the tolerance. */
+  /** True when every scored macro lands inside the tolerance. */
   passed: boolean;
+  /**
+   * Total-mass accuracy — the Nutrition5k paper's key diagnostic. Comparing it
+   * against the calorie error separates "saw the wrong portion" from "used the
+   * wrong nutrient density".
+   */
+  mass: MassAccuracy | null;
 };
 
 /**
@@ -123,6 +150,7 @@ export function scoreAgainstTruth(
   summary: CellSummary,
   expected: Macros,
   withinPct: number = DEFAULT_WITHIN_PCT,
+  mass?: { predicted: number; expected: number } | null,
 ): CellAccuracy {
   const perMacro = {} as Record<MacroKey, MacroAccuracy>;
   for (const key of MACRO_KEYS) {
@@ -135,11 +163,33 @@ export function scoreAgainstTruth(
       error: p - e,
       pctError,
       within: pctError <= withinPct,
+      scored: e >= MACRO_FLOORS[key],
     };
   }
-  const mape =
-    MACRO_KEYS.reduce((a, k) => a + perMacro[k].pctError, 0) / MACRO_KEYS.length;
-  return { perMacro, mape, passed: MACRO_KEYS.every((k) => perMacro[k].within) };
+
+  const scoredKeys = MACRO_KEYS.filter((k) => perMacro[k].scored);
+  const mape = scoredKeys.length
+    ? scoredKeys.reduce((a, k) => a + perMacro[k].pctError, 0) / scoredKeys.length
+    : 0;
+
+  let massAcc: MassAccuracy | null = null;
+  if (mass && mass.expected > 0 && mass.predicted > 0) {
+    const pctError = (Math.abs(mass.predicted - mass.expected) / mass.expected) * 100;
+    massAcc = {
+      predicted: mass.predicted,
+      expected: mass.expected,
+      error: mass.predicted - mass.expected,
+      pctError,
+      within: pctError <= withinPct,
+    };
+  }
+
+  return {
+    perMacro,
+    mape,
+    passed: scoredKeys.length > 0 && scoredKeys.every((k) => perMacro[k].within),
+    mass: massAcc,
+  };
 }
 
 /** Roll several scored cells (one model across many dishes) into headline numbers. */
@@ -147,28 +197,46 @@ export function aggregateAccuracy(cells: CellAccuracy[]): {
   n: number;
   passRate: number;
   mape: number;
-  perMacro: Record<MacroKey, { withinRate: number; mape: number; bias: number }>;
+  perMacro: Record<
+    MacroKey,
+    { withinRate: number; mape: number; bias: number; n: number }
+  >;
+  mass: { withinRate: number; mape: number; bias: number; n: number } | null;
 } {
   const n = cells.length;
   const perMacro = {} as Record<
     MacroKey,
-    { withinRate: number; mape: number; bias: number }
+    { withinRate: number; mape: number; bias: number; n: number }
   >;
   for (const key of MACRO_KEYS) {
-    const cs = cells.map((c) => c.perMacro[key]);
+    // Only macros above the floor count — see MACRO_FLOORS.
+    const cs = cells.map((c) => c.perMacro[key]).filter((c) => c.scored);
     const d = cs.length || 1;
     perMacro[key] = {
       withinRate: cs.filter((c) => c.within).length / d,
       mape: cs.reduce((a, c) => a + c.pctError, 0) / d,
       // Mean signed error — reveals a systematic over/under-estimate.
       bias: cs.reduce((a, c) => a + c.error, 0) / d,
+      n: cs.length,
     };
   }
+
+  const masses = cells.map((c) => c.mass).filter((m): m is MassAccuracy => !!m);
+  const md = masses.length || 1;
+
   return {
     n,
     passRate: n ? cells.filter((c) => c.passed).length / n : 0,
     mape: n ? cells.reduce((a, c) => a + c.mape, 0) / n : 0,
     perMacro,
+    mass: masses.length
+      ? {
+          withinRate: masses.filter((m) => m.within).length / md,
+          mape: masses.reduce((a, m) => a + m.pctError, 0) / md,
+          bias: masses.reduce((a, m) => a + m.error, 0) / md,
+          n: masses.length,
+        }
+      : null,
   };
 }
 
