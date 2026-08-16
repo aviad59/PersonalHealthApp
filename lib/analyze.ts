@@ -5,7 +5,7 @@
 // If the lab called a copy of this logic, its results wouldn't transfer to
 // production — so everything funnels through analyzeMeal() here.
 
-import { anthropic, CLAUDE_MODEL, extractJson } from "@/lib/anthropic";
+import { anthropic, CLAUDE_MODEL, extractJson, extractJsonLoose } from "@/lib/anthropic";
 import {
   mealVisionPrompt,
   mealTextPrompt,
@@ -73,10 +73,21 @@ export type AnalyzeResult = {
   latencyMs: number;
   /** Set when the reply couldn't be parsed into JSON; analysis is null then. */
   parseError?: string;
+  /** True when the reply was clipped and had to be salvaged — the item list
+   *  may be incomplete, so the totals could under-count. */
+  truncated?: boolean;
   pipeline: "single" | "two-stage";
   /** Stage-1 output, present only for two-stage runs. */
   perception?: PerceptionResult;
 };
+
+// A meal with many items — and especially one described in Hebrew, which costs
+// roughly 2-3x more tokens per character — can outrun a small ceiling. The
+// reply is then cut off mid-array, before the trailing "total" is emitted, and
+// the whole analysis fails. Output tokens are billed only for what is actually
+// generated, so a generous ceiling costs nothing on ordinary meals.
+const MAX_TOKENS_ANALYZE = 3000;
+const MAX_TOKENS_PERCEIVE = 2000;
 
 /** The model production uses for meal analysis today. */
 export const DEFAULT_ANALYZE_MODEL = CLAUDE_MODEL;
@@ -140,7 +151,7 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
   const startedAt = Date.now();
   const resp = await anthropic().messages.create({
     model,
-    max_tokens: 800,
+    max_tokens: MAX_TOKENS_ANALYZE,
     system,
     messages: [{ role: "user", content }],
   });
@@ -158,8 +169,11 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
 
   let analysis: any = null;
   let parseError: string | undefined;
+  let truncated = false;
   try {
-    analysis = extractJson<any>(raw);
+    const { value, truncated: wasTruncated } = extractJsonLoose<any>(raw);
+    truncated = wasTruncated;
+    analysis = normalizeAnalysis(value, wasTruncated);
   } catch (e: any) {
     parseError = e?.message ?? "Could not parse JSON from model output";
   }
@@ -173,9 +187,79 @@ export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
     usage,
     latencyMs,
     parseError,
+    truncated,
     pipeline: "single",
   };
 }
+
+/**
+ * Make a parsed analysis safe to use.
+ *
+ * The reply lists `items` before `total`, so a clipped reply loses the total
+ * entirely — recompute it from the items. A recomputed total is also simply
+ * more trustworthy: models routinely emit totals that don't match their own
+ * rows.
+ *
+ * If the reply WAS clipped the item list may itself be incomplete, which would
+ * silently under-count the meal. That is worse than an error, so such a result
+ * is marked low-confidence and carries a visible note.
+ */
+function normalizeAnalysis(d: any, truncated: boolean): any {
+  if (!d || typeof d !== "object") throw new Error("model returned no JSON object");
+  const items = Array.isArray(d.items) ? d.items : [];
+  if (items.length === 0) throw new Error("model returned no food items");
+
+  const num = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const summed = items.reduce(
+    (a: any, it: any) => ({
+      calories: a.calories + num(it.calories),
+      protein_g: a.protein_g + num(it.protein_g),
+      fat_g: a.fat_g + num(it.fat_g),
+      carbs_g: a.carbs_g + num(it.carbs_g),
+    }),
+    { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
+  );
+
+  const t = d.total;
+  const totalOk =
+    t && Number.isFinite(Number(t.calories)) && Number(t.calories) > 0;
+  // Trust the model's total only when it actually agrees with its own items.
+  const agrees =
+    totalOk && Math.abs(Number(t.calories) - summed.calories) <= 5;
+
+  const total = agrees
+    ? {
+        calories: Math.round(num(t.calories)),
+        protein_g: Math.round(num(t.protein_g)),
+        fat_g: Math.round(num(t.fat_g)),
+        carbs_g: Math.round(num(t.carbs_g)),
+      }
+    : {
+        calories: Math.round(summed.calories),
+        protein_g: Math.round(summed.protein_g),
+        fat_g: Math.round(summed.fat_g),
+        carbs_g: Math.round(summed.carbs_g),
+      };
+
+  const notes = [d.notes, truncated ? PARTIAL_READ_NOTE : ""]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    description: d.description ?? "",
+    items,
+    total,
+    confidence: truncated ? "low" : (d.confidence ?? "medium"),
+    notes,
+    clarifying_question: d.clarifying_question ?? "",
+  };
+}
+
+const PARTIAL_READ_NOTE =
+  "⚠︎ The reply was cut short, so some items may be missing — please check the list and totals before saving.";
 
 /**
  * Convert stage 2's per-100g densities + masses into the app's Analysis shape,
@@ -271,7 +355,7 @@ async function analyzeTwoStage(
   const t1 = Date.now();
   const perceiveResp = await anthropic().messages.create({
     model,
-    max_tokens: 1000,
+    max_tokens: MAX_TOKENS_PERCEIVE,
     system: perceiveSystem,
     messages: [
       {
@@ -316,7 +400,7 @@ async function analyzeTwoStage(
   const t2 = Date.now();
   const quantifyResp = await anthropic().messages.create({
     model,
-    max_tokens: 800,
+    max_tokens: MAX_TOKENS_ANALYZE,
     system: quantifySystem,
     messages: [
       {
