@@ -57,8 +57,16 @@ export async function POST(req: NextRequest) {
       throw new Error(result.parseError || "analyze_failed");
     }
 
-    // Preserve the original response shape exactly.
-    return NextResponse.json({ analysis: result.analysis, mode: result.mode });
+    // Timing and model are returned so the real cost of an analysis is
+    // visible in the app itself. The lab's latency figures are measured with
+    // several cells in flight at once, so they overstate what a single
+    // production call takes — this is the number that actually matters.
+    return NextResponse.json({
+      analysis: result.analysis,
+      mode: result.mode,
+      model: result.model,
+      latencyMs: result.latencyMs,
+    });
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message ?? "analyze_failed" },

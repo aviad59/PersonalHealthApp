@@ -12,6 +12,9 @@ import { t, Lang } from "@/lib/i18n";
 const ANALYZE_TASK = "meal-analyze";
 
 type Analysis = {
+  /** Round-trip time of the model call, attached by the analyze route. */
+  _latencyMs?: number;
+  _model?: string;
   description: string;
   items: {
     name: string;
@@ -379,7 +382,7 @@ export default function LogMealPage() {
     }
     const done = bg.consume(ANALYZE_TASK);
     if (done?.status === "done" && done.result?.analysis) {
-      applyAnalysis(done.result.analysis as Analysis);
+      applyAnalysis(done.result.analysis as Analysis, done.result as any);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -420,7 +423,7 @@ export default function LogMealPage() {
     if (wasAnalyzing.current && !analyzing) {
       const done = bg.consume(ANALYZE_TASK);
       if (done?.status === "done" && done.result?.analysis) {
-        applyAnalysis(done.result.analysis as Analysis);
+        applyAnalysis(done.result.analysis as Analysis, done.result as any);
       } else if (done?.status === "error") {
         setErr(done.error ?? "analyze failed");
       }
@@ -734,8 +737,10 @@ export default function LogMealPage() {
     clearPhoto();
   }
 
-  function applyAnalysis(a: Analysis) {
-    setAnalysis(a);
+  /** `meta` carries the route's timing/model, attached so the result card can
+   *  show what the call actually cost. */
+  function applyAnalysis(a: Analysis, meta?: { latencyMs?: number; model?: string }) {
+    setAnalysis({ ...a, _latencyMs: meta?.latencyMs, _model: meta?.model });
     setEditing({
       calories: a.total.calories,
       protein_g: a.total.protein_g,
@@ -767,7 +772,11 @@ export default function LogMealPage() {
     // back. `analyzing` is derived from the provider's pending state.
     bg.run(
       ANALYZE_TASK,
-      () => safeFetchJson<{ analysis: Analysis }>("/api/meals/analyze", { method: "POST", body: fd }),
+      () =>
+        safeFetchJson<{ analysis: Analysis; latencyMs?: number; model?: string }>(
+          "/api/meals/analyze",
+          { method: "POST", body: fd },
+        ),
       { label: t(lang, "meal_analyzing") },
     ).catch((e: any) => setErr(e?.message ?? "analyze failed"));
   }
@@ -1584,9 +1593,19 @@ export default function LogMealPage() {
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold">{analysis.description}</h3>
-              <span className="text-[10px] uppercase tracking-wider text-white/50 bg-bg-elev border border-border rounded-full px-2 py-0.5">
-                {analysis.confidence} {t(lang, "meal_confidence")}
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {analysis._latencyMs ? (
+                  <span
+                    className="text-[10px] tabular-nums text-white/35"
+                    title={analysis._model ?? ""}
+                  >
+                    {(analysis._latencyMs / 1000).toFixed(1)}s
+                  </span>
+                ) : null}
+                <span className="text-[10px] uppercase tracking-wider text-white/50 bg-bg-elev border border-border rounded-full px-2 py-0.5">
+                  {analysis.confidence} {t(lang, "meal_confidence")}
+                </span>
+              </div>
             </div>
             {analysis.items?.length > 0 && (
               <ul className="text-[13px] text-white/70 space-y-1 mt-2">
