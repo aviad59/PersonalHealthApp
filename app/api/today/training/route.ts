@@ -95,6 +95,7 @@ export async function GET() {
   const workoutScore = computeWorkoutScore({
     recentWorkouts: recentHevy,
     weeklyWorkoutTarget: profile?.weekly_workout_target,
+    focus: (profile?.training_focus as any) ?? "upper",
   });
 
   // Weekly summary — count distinct workout dates Sunday→today, compare

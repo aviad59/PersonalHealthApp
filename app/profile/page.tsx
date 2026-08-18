@@ -421,6 +421,29 @@ export default function ProfilePage() {
             {t(lang, "profile_workouts_note")}
           </div>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-white/60 mb-1.5">
+            {t(lang, "profile_training_focus")}
+          </label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["upper", "balanced", "lower"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => update("training_focus", f)}
+                className={`rounded-lg py-2 text-xs font-medium ${
+                  (profile.training_focus ?? "upper") === f
+                    ? "bg-accent-brand text-white"
+                    : "bg-bg-elev border border-border text-white/70"
+                }`}
+              >
+                {t(lang, `focus_${f}` as any)}
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-white/40 mt-1.5">
+            {t(lang, "profile_training_focus_note")}
+          </div>
+        </div>
       </section>
 
       <section className="card p-5 space-y-3">
@@ -747,6 +770,7 @@ function toPayload(p: any) {
     activity_level: p.activity_level,
     goal_mode: p.goal_mode ?? "recomp",
     weekly_workout_target: Number.isFinite(wkt) && wkt > 0 ? wkt : null,
+    training_focus: p.training_focus ?? "upper",
   };
 }
 

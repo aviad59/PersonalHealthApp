@@ -28,13 +28,16 @@ type WorkoutScore = {
   components: {
     consistency: ScoreComponent;
     progression: ScoreComponent;
-    balance: ScoreComponent;
+    focus: ScoreComponent;
     intensity: ScoreComponent;
   };
+  focusTarget: "upper" | "balanced" | "lower";
   sessionsLast7: number;
   weeklyTarget: number;
-  volumeLast7Kg: number;
-  volumeChangePct: number | null;
+  hardSetsLast7: number;
+  focusSharePct: number | null;
+  strengthChangePct: number | null;
+  comparedExercises: number;
   avgRpeLast7: number | null;
   neglectedRegions: string[];
   daysSinceLastSession: number | null;
@@ -562,10 +565,10 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
               highlight={c.progression.score < c.progression.max * 0.7}
             />
           ) : null}
-          {c.balance.available ? (
+          {c.focus.available ? (
             <RationaleRow
-              label={t(lang, "home_score_balance")}
-              value={c.balance.detail}
+              label={t(lang, "home_score_focus")}
+              value={c.focus.detail}
               highlight={score.neglectedRegions.length > 0}
             />
           ) : null}
@@ -577,8 +580,8 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
             />
           ) : null}
           <RationaleRow
-            label={t(lang, "home_score_volume")}
-            value={`${score.volumeLast7Kg.toLocaleString()} kg`}
+            label={t(lang, "home_score_sets")}
+            value={`${score.hardSetsLast7}`}
           />
           <p className="text-[10px] text-white/40 leading-snug pt-1.5 mt-1.5 border-t border-border">
             {t(lang, "home_score_explainer")}

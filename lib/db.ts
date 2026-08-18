@@ -162,6 +162,9 @@ const COLUMN_ADDS: { sql: string }[] = [
   // Ground-truth total mass. Per the Nutrition5k paper portion estimation is
   // where nearly all nutrition error originates, so it is scored on its own.
   { sql: "ALTER TABLE analyzer_fixtures ADD COLUMN expected_mass_g REAL" },
+  // Which half of the body training should be weighted toward, used by the
+  // workout score's focus component.
+  { sql: "ALTER TABLE user_profile ADD COLUMN training_focus TEXT NOT NULL DEFAULT 'upper'" },
 ];
 
 // Indexes that reference columns added by COLUMN_ADDS — they MUST run after
@@ -563,6 +566,8 @@ export type Profile = {
   weekly_workout_target: number | null;
   weekly_volume_note: string | null;
   goal_mode: string;
+  /** 'upper' | 'balanced' | 'lower' — weights the workout score's focus. */
+  training_focus: string;
   language: string;
   // Free-text notes the user writes for the AI (allergies, dietary rules,
   // preferences, injuries…) so the coach/insights know context that isn't

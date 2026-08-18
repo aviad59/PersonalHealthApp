@@ -37,6 +37,7 @@ export async function GET() {
   const workoutScore = computeWorkoutScore({
     recentWorkouts: rowsToHevy(cachedRecent),
     weeklyWorkoutTarget: profile?.weekly_workout_target,
+    focus: (profile?.training_focus as any) ?? "upper",
   });
 
   return NextResponse.json({ workoutScore });

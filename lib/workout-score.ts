@@ -1,12 +1,12 @@
 // Workout score (0–100) + per-muscle status, computed entirely from Hevy data
-// (plus the user's own weekly session target).
+// (plus the user's own weekly session target and training focus).
 //
 // It answers "am I training well right now?" across four things a lifter can
 // actually act on:
 //   1. Consistency  — are the sessions happening at the planned rate?
-//   2. Progression  — is training volume trending up, or sliding?
-//   3. Balance      — is every region getting worked, or is something skipped?
-//   4. Intensity    — are sets being taken close enough to failure to drive
+//   2. Progression  — are the lifts actually getting stronger?
+//   3. Focus        — is the work going where the user wants it to go?
+//   4. Intensity    — are sets taken close enough to failure to drive
 //                     adaptation, without living at redline?
 //
 // Every component degrades gracefully: whatever can't be measured (no RPE
@@ -14,13 +14,11 @@
 // the components that remain, so a missing signal never silently caps the
 // score.
 
-import {
-  HevyWorkout,
-  inferMuscleGroups,
-  workoutVolumeKg,
-  avgRpeAcrossWorkouts,
-} from "@/lib/hevy";
+import { HevyWorkout, inferMuscleGroups, avgRpeAcrossWorkouts } from "@/lib/hevy";
 import { dateKey, diffDaysKey, todayStr } from "@/lib/db";
+
+/** Which part of the body the user wants their training weighted toward. */
+export type TrainingFocus = "upper" | "balanced" | "lower";
 
 export type MuscleStatus = {
   muscle: string;
@@ -44,17 +42,24 @@ export type WorkoutScoreResult = {
   components: {
     consistency: ScoreComponent;
     progression: ScoreComponent;
-    balance: ScoreComponent;
+    focus: ScoreComponent;
     intensity: ScoreComponent;
   };
+  focusTarget: TrainingFocus;
   /** Distinct training days in the last 7. */
   sessionsLast7: number;
   weeklyTarget: number;
-  volumeLast7Kg: number;
-  volumePrevAvgKg: number | null;
-  volumeChangePct: number | null;
+  /** Hard (non-warmup) sets in the last 7 days — the standard load metric. */
+  hardSetsLast7: number;
+  setsByRegion: Record<string, number>;
+  /** Share of hard sets going to the focused half, 0–100. */
+  focusSharePct: number | null;
+  /** Mean change in estimated 1RM across lifts trained in both windows. */
+  strengthChangePct: number | null;
+  /** How many lifts that trend is based on — low counts are weak evidence. */
+  comparedExercises: number;
   avgRpeLast7: number | null;
-  /** Regions with no working sets in the last 7 days. */
+  /** Regions the focus cares about that got no work. */
   neglectedRegions: string[];
   daysSinceLastSession: number | null;
   byMuscle: MuscleStatus[];
@@ -62,9 +67,10 @@ export type WorkoutScoreResult = {
 };
 
 export type WorkoutScoreInput = {
-  /** At least 28 days of history, so the volume trend has a baseline. */
+  /** At least 28 days of history, so the strength trend has a baseline. */
   recentWorkouts: HevyWorkout[];
   weeklyWorkoutTarget: number | null | undefined;
+  focus?: TrainingFocus | null;
 };
 
 const MUSCLES = [
@@ -80,16 +86,18 @@ const MUSCLES = [
   "core",
 ];
 
-// Coverage is judged by region rather than by individual muscle, so a lifter
-// isn't marked down for skipping calves in a given week.
 const REGIONS: Record<string, string[]> = {
   push: ["chest", "shoulders", "triceps"],
   pull: ["back", "biceps"],
   legs: ["quads", "hamstrings", "glutes", "calves"],
   core: ["core"],
 };
-// Push/pull/legs carry the weight; core is a smaller bonus.
+// Used only for the "balanced" focus, where coverage is the goal.
 const REGION_POINTS: Record<string, number> = { push: 7, pull: 7, legs: 7, core: 4 };
+
+// Share of hard sets the focused half should get before the component maxes
+// out. 70% leaves room for accessory work on the other half.
+const FOCUS_TARGET_SHARE = 0.7;
 
 const DEFAULT_WEEKLY_TARGET = 3;
 
@@ -97,10 +105,67 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/** Calendar day (APP_TZ) a workout belongs to, or "" if unparseable. */
 function workoutDay(w: HevyWorkout): string {
   const t = Date.parse(w.start_time || "");
   return Number.isFinite(t) ? dateKey(new Date(t)) : "";
+}
+
+/**
+ * Estimated one-rep max (Epley). Turns a set of any weight/rep combination
+ * into a single comparable strength number, so 80kg x 8 and 90kg x 5 can be
+ * ranked against each other.
+ *
+ * The formula degrades badly past ~15 reps, so high-rep sets are ignored
+ * rather than trusted.
+ */
+function estimated1RM(weightKg: number, reps: number): number | null {
+  if (!(weightKg > 0) || !(reps > 0) || reps > 15) return null;
+  return weightKg * (1 + reps / 30);
+}
+
+/** Best e1RM per exercise across a set of workouts. */
+function bestE1RMByExercise(workouts: HevyWorkout[]): Map<string, number> {
+  const best = new Map<string, number>();
+  for (const w of workouts) {
+    for (const ex of w.exercises) {
+      const key = ex.title.trim().toLowerCase();
+      for (const s of ex.sets) {
+        if (s.type === "warmup") continue;
+        const e = estimated1RM(s.weight_kg ?? 0, s.reps ?? 0);
+        if (e === null) continue;
+        if (!best.has(key) || e > (best.get(key) as number)) best.set(key, e);
+      }
+    }
+  }
+  return best;
+}
+
+/** Hard (non-warmup) sets per region across a set of workouts. */
+function hardSetsByRegion(workouts: HevyWorkout[]): {
+  byRegion: Record<string, number>;
+  total: number;
+} {
+  const byRegion: Record<string, number> = { push: 0, pull: 0, legs: 0, core: 0 };
+  let total = 0;
+  for (const w of workouts) {
+    for (const ex of w.exercises) {
+      const working = ex.sets.filter((s) => s.type !== "warmup").length;
+      if (working === 0) continue;
+      const groups = inferMuscleGroups(ex.title).filter((g) => g !== "other");
+      if (groups.length === 0) continue;
+      total += working;
+      // An exercise mapping to several regions (e.g. a compound) credits each
+      // once, not once per muscle, so region shares stay comparable.
+      const regions = new Set<string>();
+      for (const g of groups) {
+        for (const [region, muscles] of Object.entries(REGIONS)) {
+          if (muscles.includes(g)) regions.add(region);
+        }
+      }
+      for (const r of regions) byRegion[r] += working;
+    }
+  }
+  return { byRegion, total };
 }
 
 export function computeWorkoutScore(
@@ -108,8 +173,8 @@ export function computeWorkoutScore(
 ): WorkoutScoreResult {
   const today = todayStr();
   const target = Math.max(1, input.weeklyWorkoutTarget || DEFAULT_WEEKLY_TARGET);
+  const focusTarget: TrainingFocus = input.focus ?? "upper";
 
-  // Bucket workouts by age in days so every window below is a simple filter.
   const dated = input.recentWorkouts
     .map((w) => ({ w, day: workoutDay(w) }))
     .filter((x) => x.day)
@@ -117,24 +182,16 @@ export function computeWorkoutScore(
     .filter((x) => x.age >= 0);
 
   const last7 = dated.filter((x) => x.age <= 6);
-  // The previous three weeks, used as the baseline for the volume trend.
   const prev21 = dated.filter((x) => x.age >= 7 && x.age <= 27);
 
-  const sessionDays = new Set(last7.map((x) => x.day));
-  const sessionsLast7 = sessionDays.size;
-
+  const sessionsLast7 = new Set(last7.map((x) => x.day)).size;
   const daysSinceLastSession = dated.length
     ? Math.min(...dated.map((x) => x.age))
     : null;
 
-  const volumeLast7Kg = last7.reduce((a, x) => a + workoutVolumeKg(x.w), 0);
-  const prevVolume = prev21.reduce((a, x) => a + workoutVolumeKg(x.w), 0);
-  // Per-week average across the 3-week baseline.
-  const volumePrevAvgKg = prev21.length > 0 ? prevVolume / 3 : null;
-  const volumeChangePct =
-    volumePrevAvgKg && volumePrevAvgKg > 0
-      ? ((volumeLast7Kg - volumePrevAvgKg) / volumePrevAvgKg) * 100
-      : null;
+  const { byRegion: setsByRegion, total: hardSetsLast7 } = hardSetsByRegion(
+    last7.map((x) => x.w),
+  );
 
   // ---- 1. Consistency ----
   const consistency: ScoreComponent = {
@@ -144,74 +201,111 @@ export function computeWorkoutScore(
     detail: `${sessionsLast7} / ${target} sessions`,
   };
 
-  // ---- 2. Progression ----
-  // Rewards holding or growing volume. A deliberate deload will read as a dip;
-  // that's why the raw change is surfaced alongside the score.
+  // ---- 2. Progression: are the lifts getting stronger? ----
+  // Tonnage (weight x reps summed) was the obvious metric and the wrong one:
+  // it is dominated by exercise selection, so swapping in heavy leg work reads
+  // as "progress" without a single lift improving. Comparing estimated 1RM
+  // per exercise, across only the lifts trained in BOTH windows, measures
+  // strength directly and is unaffected by what else was in the session.
+  const recentBest = bestE1RMByExercise(last7.map((x) => x.w));
+  const prevBest = bestE1RMByExercise(prev21.map((x) => x.w));
+  const changes: number[] = [];
+  for (const [exercise, recent] of recentBest) {
+    const prev = prevBest.get(exercise);
+    if (prev && prev > 0) changes.push(recent / prev - 1);
+  }
+  const comparedExercises = changes.length;
+  const strengthChangePct =
+    comparedExercises > 0
+      ? (changes.reduce((a, b) => a + b, 0) / comparedExercises) * 100
+      : null;
+
   let progression: ScoreComponent;
-  if (volumeChangePct === null) {
+  // One matching lift is noise; require a couple before drawing a trend.
+  if (strengthChangePct === null || comparedExercises < 2) {
     progression = {
       score: 0,
       max: 25,
       available: false,
-      detail: "no prior weeks to compare",
+      detail:
+        comparedExercises === 0
+          ? "no repeated lifts to compare yet"
+          : "not enough repeated lifts yet",
     };
   } else {
     let pts: number;
-    if (volumeChangePct >= 5) pts = 25;
-    else if (volumeChangePct >= -5) pts = 20;
-    else if (volumeChangePct >= -20) pts = 12;
+    if (strengthChangePct >= 2) pts = 25;
+    else if (strengthChangePct >= -1) pts = 20;
+    else if (strengthChangePct >= -5) pts = 12;
     else pts = 5;
     progression = {
       score: pts,
       max: 25,
       available: true,
-      detail: `${volumeChangePct >= 0 ? "+" : "−"}${Math.abs(Math.round(volumeChangePct))}% volume vs prior weeks`,
+      detail: `${strengthChangePct >= 0 ? "+" : "−"}${Math.abs(strengthChangePct).toFixed(1)}% est. 1RM across ${comparedExercises} lifts`,
     };
   }
 
-  // ---- 3. Balance ----
-  const workedMuscles = new Set<string>();
-  for (const { w } of last7) {
-    for (const ex of w.exercises) {
-      const hasWorkingSet = ex.sets.some((s) => s.type !== "warmup");
-      if (!hasWorkingSet) continue;
-      for (const g of inferMuscleGroups(ex.title)) {
-        if (g !== "other") workedMuscles.add(g);
-      }
-    }
-  }
+  // ---- 3. Focus: is the work going where the user wants it? ----
+  const upperSets = setsByRegion.push + setsByRegion.pull;
+  const lowerSets = setsByRegion.legs;
+  const focusedSets = focusTarget === "lower" ? lowerSets : upperSets;
+  const focusSharePct =
+    hardSetsLast7 > 0 ? Math.round((focusedSets / hardSetsLast7) * 100) : null;
+
   const neglectedRegions: string[] = [];
-  let balancePts = 0;
-  for (const [region, muscles] of Object.entries(REGIONS)) {
-    if (muscles.some((m) => workedMuscles.has(m))) {
-      balancePts += REGION_POINTS[region];
-    } else {
-      neglectedRegions.push(region);
+  let focus: ScoreComponent;
+
+  if (focusTarget === "balanced") {
+    // Coverage of every region, the classic reading of "balanced".
+    let pts = 0;
+    for (const [region, points] of Object.entries(REGION_POINTS)) {
+      if (setsByRegion[region] > 0) pts += points;
+      else neglectedRegions.push(region);
     }
+    focus = {
+      score: pts,
+      max: 25,
+      available: dated.length > 0,
+      detail: neglectedRegions.length
+        ? `missing ${neglectedRegions.join(", ")}`
+        : "all regions covered",
+    };
+  } else {
+    // Weighted toward one half: reward the share of work going there, and
+    // require both halves of that half to be trained so an "upper focus"
+    // can't just be chest every session.
+    const share = hardSetsLast7 > 0 ? focusedSets / hardSetsLast7 : 0;
+    const shareScore = 15 * clamp(share / FOCUS_TARGET_SHARE, 0, 1);
+
+    const subRegions =
+      focusTarget === "upper"
+        ? ([["push", setsByRegion.push], ["pull", setsByRegion.pull]] as const)
+        : ([["legs", setsByRegion.legs]] as const);
+    let coverage = 0;
+    for (const [name, sets] of subRegions) {
+      if (sets > 0) coverage += 10 / subRegions.length;
+      else neglectedRegions.push(name);
+    }
+
+    focus = {
+      score: Math.round(shareScore + coverage),
+      max: 25,
+      available: hardSetsLast7 > 0,
+      detail:
+        focusSharePct === null
+          ? "no sets logged"
+          : neglectedRegions.length
+            ? `${focusSharePct}% ${focusTarget} · missing ${neglectedRegions.join(", ")}`
+            : `${focusSharePct}% of sets ${focusTarget}`,
+    };
   }
-  const balance: ScoreComponent = {
-    score: balancePts,
-    max: 25,
-    // Nothing trained at all is a real signal (score 0), not a missing one —
-    // but only once we know the user trains at all.
-    available: dated.length > 0,
-    detail: neglectedRegions.length
-      ? `missing ${neglectedRegions.join(", ")}`
-      : "all regions covered",
-  };
 
   // ---- 4. Intensity ----
-  // RPE 7–9 is the productive band: hard enough to drive adaptation, short of
-  // living at failure. Many lifters never log RPE, so this drops out cleanly.
   const avgRpeLast7 = avgRpeAcrossWorkouts(last7.map((x) => x.w));
   let intensity: ScoreComponent;
   if (avgRpeLast7 === null) {
-    intensity = {
-      score: 0,
-      max: 20,
-      available: false,
-      detail: "no RPE logged",
-    };
+    intensity = { score: 0, max: 20, available: false, detail: "no RPE logged" };
   } else {
     let pts: number;
     if (avgRpeLast7 >= 7 && avgRpeLast7 <= 9) pts = 20;
@@ -228,22 +322,11 @@ export function computeWorkoutScore(
   }
 
   // ---- Normalise over the components we could actually measure ----
-  const components = { consistency, progression, balance, intensity };
+  const components = { consistency, progression, focus, intensity };
   const usable = Object.values(components).filter((c) => c.available);
   const earned = usable.reduce((a, c) => a + c.score, 0);
   const possible = usable.reduce((a, c) => a + c.max, 0);
-  let score = possible > 0 ? Math.round((earned / possible) * 100) : 0;
-
-  // Skipping an entire major region (push, pull or legs) for a full seven days
-  // is a real gap, but as a share of one 25-point component it barely dented
-  // the total — four hard sessions with no legs still scored "high". Cap the
-  // score below the top band while that's true. Only applies once there's
-  // enough training in the window to call it a choice rather than a slow week;
-  // the window is a trailing 7 days, so it isn't an early-in-the-week artifact.
-  const missedMajor = neglectedRegions.some((r) => r !== "core");
-  if (missedMajor && sessionsLast7 >= 2) {
-    score = Math.min(score, 79);
-  }
+  const score = possible > 0 ? Math.round((earned / possible) * 100) : 0;
 
   let band: WorkoutScoreResult["band"];
   if (score >= 85) band = "high";
@@ -276,7 +359,7 @@ export function computeWorkoutScore(
     return { muscle: m, daysSince: d, readiness };
   });
 
-  // ---- Rationale: lead with the weakest actionable component ----
+  // ---- Rationale ----
   const reasons: string[] = [];
   if (dated.length === 0) {
     reasons.push("no workouts synced yet");
@@ -293,12 +376,21 @@ export function computeWorkoutScore(
       reasons.push(`${sessionsLast7} sessions — target met`);
     }
     if (neglectedRegions.length && sessionsLast7 > 0) {
-      reasons.push(`${neglectedRegions.join(" and ")} untrained this week`);
+      reasons.push(`no ${neglectedRegions.join(" or ")} work this week`);
+    } else if (
+      focusTarget !== "balanced" &&
+      focusSharePct !== null &&
+      focusSharePct < FOCUS_TARGET_SHARE * 100 &&
+      sessionsLast7 > 0
+    ) {
+      reasons.push(`only ${focusSharePct}% of sets were ${focusTarget}-body`);
     }
-    if (volumeChangePct !== null && volumeChangePct <= -20) {
-      reasons.push(`volume down ${Math.abs(Math.round(volumeChangePct))}%`);
-    } else if (volumeChangePct !== null && volumeChangePct >= 10) {
-      reasons.push(`volume up ${Math.round(volumeChangePct)}%`);
+    if (strengthChangePct !== null && comparedExercises >= 2) {
+      if (strengthChangePct <= -5) {
+        reasons.push(`lifts down ${Math.abs(strengthChangePct).toFixed(1)}%`);
+      } else if (strengthChangePct >= 2) {
+        reasons.push(`lifts up ${strengthChangePct.toFixed(1)}%`);
+      }
     }
     if (avgRpeLast7 !== null && avgRpeLast7 > 9.5) {
       reasons.push(`sets averaging RPE ${avgRpeLast7} — very close to failure`);
@@ -311,11 +403,15 @@ export function computeWorkoutScore(
     score,
     band,
     components,
+    focusTarget,
     sessionsLast7,
     weeklyTarget: target,
-    volumeLast7Kg: Math.round(volumeLast7Kg),
-    volumePrevAvgKg: volumePrevAvgKg === null ? null : Math.round(volumePrevAvgKg),
-    volumeChangePct: volumeChangePct === null ? null : Math.round(volumeChangePct),
+    hardSetsLast7,
+    setsByRegion,
+    focusSharePct,
+    strengthChangePct:
+      strengthChangePct === null ? null : Math.round(strengthChangePct * 10) / 10,
+    comparedExercises,
     avgRpeLast7,
     neglectedRegions,
     daysSinceLastSession,

@@ -30,6 +30,7 @@ const ProfileSchema = z.object({
   ]),
   goal_mode: z.enum(["recomp", "cut", "bulk", "maintain"]).optional(),
   weekly_workout_target: z.number().int().min(1).max(7).nullable().optional(),
+  training_focus: z.enum(["upper", "balanced", "lower"]).optional(),
 });
 
 export async function GET() {
@@ -79,12 +80,12 @@ export async function POST(req: NextRequest) {
       user_id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm, activity_level,
       body_fat_pct, lean_mass_kg, bmr, tdee,
       goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
-      weekly_workout_target, weekly_volume_note, goal_mode, updated_at
+      weekly_workout_target, weekly_volume_note, goal_mode, training_focus, updated_at
     ) VALUES (
       :user_id, :age, :sex, :height_cm, :weight_kg, :neck_cm, :waist_cm, :hips_cm, :activity_level,
       :body_fat_pct, :lean_mass_kg, :bmr, :tdee,
       :goal_calories, :goal_protein_g, :goal_fat_g, :goal_carbs_g,
-      :weekly_workout_target, :weekly_volume_note, :goal_mode, datetime('now')
+      :weekly_workout_target, :weekly_volume_note, :goal_mode, :training_focus, datetime('now')
     )
     ON CONFLICT(user_id) DO UPDATE SET
       age=excluded.age, sex=excluded.sex, height_cm=excluded.height_cm, weight_kg=excluded.weight_kg,
@@ -96,7 +97,8 @@ export async function POST(req: NextRequest) {
       goal_fat_g=excluded.goal_fat_g, goal_carbs_g=excluded.goal_carbs_g,
       weekly_workout_target=excluded.weekly_workout_target,
       weekly_volume_note=excluded.weekly_volume_note,
-      goal_mode=excluded.goal_mode, updated_at=datetime('now')`,
+      goal_mode=excluded.goal_mode,
+      training_focus=excluded.training_focus, updated_at=datetime('now')`,
     args: {
       user_id: userId,
       age: p.age,
@@ -118,6 +120,8 @@ export async function POST(req: NextRequest) {
       weekly_workout_target: goals.weekly_workout_target,
       weekly_volume_note: goals.weekly_volume_note,
       goal_mode: goals.goal_mode,
+      // Preserve the existing choice when the client doesn't send one.
+      training_focus: p.training_focus ?? priorProfile?.training_focus ?? "upper",
     },
   });
 
