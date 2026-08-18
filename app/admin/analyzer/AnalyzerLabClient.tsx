@@ -1349,15 +1349,53 @@ const SERIES_COLORS = [
   "#a855f7", "#14b8a6", "#ec4899", "#84cc16",
 ];
 
+/** What the history chart can plot. Both are "lower is better". */
+type ChartMetric = "error" | "time";
+const CHART_METRICS: {
+  id: ChartMetric;
+  label: string;
+  unit: string;
+  /** Pull the raw value out of a saved scorecard row, or null if absent. */
+  get: (row: any) => number | null;
+  format: (v: number) => string;
+}[] = [
+  {
+    id: "error",
+    label: "Avg error",
+    unit: "%",
+    get: (row) =>
+      typeof row?.agg?.mape === "number" && Number.isFinite(row.agg.mape)
+        ? row.agg.mape
+        : null,
+    format: (v) => `${Math.round(v)}%`,
+  },
+  {
+    id: "time",
+    label: "Time",
+    unit: "ms",
+    get: (row) =>
+      typeof row?.meanLatency === "number" && Number.isFinite(row.meanLatency)
+        ? row.meanLatency
+        : null,
+    format: (v) => `${Math.round(v).toLocaleString()} ms`,
+  },
+];
+
 /**
- * Average error per configuration across saved reports, oldest to newest.
+ * Average error and/or latency per configuration across saved reports, oldest
+ * to newest, so a prompt or model change can be judged against every previous
+ * run rather than only the one on screen.
  *
- * The point is to see whether a prompt or model change actually moved the
- * needle: each line is one model x pipeline x input combination, and lower is
- * better. A configuration missing from a given report simply has no point
- * there, so lines can start late or have gaps rather than implying a zero.
+ * Picking a single metric plots it in its own units. Picking several plots a
+ * combined index instead: each metric is min-max normalised across every point
+ * on the chart and the normalised values are averaged, which is the only way
+ * to put percentages and milliseconds on one axis. That index is relative to
+ * the data in view and unitless — 0 is the best point on the chart, 100 the
+ * worst — so it ranks configurations rather than measuring them. The tooltip
+ * always shows the underlying raw numbers.
  */
 function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
+  const [metrics, setMetrics] = useState<Set<ChartMetric>>(new Set(["error"]));
   // Which point the pointer (or a tap) is on. SVG <title> gives a native
   // tooltip, but it is slow to appear and never fires on touch — and this is
   // read on a phone, so the tooltip is rendered directly.
@@ -1365,21 +1403,61 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
     sx: number;
     sy: number;
     label: string;
-    value: number;
-    run: string;
     color: string;
+    run: string;
+    /** Displayed value (raw, or the combined index). */
+    headline: string;
+    /** Raw per-metric values, always shown so the index stays interpretable. */
+    raws: string[];
   } | null>(null);
 
   // Saved runs arrive newest-first; a trend reads left-to-right in time.
   const ordered = [...runs].reverse().filter((r) => (r.rows?.length ?? 0) > 0);
-  if (ordered.length === 0) return null;
+  const active = CHART_METRICS.filter((m) => metrics.has(m.id));
 
-  type Series = { key: string; label: string; points: { x: number; y: number }[] };
-  const seriesMap = new Map<string, Series>();
+  const toggleMetric = (id: ChartMetric) =>
+    setMetrics((s) => {
+      const n = new Set(s);
+      // Never allow an empty selection — there would be nothing to plot.
+      if (n.has(id) && n.size > 1) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  const metricPicker = (
+    <div className="flex flex-wrap gap-1.5">
+      {CHART_METRICS.map((m) => (
+        <button
+          key={m.id}
+          onClick={() => toggleMetric(m.id)}
+          className={`px-2.5 py-1 rounded-full text-[10px] ${
+            metrics.has(m.id)
+              ? "bg-accent-brand text-white"
+              : "bg-bg-elev border border-border text-white/55"
+          }`}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Raw value per (series, report, metric).
+  type Raw = { x: number; values: Record<string, number> };
+  const seriesMap = new Map<string, { key: string; label: string; raw: Raw[] }>();
   ordered.forEach((run, i) => {
     for (const row of run.rows ?? []) {
-      const mape = row?.agg?.mape;
-      if (typeof mape !== "number" || !Number.isFinite(mape)) continue;
+      const values: Record<string, number> = {};
+      let complete = true;
+      for (const m of active) {
+        const v = m.get(row);
+        // A point needs every selected metric, otherwise a combined index
+        // would silently compare different things.
+        if (v === null) { complete = false; break; }
+        values[m.id] = v;
+      }
+      if (!complete) continue;
+
       const key = row.key ?? `${row.model}-${row.pipeline}-${row.variant}`;
       if (!seriesMap.has(key)) {
         seriesMap.set(key, {
@@ -1388,157 +1466,205 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
           label: [row.modelLabel ?? row.model, row.pipeline, row.variant]
             .filter(Boolean)
             .join(" · "),
-          points: [],
+          raw: [],
         });
       }
-      seriesMap.get(key)!.points.push({ x: i, y: mape });
+      seriesMap.get(key)!.raw.push({ x: i, values });
     }
   });
 
-  const series = Array.from(seriesMap.values()).filter((s) => s.points.length > 0);
-  if (series.length === 0) return null;
+  const rawSeries = Array.from(seriesMap.values()).filter((s) => s.raw.length > 0);
+
+  // Min-max bounds per metric across every point, for normalisation.
+  const bounds: Record<string, { min: number; max: number }> = {};
+  for (const m of active) {
+    const all = rawSeries.flatMap((s) => s.raw.map((p) => p.values[m.id]));
+    bounds[m.id] = { min: Math.min(...all), max: Math.max(...all) };
+  }
+  const norm = (id: string, v: number) => {
+    const b = bounds[id];
+    // Every value identical: no spread to show, so plot them level.
+    if (!b || b.max === b.min) return 0;
+    return (v - b.min) / (b.max - b.min);
+  };
+
+  const combined = active.length > 1;
+  const series = rawSeries.map((s) => ({
+    ...s,
+    points: s.raw.map((p) => ({
+      x: p.x,
+      y: combined
+        ? (active.reduce((a, m) => a + norm(m.id, p.values[m.id]), 0) / active.length) * 100
+        : p.values[active[0].id],
+      values: p.values,
+    })),
+  }));
+
+  if (ordered.length === 0 || series.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-wider text-white/50">
+            {combined ? "Combined index by report" : `${active[0].label} by report`}
+          </div>
+          {metricPicker}
+        </div>
+        <p className="text-[11px] text-white/40">
+          No saved reports carry this metric yet.
+        </p>
+      </div>
+    );
+  }
 
   const W = 320;
   const H = 150;
-  const PAD = { l: 26, r: 6, t: 8, b: 18 };
+  const PAD = { l: 32, r: 6, t: 8, b: 18 };
   const plotW = W - PAD.l - PAD.r;
   const plotH = H - PAD.t - PAD.b;
 
-  const maxY = Math.max(10, ...series.flatMap((s) => s.points.map((p) => p.y)));
-  const niceMax = Math.ceil(maxY / 20) * 20;
+  const maxVal = Math.max(...series.flatMap((s) => s.points.map((p) => p.y)));
+  // Combined is already a 0–100 index; raw metrics get a rounded-up ceiling.
+  const niceMax = combined
+    ? 100
+    : Math.max(1, Math.ceil(Math.max(maxVal, 1) / 20) * 20);
   const n = ordered.length;
   // A single report has no span to spread across — pin it to the middle.
   const xAt = (i: number) => PAD.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = (v: number) => PAD.t + plotH - (v / niceMax) * plotH;
 
-  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((f) => niceMax * f);
+  const axisLabel = (v: number) =>
+    combined ? `${Math.round(v)}` : active[0].format(v).replace(/,/g, "");
 
   return (
     <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
-      <div className="text-[10px] uppercase tracking-wider text-white/50">
-        Avg error by report
-      </div>
-      <div className="relative" onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
-        {gridLines.map((v) => (
-          <g key={v}>
-            <line
-              x1={PAD.l}
-              x2={W - PAD.r}
-              y1={yAt(v)}
-              y2={yAt(v)}
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth={1}
-            />
-            <text x={2} y={yAt(v) + 3} fill="rgba(255,255,255,0.35)" fontSize={8}>
-              {Math.round(v)}%
-            </text>
-          </g>
-        ))}
-        {series.map((s, si) => {
-          const color = SERIES_COLORS[si % SERIES_COLORS.length];
-          return (
-            <g key={s.key}>
-              {s.points.length > 1 && (
-                <polyline
-                  points={s.points.map((p) => `${xAt(p.x)},${yAt(p.y)}`).join(" ")}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-              {s.points.map((p) => {
-                const cx = xAt(p.x);
-                const cy = yAt(p.y);
-                const active =
-                  hover && hover.sx === cx && hover.sy === cy && hover.label === s.label;
-                return (
-                  <g key={p.x}>
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={active ? 3.6 : 2.2}
-                      fill={color}
-                      stroke={active ? "#fff" : "none"}
-                      strokeWidth={active ? 1 : 0}
-                    />
-                    {/* Invisible, generously sized hit target — a 2px dot is
-                        far too small to hit with a fingertip. */}
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={9}
-                      fill="transparent"
-                      style={{ cursor: "pointer" }}
-                      onMouseEnter={() =>
-                        setHover({
-                          sx: cx,
-                          sy: cy,
-                          label: s.label,
-                          value: p.y,
-                          run: ordered[p.x]?.label ?? "",
-                          color,
-                        })
-                      }
-                      onClick={() =>
-                        setHover((h) =>
-                          h && h.sx === cx && h.sy === cy && h.label === s.label
-                            ? null
-                            : {
-                                sx: cx,
-                                sy: cy,
-                                label: s.label,
-                                value: p.y,
-                                run: ordered[p.x]?.label ?? "",
-                                color,
-                              },
-                        )
-                      }
-                    />
-                  </g>
-                );
-              })}
-            </g>
-          );
-        })}
-        <text x={PAD.l} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8}>
-          oldest
-        </text>
-        <text x={W - PAD.r} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8} textAnchor="end">
-          newest
-        </text>
-      </svg>
-      {hover && (
-        <div
-          // Positioned in percentages so it tracks the SVG as it scales with
-          // the container width.
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
-          style={{
-            left: `${(hover.sx / W) * 100}%`,
-            top: `${(hover.sy / H) * 100}%`,
-            marginTop: -8,
-          }}
-        >
-          <div className="rounded-lg border border-border bg-bg px-2.5 py-1.5 shadow-lg whitespace-nowrap">
-            <div className="flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: hover.color }}
-              />
-              <span className="text-[10px] font-semibold text-white">
-                {Math.round(hover.value)}% avg error
-              </span>
-            </div>
-            <div className="text-[9px] text-white/60 mt-0.5">{hover.label}</div>
-            {hover.run && (
-              <div className="text-[9px] text-white/40">{hover.run}</div>
-            )}
-          </div>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[10px] uppercase tracking-wider text-white/50">
+          {combined ? "Combined index by report" : `${active[0].label} by report`}
         </div>
-      )}
+        {metricPicker}
       </div>
+
+      <div className="relative" onMouseLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+            const v = niceMax * f;
+            return (
+              <g key={f}>
+                <line
+                  x1={PAD.l}
+                  x2={W - PAD.r}
+                  y1={yAt(v)}
+                  y2={yAt(v)}
+                  stroke="rgba(255,255,255,0.08)"
+                  strokeWidth={1}
+                />
+                <text x={2} y={yAt(v) + 3} fill="rgba(255,255,255,0.35)" fontSize={7}>
+                  {axisLabel(v)}
+                </text>
+              </g>
+            );
+          })}
+          {series.map((s, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            return (
+              <g key={s.key}>
+                {s.points.length > 1 && (
+                  <polyline
+                    points={s.points.map((p) => `${xAt(p.x)},${yAt(p.y)}`).join(" ")}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+                {s.points.map((p) => {
+                  const cx = xAt(p.x);
+                  const cy = yAt(p.y);
+                  const isActive =
+                    hover && hover.sx === cx && hover.sy === cy && hover.label === s.label;
+                  const show = () =>
+                    setHover({
+                      sx: cx,
+                      sy: cy,
+                      label: s.label,
+                      color,
+                      run: ordered[p.x]?.label ?? "",
+                      headline: combined
+                        ? `${Math.round(p.y)} combined index`
+                        : active[0].format(p.y),
+                      raws: active.map((m) => `${m.label}: ${m.format(p.values[m.id])}`),
+                    });
+                  return (
+                    <g key={p.x}>
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={isActive ? 3.6 : 2.2}
+                        fill={color}
+                        stroke={isActive ? "#fff" : "none"}
+                        strokeWidth={isActive ? 1 : 0}
+                      />
+                      {/* Invisible, generously sized hit target — a 2px dot is
+                          far too small to hit with a fingertip. */}
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={9}
+                        fill="transparent"
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={show}
+                        onClick={() => (isActive ? setHover(null) : show())}
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+          <text x={PAD.l} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8}>
+            oldest
+          </text>
+          <text x={W - PAD.r} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8} textAnchor="end">
+            newest
+          </text>
+        </svg>
+        {hover && (
+          <div
+            // Positioned in percentages so it tracks the SVG as it scales with
+            // the container width.
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
+            style={{
+              left: `${(hover.sx / W) * 100}%`,
+              top: `${(hover.sy / H) * 100}%`,
+              marginTop: -8,
+            }}
+          >
+            <div className="rounded-lg border border-border bg-bg px-2.5 py-1.5 shadow-lg whitespace-nowrap">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: hover.color }}
+                />
+                <span className="text-[10px] font-semibold text-white">
+                  {hover.headline}
+                </span>
+              </div>
+              {/* With a combined index the raw numbers are what actually mean
+                  something, so they are always listed. */}
+              {combined &&
+                hover.raws.map((r) => (
+                  <div key={r} className="text-[9px] text-white/70">
+                    {r}
+                  </div>
+                ))}
+              <div className="text-[9px] text-white/60 mt-0.5">{hover.label}</div>
+              {hover.run && <div className="text-[9px] text-white/40">{hover.run}</div>}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {series.map((s, si) => (
           <span key={s.key} className="flex items-center gap-1 text-[9px] text-white/55">
@@ -1550,6 +1676,13 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
           </span>
         ))}
       </div>
+      {combined && (
+        <p className="text-[9px] text-white/40 leading-snug">
+          Each metric is scaled 0–100 across the points shown, then averaged. The
+          index ranks configurations against each other on this chart — it is not
+          a measurement, and it shifts if the reports change.
+        </p>
+      )}
     </div>
   );
 }
