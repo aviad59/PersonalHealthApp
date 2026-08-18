@@ -35,6 +35,7 @@ type FixtureListItem = {
 
 type Config = {
   defaultModel: string;
+  production?: { model: string; pipeline: Pipeline; customPrompts: boolean };
   visionPrompt: string;
   textPrompt: string;
   perceivePrompt: string;
@@ -776,7 +777,16 @@ export default function AnalyzerLabClient() {
 
       {/* ---------- RUN CONFIG ---------- */}
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold">Run</h2>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="font-semibold">Run</h2>
+          {config?.production && (
+            <span className="text-[10px] rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-2.5 py-1">
+              Live in production: {modelLabel(config.production.model)} ·{" "}
+              {config.production.pipeline === "two-stage" ? "two-stage" : "single call"} ·{" "}
+              {config.production.customPrompts ? "custom prompts" : "default prompts"}
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <span className="block text-[11px] text-white/50 mb-1">Models to compare</span>

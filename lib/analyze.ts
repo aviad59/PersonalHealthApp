@@ -5,7 +5,12 @@
 // If the lab called a copy of this logic, its results wouldn't transfer to
 // production — so everything funnels through analyzeMeal() here.
 
-import { anthropic, CLAUDE_MODEL, extractJson, extractJsonLoose } from "@/lib/anthropic";
+import {
+  anthropic,
+  CLAUDE_FAST_MODEL,
+  extractJson,
+  extractJsonLoose,
+} from "@/lib/anthropic";
 import {
   mealVisionPrompt,
   mealTextPrompt,
@@ -89,8 +94,16 @@ export type AnalyzeResult = {
 const MAX_TOKENS_ANALYZE = 3000;
 const MAX_TOKENS_PERCEIVE = 2000;
 
-/** The model production uses for meal analysis today. */
-export const DEFAULT_ANALYZE_MODEL = CLAUDE_MODEL;
+/**
+ * The model production uses for meal analysis.
+ *
+ * Measured on 20 Nutrition5k dishes, Haiku and Sonnet were statistically tied
+ * on accuracy (48% vs 50% mean error — well inside the ±7-11 point standard
+ * error at that sample size), while Haiku answered in 3.7 s against 7.0 s and
+ * costs a fraction as much. With accuracy indistinguishable, speed and cost
+ * decide it.
+ */
+export const DEFAULT_ANALYZE_MODEL = CLAUDE_FAST_MODEL;
 
 /**
  * Run one meal analysis. Pure orchestration around a single Claude call —

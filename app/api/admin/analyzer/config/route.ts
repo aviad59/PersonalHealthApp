@@ -29,14 +29,25 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     defaultModel: DEFAULT_ANALYZE_MODEL,
+    // What production actually runs, so the lab can state its baseline rather
+    // than leaving it to be inferred from a "(default)" suffix.
+    production: {
+      model: DEFAULT_ANALYZE_MODEL,
+      // /api/meals/analyze passes no pipeline, so it takes the single-call path.
+      pipeline: "single" as const,
+      // It also passes no system override, so both prompts are the defaults.
+      customPrompts: false,
+    },
     visionPrompt: mealVisionPrompt(lang),
     textPrompt: mealTextPrompt(lang),
     perceivePrompt: mealPerceivePrompt(lang),
     quantifyPrompt: mealQuantifyPrompt(lang),
     models: [
-      { id: CLAUDE_FAST_MODEL, label: "Haiku 4.5 (fast)" },
-      { id: CLAUDE_MODEL, label: "Sonnet 4.6 (default)" },
-      { id: CLAUDE_OPUS_MODEL, label: "Opus 4.8 (best)" },
+      // Labels describe the model, not its role — which model is "default"
+      // changes, and the picker marks production separately.
+      { id: CLAUDE_FAST_MODEL, label: "Haiku 4.5" },
+      { id: CLAUDE_MODEL, label: "Sonnet 4.6" },
+      { id: CLAUDE_OPUS_MODEL, label: "Opus 4.8" },
     ],
   });
 }
