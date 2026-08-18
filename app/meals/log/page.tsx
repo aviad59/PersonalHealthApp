@@ -2406,22 +2406,30 @@ function BatchMealCard({
  *  "the model is thinking" instead of a static "Loading…" label. */
 // Pipeline stage lists for the analyze call, shared by the single-photo flow
 // and each batch item. `after` is the ms offset from when analysis starts at
-// which the label switches. Photo and text modes differ (a text-only meal has
-// no upload / vision-reading phase).
+// which the label switches.
+//
+// The labels track what the analyzer actually does now: it identifies each
+// food (to get its per-100g nutrient density), estimates the portion in grams,
+// and the totals are multiplied out in code.
+//
+// Pacing matters as much as wording. These offsets were set when analysis ran
+// on Sonnet at ~14 s; production now runs Haiku at ~3.7 s, so the last three
+// labels never appeared at all. They are compressed to fit a typical call,
+// with the final label holding until the real result lands.
 function photoAnalyzeStages(lang: Lang) {
   return [
     { after: 0, label: t(lang, "meal_stage_upload") },
-    { after: 1200, label: t(lang, "meal_stage_reading_photo") },
-    { after: 4500, label: t(lang, "meal_stage_items") },
-    { after: 9000, label: t(lang, "meal_stage_macros") },
-    { after: 14000, label: t(lang, "meal_stage_finishing") },
+    { after: 500, label: t(lang, "meal_stage_identify") },
+    { after: 1500, label: t(lang, "meal_stage_portions") },
+    { after: 2600, label: t(lang, "meal_stage_nutrition") },
+    { after: 3600, label: t(lang, "meal_stage_totals") },
   ];
 }
 function textAnalyzeStages(lang: Lang) {
   return [
     { after: 0, label: t(lang, "meal_stage_reading_text") },
-    { after: 3500, label: t(lang, "meal_stage_macros") },
-    { after: 8000, label: t(lang, "meal_stage_finishing") },
+    { after: 1200, label: t(lang, "meal_stage_nutrition") },
+    { after: 2400, label: t(lang, "meal_stage_totals") },
   ];
 }
 
