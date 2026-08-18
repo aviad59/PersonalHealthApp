@@ -1358,6 +1358,18 @@ const SERIES_COLORS = [
  * there, so lines can start late or have gaps rather than implying a zero.
  */
 function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
+  // Which point the pointer (or a tap) is on. SVG <title> gives a native
+  // tooltip, but it is slow to appear and never fires on touch — and this is
+  // read on a phone, so the tooltip is rendered directly.
+  const [hover, setHover] = useState<{
+    sx: number;
+    sy: number;
+    label: string;
+    value: number;
+    run: string;
+    color: string;
+  } | null>(null);
+
   // Saved runs arrive newest-first; a trend reads left-to-right in time.
   const ordered = [...runs].reverse().filter((r) => (r.rows?.length ?? 0) > 0);
   if (ordered.length === 0) return null;
@@ -1404,8 +1416,9 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
   return (
     <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
       <div className="text-[10px] uppercase tracking-wider text-white/50">
-        Avg error by report · lower is better
+        Avg error by report
       </div>
+      <div className="relative" onMouseLeave={() => setHover(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
         {gridLines.map((v) => (
           <g key={v}>
@@ -1436,11 +1449,57 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
                   strokeLinejoin="round"
                 />
               )}
-              {s.points.map((p) => (
-                <circle key={p.x} cx={xAt(p.x)} cy={yAt(p.y)} r={2.2} fill={color}>
-                  <title>{`${s.label}\n${Math.round(p.y)}% avg error\n${ordered[p.x]?.label ?? ""}`}</title>
-                </circle>
-              ))}
+              {s.points.map((p) => {
+                const cx = xAt(p.x);
+                const cy = yAt(p.y);
+                const active =
+                  hover && hover.sx === cx && hover.sy === cy && hover.label === s.label;
+                return (
+                  <g key={p.x}>
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={active ? 3.6 : 2.2}
+                      fill={color}
+                      stroke={active ? "#fff" : "none"}
+                      strokeWidth={active ? 1 : 0}
+                    />
+                    {/* Invisible, generously sized hit target — a 2px dot is
+                        far too small to hit with a fingertip. */}
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={9}
+                      fill="transparent"
+                      style={{ cursor: "pointer" }}
+                      onMouseEnter={() =>
+                        setHover({
+                          sx: cx,
+                          sy: cy,
+                          label: s.label,
+                          value: p.y,
+                          run: ordered[p.x]?.label ?? "",
+                          color,
+                        })
+                      }
+                      onClick={() =>
+                        setHover((h) =>
+                          h && h.sx === cx && h.sy === cy && h.label === s.label
+                            ? null
+                            : {
+                                sx: cx,
+                                sy: cy,
+                                label: s.label,
+                                value: p.y,
+                                run: ordered[p.x]?.label ?? "",
+                                color,
+                              },
+                        )
+                      }
+                    />
+                  </g>
+                );
+              })}
             </g>
           );
         })}
@@ -1451,6 +1510,35 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
           newest
         </text>
       </svg>
+      {hover && (
+        <div
+          // Positioned in percentages so it tracks the SVG as it scales with
+          // the container width.
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
+          style={{
+            left: `${(hover.sx / W) * 100}%`,
+            top: `${(hover.sy / H) * 100}%`,
+            marginTop: -8,
+          }}
+        >
+          <div className="rounded-lg border border-border bg-bg px-2.5 py-1.5 shadow-lg whitespace-nowrap">
+            <div className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: hover.color }}
+              />
+              <span className="text-[10px] font-semibold text-white">
+                {Math.round(hover.value)}% avg error
+              </span>
+            </div>
+            <div className="text-[9px] text-white/60 mt-0.5">{hover.label}</div>
+            {hover.run && (
+              <div className="text-[9px] text-white/40">{hover.run}</div>
+            )}
+          </div>
+        </div>
+      )}
+      </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {series.map((s, si) => (
           <span key={s.key} className="flex items-center gap-1 text-[9px] text-white/55">
