@@ -175,6 +175,10 @@ export default function AnalyzerLabClient() {
   // few hundred imported dishes was unusable; a count + random draw is both
   // easier and a less biased sample.
   const [sampleSize, setSampleSize] = useState("10");
+  // When set, the next run uses exactly these dishes instead of a fresh random
+  // draw. Re-running a past report's dish set removes sampling luck from a
+  // comparison, which is otherwise the main confound between reports.
+  const [pinnedDishIds, setPinnedDishIds] = useState<string[] | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<Map<string, CellResult>>(new Map());
@@ -352,13 +356,25 @@ export default function AnalyzerLabClient() {
     // Draw a fresh random sample for this run. Every model/pipeline/variant
     // in the run sees the SAME dishes, so comparisons within a run are fair;
     // across runs the sample differs, which is why the dish ids are saved.
-    const n = Math.max(1, Math.min(fixtures.length, Number(sampleSize) || 10));
-    const shuffled = [...fixtures];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    let targetFixtures: FixtureListItem[];
+    if (pinnedDishIds?.length) {
+      const byId = new Map(fixtures.map((f) => [f.id, f]));
+      targetFixtures = pinnedDishIds
+        .map((id) => byId.get(id))
+        .filter((f): f is FixtureListItem => !!f);
+      if (targetFixtures.length === 0) {
+        setPinnedDishIds(null);
+        return setErr("Those dishes are no longer in the pool — pin cleared");
+      }
+    } else {
+      const n = Math.max(1, Math.min(fixtures.length, Number(sampleSize) || 10));
+      const shuffled = [...fixtures];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      targetFixtures = shuffled.slice(0, n);
     }
-    const targetFixtures = shuffled.slice(0, n);
     const modelList = Array.from(models);
 
     const variantList = VARIANTS.filter((v) =>
@@ -827,17 +843,34 @@ export default function AnalyzerLabClient() {
               })}
             </div>
           </div>
-          <label className="block">
-            <span className="block text-[11px] text-white/50 mb-1">Dishes (random)</span>
-            <input
-              type="number"
-              min={1}
-              max={fixtures?.length || 500}
-              value={sampleSize}
-              onChange={(e) => setSampleSize(e.target.value)}
-              className="w-24 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
-            />
-          </label>
+          {pinnedDishIds?.length ? (
+            <div>
+              <span className="block text-[11px] text-white/50 mb-1">Dishes</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-accent-sec-container text-accent-on-sec-container px-3 py-2 text-xs font-medium">
+                  {pinnedDishIds.length} pinned
+                </span>
+                <button
+                  onClick={() => setPinnedDishIds(null)}
+                  className="text-[11px] text-accent-brand"
+                >
+                  Use random
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="block">
+              <span className="block text-[11px] text-white/50 mb-1">Dishes (random)</span>
+              <input
+                type="number"
+                min={1}
+                max={fixtures?.length || 500}
+                value={sampleSize}
+                onChange={(e) => setSampleSize(e.target.value)}
+                className="w-24 rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
+              />
+            </label>
+          )}
           <button
             onClick={run}
             disabled={running}
@@ -845,7 +878,9 @@ export default function AnalyzerLabClient() {
           >
             {running && progress
               ? `Running… ${progress.done}/${progress.total}`
-              : `Run on ${Math.min(Number(sampleSize) || 10, fixtures?.length || 0)} random dishes`}
+              : pinnedDishIds?.length
+                ? `Run on the same ${pinnedDishIds.length} dishes`
+                : `Run on ${Math.min(Number(sampleSize) || 10, fixtures?.length || 0)} random dishes`}
           </button>
         </div>
 
@@ -951,6 +986,18 @@ export default function AnalyzerLabClient() {
                             : "no scored dishes"}
                         </div>
                       </button>
+                      {Array.isArray(r.config?.dishIds) && r.config.dishIds.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setPinnedDishIds(r.config.dishIds);
+                            setViewingRun(null);
+                          }}
+                          title="Run again on exactly these dishes, so the comparison isn't affected by sampling"
+                          className="text-[11px] text-accent-brand shrink-0"
+                        >
+                          Same dishes
+                        </button>
+                      )}
                       <button
                         onClick={() => deleteRun(r.id)}
                         className="text-[11px] text-red-400/80 shrink-0"
