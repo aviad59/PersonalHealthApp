@@ -918,6 +918,7 @@ export default function AnalyzerLabClient() {
               Every run is saved automatically, so reports are never lost and prompt
               changes can be compared over time.
             </p>
+            <RunHistoryChart runs={runsList ?? []} />
             {viewingRun && (
               <button
                 onClick={() => setViewingRun(null)}
@@ -1339,5 +1340,128 @@ function AccuracyScorecard({
         mass is portion-size accuracy, the Nutrition5k paper's key diagnostic.
       </p>
     </section>
+  );
+}
+
+// Distinguishable line colors, one per model x pipeline x input combination.
+const SERIES_COLORS = [
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444",
+  "#a855f7", "#14b8a6", "#ec4899", "#84cc16",
+];
+
+/**
+ * Average error per configuration across saved reports, oldest to newest.
+ *
+ * The point is to see whether a prompt or model change actually moved the
+ * needle: each line is one model x pipeline x input combination, and lower is
+ * better. A configuration missing from a given report simply has no point
+ * there, so lines can start late or have gaps rather than implying a zero.
+ */
+function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
+  // Saved runs arrive newest-first; a trend reads left-to-right in time.
+  const ordered = [...runs].reverse().filter((r) => (r.rows?.length ?? 0) > 0);
+  if (ordered.length === 0) return null;
+
+  type Series = { key: string; label: string; points: { x: number; y: number }[] };
+  const seriesMap = new Map<string, Series>();
+  ordered.forEach((run, i) => {
+    for (const row of run.rows ?? []) {
+      const mape = row?.agg?.mape;
+      if (typeof mape !== "number" || !Number.isFinite(mape)) continue;
+      const key = row.key ?? `${row.model}-${row.pipeline}-${row.variant}`;
+      if (!seriesMap.has(key)) {
+        seriesMap.set(key, {
+          key,
+          // Older saved runs predate some fields; fall back rather than crash.
+          label: [row.modelLabel ?? row.model, row.pipeline, row.variant]
+            .filter(Boolean)
+            .join(" · "),
+          points: [],
+        });
+      }
+      seriesMap.get(key)!.points.push({ x: i, y: mape });
+    }
+  });
+
+  const series = Array.from(seriesMap.values()).filter((s) => s.points.length > 0);
+  if (series.length === 0) return null;
+
+  const W = 320;
+  const H = 150;
+  const PAD = { l: 26, r: 6, t: 8, b: 18 };
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+
+  const maxY = Math.max(10, ...series.flatMap((s) => s.points.map((p) => p.y)));
+  const niceMax = Math.ceil(maxY / 20) * 20;
+  const n = ordered.length;
+  // A single report has no span to spread across — pin it to the middle.
+  const xAt = (i: number) => PAD.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (v: number) => PAD.t + plotH - (v / niceMax) * plotH;
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((f) => niceMax * f);
+
+  return (
+    <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-white/50">
+        Avg error by report · lower is better
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        {gridLines.map((v) => (
+          <g key={v}>
+            <line
+              x1={PAD.l}
+              x2={W - PAD.r}
+              y1={yAt(v)}
+              y2={yAt(v)}
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth={1}
+            />
+            <text x={2} y={yAt(v) + 3} fill="rgba(255,255,255,0.35)" fontSize={8}>
+              {Math.round(v)}%
+            </text>
+          </g>
+        ))}
+        {series.map((s, si) => {
+          const color = SERIES_COLORS[si % SERIES_COLORS.length];
+          return (
+            <g key={s.key}>
+              {s.points.length > 1 && (
+                <polyline
+                  points={s.points.map((p) => `${xAt(p.x)},${yAt(p.y)}`).join(" ")}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              {s.points.map((p) => (
+                <circle key={p.x} cx={xAt(p.x)} cy={yAt(p.y)} r={2.2} fill={color}>
+                  <title>{`${s.label}\n${Math.round(p.y)}% avg error\n${ordered[p.x]?.label ?? ""}`}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+        <text x={PAD.l} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8}>
+          oldest
+        </text>
+        <text x={W - PAD.r} y={H - 5} fill="rgba(255,255,255,0.35)" fontSize={8} textAnchor="end">
+          newest
+        </text>
+      </svg>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {series.map((s, si) => (
+          <span key={s.key} className="flex items-center gap-1 text-[9px] text-white/55">
+            <span
+              className="inline-block w-2.5 h-[2px] rounded-full"
+              style={{ backgroundColor: SERIES_COLORS[si % SERIES_COLORS.length] }}
+            />
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
