@@ -7,11 +7,16 @@ export const CLAUDE_MODEL = "claude-sonnet-4-6";
 // "Best" model — used for the AI coach where response quality matters most.
 export const CLAUDE_OPUS_MODEL = "claude-opus-4-8";
 
-// "Fast" model — used for time-sensitive calls the user is sitting and
-// waiting on: meal photo/text analysis, the next-meal tip, and the
-// home-page suggestion. Haiku 4.5 is dramatically faster (typical
-// 1–3 s response) while remaining fully capable of structured macro
-// estimation and short context-aware suggestions.
+// "Fast" model — for time-sensitive calls the user is sitting and waiting on:
+// the next-meal tip and the home-page suggestion. Haiku 4.5 is dramatically
+// faster (typical 1–3 s) while remaining capable of structured estimation and
+// short context-aware suggestions.
+//
+// NOTE: meal photo/text analysis does NOT use this model. It runs on
+// CLAUDE_MODEL (Sonnet) via DEFAULT_ANALYZE_MODEL in lib/analyze.ts — measured
+// at ~9–10 s per meal, against ~3.3 s for Haiku. This comment used to claim
+// analysis ran here, which was never true in code; switching it is a live
+// accuracy-vs-latency decision, not an oversight to quietly fix.
 export const CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001";
 
 let _client: Anthropic | null = null;
