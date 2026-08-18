@@ -1,11 +1,10 @@
-// Slower follow-up to /api/today: workout cache + recovery score.
+// Slower follow-up to /api/today: workout cache + workout score.
 // Split out so the home page can render macro rings & meals immediately
-// (from /api/today) and stream the workout/recovery sections in after.
+// (from /api/today) and stream the workout sections in after.
 
 import { NextResponse } from "next/server";
 import {
   getProfile,
-  getMealsSinceLite,
   getCachedWorkoutsSince,
   todayStr,
   daysAgoStr,
@@ -15,7 +14,7 @@ import {
 } from "@/lib/db";
 import { HevyWorkout, workoutVolumeKg, workoutDurationMin } from "@/lib/hevy";
 import { estimateWorkoutBurn } from "@/lib/burn";
-import { computeRecovery, DailyTotals } from "@/lib/recovery";
+import { computeWorkoutScore } from "@/lib/workout-score";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
 
@@ -34,39 +33,26 @@ function rowsToHevy(rows: { raw_json: string }[]): HevyWorkout[] {
   return out;
 }
 
-function dailyTotalsFromMeals(
-  meals: { date: string; calories: number | null; protein_g: number | null }[],
-): DailyTotals[] {
-  const m = new Map<string, DailyTotals>();
-  for (const x of meals) {
-    const d = x.date;
-    const cur = m.get(d) ?? { date: d, calories: 0, protein_g: 0 };
-    cur.calories += x.calories ?? 0;
-    cur.protein_g += x.protein_g ?? 0;
-    m.set(d, cur);
-  }
-  return Array.from(m.values());
-}
-
 export async function GET() {
   const userId = await getCurrentUserIdOrDefault();
   const cfg = await getUserConfig(userId);
 
-  // Users without a workouts setup (orly) don't have Hevy/recovery data.
+  // Users without a workouts setup (orly) have no Hevy data to score.
   if (!cfg.hasWorkouts) {
     return NextResponse.json({
       date: todayStr(),
       todaysWorkout: null,
       training_burn_kcal: 0,
-      recovery: null,
+      workoutScore: null,
       week: null,
     });
   }
 
-  const [profile, cachedRecent, last3] = await Promise.all([
+  const [profile, cachedRecent] = await Promise.all([
     getProfile(userId),
-    getCachedWorkoutsSince(userId, daysAgoStr(14)),
-    getMealsSinceLite(userId, daysAgoStr(2)),
+    // 28 days: the workout score compares this week's volume against the
+    // previous three, so it needs a four-week window.
+    getCachedWorkoutsSince(userId, daysAgoStr(28)),
   ]);
   const today = todayStr();
 
@@ -106,18 +92,9 @@ export async function GET() {
     };
   }
 
-  const dailies = dailyTotalsFromMeals(
-    last3.map((m) => ({
-      date: m.date,
-      calories: m.calories,
-      protein_g: m.protein_g,
-    })),
-  );
-  const recovery = computeRecovery({
-    goalCalories: profile?.goal_calories,
-    goalProteinG: profile?.goal_protein_g,
-    last3Days: dailies,
+  const workoutScore = computeWorkoutScore({
     recentWorkouts: recentHevy,
+    weeklyWorkoutTarget: profile?.weekly_workout_target,
   });
 
   // Weekly summary — count distinct workout dates Sunday→today, compare
@@ -148,7 +125,7 @@ export async function GET() {
     date: today,
     todaysWorkout,
     training_burn_kcal: todaysWorkout?.burn_kcal ?? 0,
-    recovery,
+    workoutScore,
     week: {
       starts_on: weekStart,
       completed,

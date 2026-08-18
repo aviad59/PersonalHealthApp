@@ -15,16 +15,32 @@ type MuscleStatus = {
   readiness: "rest" | "cautious" | "ready";
 };
 
-type Recovery = {
+type ScoreComponent = {
+  score: number;
+  max: number;
+  available: boolean;
+  detail: string;
+};
+
+type WorkoutScore = {
   score: number;
   band: "low" | "moderate" | "good" | "high";
-  proteinAdherencePct: number;
-  calorieDeviationPct: number;
-  backToBackSessions: boolean;
-  avgRpeLast3Days: number | null;
+  components: {
+    consistency: ScoreComponent;
+    progression: ScoreComponent;
+    balance: ScoreComponent;
+    intensity: ScoreComponent;
+  };
+  sessionsLast7: number;
+  weeklyTarget: number;
+  volumeLast7Kg: number;
+  volumeChangePct: number | null;
+  avgRpeLast7: number | null;
+  neglectedRegions: string[];
+  daysSinceLastSession: number | null;
   byMuscle: MuscleStatus[];
   rationale: string;
-  signalsUsed: {
+  signalsUsed?: {
     protein: boolean;
     calories: boolean;
     workouts: boolean;
@@ -67,7 +83,7 @@ type Training = {
     burn_reason: string;
   } | null;
   training_burn_kcal: number;
-  recovery: Recovery | null;
+  workoutScore: WorkoutScore | null;
   week: {
     starts_on: string;
     completed: number;
@@ -185,7 +201,7 @@ export default function HomeClient({
           // 1) GET /api/workouts warms the workout cache and auto-syncs
           //    from Hevy if it's >10min stale (cheap when fresh) — this is
           //    the "auto-sync on open" so the Workouts tab isn't needed.
-          // 2) Re-read /api/today/training so the week counter + recovery
+          // 2) Re-read /api/today/training so the week counter + workout score
           //    reflect the freshly-synced sessions.
           await fetch("/api/workouts", { cache: "no-store" }).catch(() => {});
           const r = await fetch("/api/today/training", { cache: "no-store" });
@@ -218,7 +234,7 @@ export default function HomeClient({
   }
 
   const { totals, profile, meals, latestInsight, targets } = data;
-  const recovery = training?.recovery ?? null;
+  const workoutScore = training?.workoutScore ?? null;
   const today = new Date(data.date);
   const burn = training?.training_burn_kcal ?? 0;
   const baseCal = targets.base_calories;
@@ -291,33 +307,33 @@ export default function HomeClient({
                 </div>
               </div>
             </section>
-          ) : recovery ? (
+          ) : workoutScore ? (
             <section className="card p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_recovery")}</h2>
-                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(recovery.band)}`}>
-                  {recovery.band}
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_workout_score")}</h2>
+                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(workoutScore.band)}`}>
+                  {workoutScore.band}
                 </span>
               </div>
               <div className="flex items-end gap-4">
                 <div>
-                  <div className="text-3xl font-bold leading-none">{recovery.score}</div>
+                  <div className="text-3xl font-bold leading-none">{workoutScore.score}</div>
                   <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">/ 100</div>
                 </div>
                 <div className="flex-1">
-                  <ScoreBar score={recovery.score} band={recovery.band} />
-                  <RecoveryRationale recovery={recovery} lang={lang} />
+                  <ScoreBar score={workoutScore.score} band={workoutScore.band} />
+                  <WorkoutScoreRationale score={workoutScore} lang={lang} />
                 </div>
               </div>
               <div className="mt-4">
                 <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {recovery.byMuscle.map((m) => (
+                  {workoutScore.byMuscle.map((m) => (
                     <MusclePill key={m.muscle} status={m} todayLabel={t(lang, "home_today_label")} />
                   ))}
                 </div>
               </div>
-              {!recovery.signalsUsed.workouts && (
+              {workoutScore.daysSinceLastSession === null && (
                 <p className="text-[10px] text-white/30 mt-3">
                   {t(lang, "home_refresh_workouts")}
                 </p>
@@ -502,11 +518,12 @@ function WeekWorkoutsBar({
   );
 }
 
-function RecoveryRationale({ recovery, lang }: { recovery: Recovery; lang: Lang }) {
+function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lang }) {
   const [open, setOpen] = useState(false);
+  const c = score.components;
   // Turn the flat rationale into a tap-target that expands an inline
-  // breakdown of the signals that drove the score. No portal/modal — a
-  // disclosure feels lighter on the small home cards.
+  // breakdown of the four components that drove the score. No portal/modal —
+  // a disclosure feels lighter on the small home cards.
   return (
     <div className="mt-2">
       <button
@@ -515,7 +532,7 @@ function RecoveryRationale({ recovery, lang }: { recovery: Recovery; lang: Lang 
         aria-expanded={open}
         className="group flex items-start gap-1.5 text-left leading-snug hover:opacity-90 transition-opacity"
       >
-        <span className="text-[12px] text-white/60">{recovery.rationale}</span>
+        <span className="text-[12px] text-white/60">{score.rationale}</span>
         <svg
           viewBox="0 0 24 24"
           className={`mt-[3px] h-3 w-3 shrink-0 text-accent-brand transition-transform ${open ? "rotate-180" : ""}`}
@@ -531,34 +548,40 @@ function RecoveryRationale({ recovery, lang }: { recovery: Recovery; lang: Lang 
       {open && (
         <div className="mt-2 rounded-lg border border-border bg-bg-elev p-3 space-y-1.5 text-[11px]">
           <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1">
-            {t(lang, "home_recovery_breakdown")}
+            {t(lang, "home_score_breakdown")}
           </div>
           <RationaleRow
-            label={t(lang, "home_recovery_protein")}
-            value={`${recovery.proteinAdherencePct}%`}
-            highlight={recovery.proteinAdherencePct < 85}
+            label={t(lang, "home_score_consistency")}
+            value={c.consistency.detail}
+            highlight={c.consistency.score < c.consistency.max * 0.7}
           />
+          {c.progression.available ? (
+            <RationaleRow
+              label={t(lang, "home_score_progression")}
+              value={c.progression.detail}
+              highlight={c.progression.score < c.progression.max * 0.7}
+            />
+          ) : null}
+          {c.balance.available ? (
+            <RationaleRow
+              label={t(lang, "home_score_balance")}
+              value={c.balance.detail}
+              highlight={score.neglectedRegions.length > 0}
+            />
+          ) : null}
+          {c.intensity.available ? (
+            <RationaleRow
+              label={t(lang, "home_score_intensity")}
+              value={c.intensity.detail}
+              highlight={c.intensity.score < c.intensity.max * 0.7}
+            />
+          ) : null}
           <RationaleRow
-            label={t(lang, "home_recovery_calories")}
-            value={`${recovery.calorieDeviationPct}% ${t(lang, "home_recovery_off_target")}`}
-            highlight={recovery.calorieDeviationPct > 15}
+            label={t(lang, "home_score_volume")}
+            value={`${score.volumeLast7Kg.toLocaleString()} kg`}
           />
-          {recovery.signalsUsed.workouts && (
-            <RationaleRow
-              label={t(lang, "home_recovery_back_to_back")}
-              value={recovery.backToBackSessions ? t(lang, "home_recovery_yes") : t(lang, "home_recovery_no")}
-              highlight={recovery.backToBackSessions}
-            />
-          )}
-          {recovery.avgRpeLast3Days !== null && (
-            <RationaleRow
-              label={t(lang, "home_recovery_rpe")}
-              value={recovery.avgRpeLast3Days.toFixed(1)}
-              highlight={recovery.avgRpeLast3Days >= 8.5}
-            />
-          )}
           <p className="text-[10px] text-white/40 leading-snug pt-1.5 mt-1.5 border-t border-border">
-            {t(lang, "home_recovery_explainer")}
+            {t(lang, "home_score_explainer")}
           </p>
         </div>
       )}
@@ -585,14 +608,14 @@ function PulseLogo(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function bandClasses(band: Recovery["band"]) {
+function bandClasses(band: WorkoutScore["band"]) {
   if (band === "high") return "border-emerald-500/40 text-emerald-400 bg-emerald-500/10";
   if (band === "good") return "border-green-500/40 text-green-400 bg-green-500/10";
   if (band === "moderate") return "border-yellow-500/40 text-yellow-400 bg-yellow-500/10";
   return "border-red-500/40 text-red-400 bg-red-500/10";
 }
 
-function ScoreBar({ score, band }: { score: number; band: Recovery["band"] }) {
+function ScoreBar({ score, band }: { score: number; band: WorkoutScore["band"] }) {
   const pct = Math.min(100, Math.max(0, score));
   const color =
     band === "high" ? "bg-emerald-500" :

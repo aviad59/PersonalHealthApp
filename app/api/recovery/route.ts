@@ -1,12 +1,9 @@
+// Standalone workout-score endpoint. The home page reads the score from
+// /api/today/training; this stays as a direct way to fetch it on its own.
 import { NextResponse } from "next/server";
-import {
-  getProfile,
-  getMealsSince,
-  getCachedWorkoutsSince,
-  daysAgoStr,
-} from "@/lib/db";
+import { getProfile, getCachedWorkoutsSince, daysAgoStr } from "@/lib/db";
 import { HevyWorkout } from "@/lib/hevy";
-import { computeRecovery, DailyTotals } from "@/lib/recovery";
+import { computeWorkoutScore } from "@/lib/workout-score";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 import { getUserConfig } from "@/lib/user";
 
@@ -25,51 +22,22 @@ function rowsToHevy(rows: { raw_json: string }[]): HevyWorkout[] {
   return out;
 }
 
-function dailyTotalsFromMeals(
-  meals: {
-    date: string;
-    calories: number | null;
-    protein_g: number | null;
-  }[],
-): DailyTotals[] {
-  const m = new Map<string, DailyTotals>();
-  for (const x of meals) {
-    const d = x.date;
-    const cur = m.get(d) ?? { date: d, calories: 0, protein_g: 0 };
-    cur.calories += x.calories ?? 0;
-    cur.protein_g += x.protein_g ?? 0;
-    m.set(d, cur);
-  }
-  return Array.from(m.values());
-}
-
 export async function GET() {
   const userId = await getCurrentUserIdOrDefault();
   const cfg = await getUserConfig(userId);
   if (!cfg.hasWorkouts) {
-    return NextResponse.json({ recovery: null });
+    return NextResponse.json({ workoutScore: null });
   }
-  const [profile, last3, cachedRecent] = await Promise.all([
+  const [profile, cachedRecent] = await Promise.all([
     getProfile(userId),
-    getMealsSince(userId, daysAgoStr(2)),
-    getCachedWorkoutsSince(userId, daysAgoStr(14)),
+    // Four weeks, so the volume trend has three prior weeks to compare against.
+    getCachedWorkoutsSince(userId, daysAgoStr(28)),
   ]);
 
-  const dailies = dailyTotalsFromMeals(
-    last3.map((m) => ({
-      date: m.date,
-      calories: m.calories,
-      protein_g: m.protein_g,
-    })),
-  );
-  const recentHevy = rowsToHevy(cachedRecent);
-
-  const recovery = computeRecovery({
-    goalCalories: profile?.goal_calories,
-    goalProteinG: profile?.goal_protein_g,
-    last3Days: dailies,
-    recentWorkouts: recentHevy,
+  const workoutScore = computeWorkoutScore({
+    recentWorkouts: rowsToHevy(cachedRecent),
+    weeklyWorkoutTarget: profile?.weekly_workout_target,
   });
 
-  return NextResponse.json({ recovery });
+  return NextResponse.json({ workoutScore });
 }
