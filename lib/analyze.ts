@@ -56,6 +56,12 @@ export type AnalyzeInput = {
   systemPerceive?: string;
   /** Stage-2 prompt override (two-stage only). */
   systemQuantify?: string;
+  /**
+   * Self-consistency: run the identical request this many times and combine
+   * the answers. Calls go out in PARALLEL, so latency stays roughly that of a
+   * single call while cost scales with the count. Default 1 (off).
+   */
+  samples?: number;
 };
 
 /** What stage 1 saw, surfaced so the lab can show where an error came from. */
@@ -84,6 +90,10 @@ export type AnalyzeResult = {
   pipeline: "single" | "two-stage";
   /** Stage-1 output, present only for two-stage runs. */
   perception?: PerceptionResult;
+  /** How many samples were combined (1 = self-consistency off). */
+  samples?: number;
+  /** Calorie spread across samples — wide means the model is unsure. */
+  sampleSpread?: { min: number; max: number } | null;
 };
 
 // A meal with many items — and especially one described in Hebrew, which costs
@@ -112,6 +122,102 @@ export const DEFAULT_ANALYZE_MODEL = CLAUDE_FAST_MODEL;
  * `images` first.
  */
 export async function analyzeMeal(input: AnalyzeInput): Promise<AnalyzeResult> {
+  const samples = Math.max(1, Math.min(7, Math.round(input.samples ?? 1)));
+  if (samples > 1) {
+    return analyzeWithSelfConsistency(input, samples);
+  }
+  return analyzeOnce(input);
+}
+
+/**
+ * Run the same request several times and combine the answers.
+ *
+ * Rationale from the benchmark: calorie bias is now near zero while mean error
+ * stays high, i.e. the estimates scatter around the truth rather than being
+ * systematically wrong — which is exactly the error that averaging removes.
+ *
+ * Three decisions matter here:
+ *  - The calls are PARALLEL, so wall-clock stays ~one call and only cost
+ *    multiplies. That is the only reason this is affordable at all.
+ *  - Totals are combined with the MEDIAN, not the mean: the whole point is to
+ *    suppress the occasional wild read, and a mean is dragged by exactly that.
+ *  - Item lists are NOT merged across samples (that yields duplicates and
+ *    contradictions). One representative sample supplies the names, and its
+ *    items are scaled so they still sum to the combined totals.
+ */
+async function analyzeWithSelfConsistency(
+  input: AnalyzeInput,
+  samples: number,
+): Promise<AnalyzeResult> {
+  const runs = await Promise.all(
+    Array.from({ length: samples }, () => analyzeOnce(input).catch(() => null)),
+  );
+  const ok = runs.filter(
+    (r): r is AnalyzeResult => !!r && !!r.analysis?.total && !r.parseError,
+  );
+  // Nothing usable, or only one — fall back rather than invent a combination.
+  if (ok.length === 0) return runs.find(Boolean) ?? analyzeOnce(input);
+  if (ok.length === 1) return { ...ok[0], samples, sampleSpread: null };
+
+  const MACROS = ["calories", "protein_g", "fat_g", "carbs_g"] as const;
+  const median = (xs: number[]) => {
+    const a = [...xs].sort((x, y) => x - y);
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+  };
+
+  const combinedTotal = {} as Record<(typeof MACROS)[number], number>;
+  for (const m of MACROS) {
+    combinedTotal[m] = Math.round(
+      median(ok.map((r) => Number(r.analysis.total[m]) || 0)),
+    );
+  }
+
+  // The sample closest to the combined calories supplies description and item
+  // names, so the write-up matches the numbers rather than being a blend.
+  const rep = ok.reduce((best, r) =>
+    Math.abs((Number(r.analysis.total.calories) || 0) - combinedTotal.calories) <
+    Math.abs((Number(best.analysis.total.calories) || 0) - combinedTotal.calories)
+      ? r
+      : best,
+  );
+
+  // Rescale the representative's items so they still add up to the combined
+  // totals — the invariant that totals equal the sum of the items is worth
+  // keeping.
+  const repItems = Array.isArray(rep.analysis.items) ? rep.analysis.items : [];
+  const scale = {} as Record<(typeof MACROS)[number], number>;
+  for (const m of MACROS) {
+    const repSum = repItems.reduce((a: number, it: any) => a + (Number(it[m]) || 0), 0);
+    scale[m] = repSum > 0 ? combinedTotal[m] / repSum : 1;
+  }
+  const items = repItems.map((it: any) => ({
+    ...it,
+    calories: Math.round((Number(it.calories) || 0) * scale.calories),
+    protein_g: Math.round((Number(it.protein_g) || 0) * scale.protein_g * 10) / 10,
+    fat_g: Math.round((Number(it.fat_g) || 0) * scale.fat_g * 10) / 10,
+    carbs_g: Math.round((Number(it.carbs_g) || 0) * scale.carbs_g * 10) / 10,
+  }));
+
+  const cals = ok.map((r) => Number(r.analysis.total.calories) || 0);
+  return {
+    ...rep,
+    analysis: { ...rep.analysis, items, total: combinedTotal },
+    // Latency is the slowest sample, since they ran concurrently.
+    latencyMs: Math.max(...ok.map((r) => r.latencyMs)),
+    usage: ok.reduce(
+      (a, r) => ({
+        input_tokens: a.input_tokens + r.usage.input_tokens,
+        output_tokens: a.output_tokens + r.usage.output_tokens,
+      }),
+      { input_tokens: 0, output_tokens: 0 },
+    ),
+    samples: ok.length,
+    sampleSpread: { min: Math.min(...cals), max: Math.max(...cals) },
+  };
+}
+
+async function analyzeOnce(input: AnalyzeInput): Promise<AnalyzeResult> {
   const lang = input.lang || "en";
   const model = input.model || DEFAULT_ANALYZE_MODEL;
   const hasPhoto = !!input.images && input.images.length > 0;

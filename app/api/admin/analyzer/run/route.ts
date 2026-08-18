@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
   // description, to measure how much the user's text note actually helps.
   // Text-mode fixtures always keep their text — it IS the input.
   const includeText = body?.includeText !== false;
+  // Self-consistency: N parallel calls combined by median. 1 = off.
+  const samples = Math.max(1, Math.min(7, Number(body?.samples) || 1));
   const pipeline: "single" | "two-stage" =
     body?.pipeline === "two-stage" ? "two-stage" : "single";
   const systemPerceive =
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
         pipeline,
         systemPerceive,
         systemQuantify,
+        samples,
       });
       // Keep the first run's stage-1 reading so the lab can show what the
       // perceive pass actually saw.
@@ -215,6 +218,7 @@ export async function POST(req: NextRequest) {
     fixtureId,
     model: model || "default",
     includeText,
+    samples,
     pipeline,
     perception: firstPerception,
     label: fx.label,

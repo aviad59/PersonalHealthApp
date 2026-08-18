@@ -114,7 +114,10 @@ function localToday(): string {
 }
 
 const HOME_CACHE_KEY = "home-today-v1";
-const HOME_TRAINING_KEY = "home-training-v1";
+// v2: the payload changed shape (recovery -> workoutScore). A cached v1 blob
+// left `training` truthy with no score, so the card silently rendered nothing
+// until a refetch landed — and not at all if the refetch failed.
+const HOME_TRAINING_KEY = "home-training-v2";
 
 export default function HomeClient({
   hasWorkouts,
@@ -179,7 +182,11 @@ export default function HomeClient({
     }
     if (hasWorkouts) {
       const cachedTraining = lsGet<Training>(HOME_TRAINING_KEY);
-      if (cachedTraining) setTraining(cachedTraining);
+      // Belt and braces alongside the key bump: only trust a cached payload
+      // that actually carries the fields this build renders.
+      if (cachedTraining && "workoutScore" in cachedTraining) {
+        setTraining(cachedTraining);
+      }
     }
 
     (async () => {

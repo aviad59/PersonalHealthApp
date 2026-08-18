@@ -57,9 +57,13 @@ const PIPELINES: { id: Pipeline; label: string; hint: string }[] = [
   },
 ];
 
+/** Self-consistency options: N parallel calls combined by median. */
+const SAMPLE_OPTIONS = [1, 3, 5] as const;
+
 type CellResult = {
   fixtureId: string;
   model: string;
+  samples: number;
   /** false = photo only; true = photo + its description. */
   includeText: boolean;
   pipeline: Pipeline;
@@ -122,7 +126,9 @@ const cellKey = (
   model: string,
   includeText: boolean,
   pipeline: Pipeline,
-) => `${fixtureId}::${model}::${includeText ? "txt" : "img"}::${pipeline}`;
+  samples: number,
+) =>
+  `${fixtureId}::${model}::${includeText ? "txt" : "img"}::${pipeline}::x${samples}`;
 
 /** Always-signed percentage, so over- vs under-estimate is never ambiguous. */
 function signedPct(error: number, pctError: number): string {
@@ -163,6 +169,8 @@ export default function AnalyzerLabClient() {
   const [variants, setVariants] = useState<Set<string>>(new Set(["img"]));
   // Which pipelines to run — selecting both A/Bs them head to head.
   const [pipelines, setPipelines] = useState<Set<Pipeline>>(new Set(["single"]));
+  // How many samples to combine per estimate — select several to A/B them.
+  const [sampleCounts, setSampleCounts] = useState<Set<number>>(new Set([1]));
   const [systemVision, setSystemVision] = useState("");
   const [systemText, setSystemText] = useState("");
   const [systemPerceive, setSystemPerceive] = useState("");
@@ -386,23 +394,30 @@ export default function AnalyzerLabClient() {
     const pipelineList = PIPELINES.filter((p) => pipelines.has(p.id));
     if (pipelineList.length === 0) return setErr("Pick at least one pipeline");
 
-    // Full grid of (fixture × model × variant × pipeline) cells.
+    const sampleList = SAMPLE_OPTIONS.filter((n) => sampleCounts.has(n));
+    if (sampleList.length === 0) return setErr("Pick at least one sample count");
+
+    // Full grid of (fixture × model × variant × pipeline × samples) cells.
     const cells: {
       fixtureId: string;
       model: string;
       includeText: boolean;
       pipeline: Pipeline;
+      samples: number;
     }[] = [];
     for (const f of targetFixtures) {
       for (const m of modelList) {
         for (const v of variantList) {
           for (const p of pipelineList) {
-            cells.push({
-              fixtureId: f.id,
-              model: m,
-              includeText: v.includeText,
-              pipeline: p.id,
-            });
+            for (const n of sampleList) {
+              cells.push({
+                fixtureId: f.id,
+                model: m,
+                includeText: v.includeText,
+                pipeline: p.id,
+                samples: n,
+              });
+            }
           }
         }
       }
@@ -426,6 +441,7 @@ export default function AnalyzerLabClient() {
               model: cell.model,
               includeText: cell.includeText,
               pipeline: cell.pipeline,
+              samples: cell.samples,
               systemVision:
                 config && systemVision !== config.visionPrompt ? systemVision : undefined,
               systemText:
@@ -445,7 +461,13 @@ export default function AnalyzerLabClient() {
             setResults((prev) => {
               const n = new Map(prev);
               n.set(
-                cellKey(cell.fixtureId, cell.model, cell.includeText, cell.pipeline),
+                cellKey(
+                  cell.fixtureId,
+                  cell.model,
+                  cell.includeText,
+                  cell.pipeline,
+                  cell.samples,
+                ),
                 cr,
               );
               return n;
@@ -472,6 +494,7 @@ export default function AnalyzerLabClient() {
         models: modelList,
         variants: variantList.map((v) => v.label),
         pipelines: pipelineList.map((p) => p.label),
+        samples: sampleList,
         dishes: targetFixtures.length,
         dishIds: targetFixtures.map((f) => f.id),
         promptEdited,
@@ -830,6 +853,36 @@ export default function AnalyzerLabClient() {
             </div>
           </div>
           <div>
+            <span className="block text-[11px] text-white/50 mb-1">Samples</span>
+            <div className="flex flex-wrap gap-2">
+              {SAMPLE_OPTIONS.map((n) => (
+                <button
+                  key={n}
+                  onClick={() =>
+                    setSampleCounts((s) => {
+                      const next = new Set(s);
+                      if (next.has(n) && next.size > 1) next.delete(n);
+                      else next.add(n);
+                      return next;
+                    })
+                  }
+                  title={
+                    n === 1
+                      ? "One call (current production behaviour)"
+                      : `${n} identical calls in parallel, combined by median — same latency, ${n}x cost`
+                  }
+                  className={`px-3 py-1.5 rounded-full text-xs ${
+                    sampleCounts.has(n)
+                      ? "bg-accent-brand text-white"
+                      : "bg-bg-elev text-white/55"
+                  }`}
+                >
+                  {n}×
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <span className="block text-[11px] text-white/50 mb-1">Input variant</span>
             <div className="flex flex-wrap gap-2">
               {VARIANTS.map((v) => {
@@ -1049,8 +1102,10 @@ export default function AnalyzerLabClient() {
             const cells = Array.from(models)
               .flatMap((m) =>
                 VARIANTS.flatMap((v) =>
-                  PIPELINES.map((p) =>
-                    results.get(cellKey(f.id, m, v.includeText, p.id)),
+                  PIPELINES.flatMap((p) =>
+                    SAMPLE_OPTIONS.map((n) =>
+                      results.get(cellKey(f.id, m, v.includeText, p.id, n)),
+                    ),
                   ),
                 ),
               )
@@ -1232,26 +1287,29 @@ function buildScoreRows(
   return models
     .flatMap((m) =>
       VARIANTS.flatMap((v) =>
-        PIPELINES.map((p) => {
+        PIPELINES.flatMap((p) =>
+          SAMPLE_OPTIONS.map((n) => {
           const cells = Array.from(results.values()).filter(
             (c) =>
               c.model === m &&
               c.includeText === v.includeText &&
               c.pipeline === p.id &&
+              (c.samples ?? 1) === n &&
               c.accuracy,
           );
           if (cells.length === 0) return null;
           return {
-            key: `${m}-${v.includeText}-${p.id}`,
+            key: `${m}-${v.includeText}-${p.id}-x${n}`,
             model: m,
             modelLabel: modelLabel(m),
-            variant: v.label,
+            variant: n > 1 ? `${v.label} · ${n}x` : v.label,
             pipeline: p.label,
             agg: aggregateAccuracy(cells.map((c) => c.accuracy!)),
             meanLatency:
               cells.reduce((a, c) => a + c.summary.meanLatencyMs, 0) / cells.length,
           };
-        }),
+          }),
+        ),
       ),
     )
     .filter(Boolean) as ScoreRow[];
