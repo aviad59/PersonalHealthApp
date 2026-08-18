@@ -75,30 +75,81 @@ COMMON UNITS (for converting what you see into grams):
 - 1 tbsp oil = 14 g · 1 tsp oil = 5 g
 - 1 cup cooked rice = 160 g · 1 cup cooked pasta = 140 g · 1 cup milk = 240 g`;
 
+/**
+ * Photo analysis, structured around the Nutrition5k paper's central finding
+ * (arXiv 2103.03375): predicting calories PER GRAM is roughly 3x more accurate
+ * than predicting calories directly (9.5% vs 26.1% MAE). Recognising food is
+ * close to solved; almost all remaining error is portion size.
+ *
+ * So the model is asked for the two things it is good at — what the food is
+ * (its per-100g density) and how much of it there is (grams) — and never for
+ * a calorie count. The multiplication happens in code, which also makes the
+ * totals exact and guaranteed to equal the sum of the items.
+ *
+ * Portion estimation is anchored to known serving weights rather than to
+ * dimensions. An earlier version asked for length x width x height and
+ * multiplied: measured against the dataset that inflated mass badly, because
+ * volume is a product of three estimates so relative error cubes.
+ */
 export function mealVisionPrompt(lang = "en"): string {
   return `You are a precise nutrition analyst with deep knowledge of food composition databases (USDA, Israeli Ministry of Health).
 Analyze the food in this photo and return ONE JSON object immediately — no prose, no fences.
 
-PORTION ESTIMATION:
-- Use visible size cues: plate diameter (~26 cm standard), utensils, packaging labels, hands.
-- If no reference is visible, default to a typical single-person restaurant serving.
-- Err on the side of the portion you can actually see — don't inflate.
+Your job is TWO separate judgements per food item. Do not compute calories — the caller does that arithmetic from your answers.
+  1. WHAT it is  -> its nutrient density per 100 g.
+  2. HOW MUCH   -> its mass in grams.
 
+STEP 1 — MASS. Compare, don't calculate.
+Never estimate length x width x height and multiply; small errors in each compound badly. Judge each item against a reference of known mass:
+- Palm of an adult hand, no fingers ≈ 100 g of cooked meat or fish
+- A deck of cards ≈ 90 g of meat
+- A clenched fist ≈ 1 cup ≈ 150 g of cooked rice, pasta or stew
+- A cupped hand ≈ 80 g of cooked grains, or 30 g of nuts/dry cereal
+- A tennis ball ≈ 80 g of rice or mashed potato
+- A thumb tip ≈ 5 g of oil or butter; a whole thumb ≈ 15 g
+- A large egg ≈ 50 g · a slice of sandwich bread ≈ 30 g · a pita ≈ 60 g
+- A standard dinner plate is ~26 cm across — use it to judge how much of the plate an item covers and how deep the pile is (flat layer, low mound, heaped).
+
+TYPICAL SINGLE SERVINGS — sanity-check every mass against these:
+- Meat or fish portion: 100–180 g · cooked rice/pasta/potato: 120–250 g
+- Cooked vegetables: 60–150 g · raw salad leaves: 20–60 g (mostly air, very light)
+- Sauce or dressing: 15–40 g · hard cheese: 20–40 g · a pastry/quiche slice: 100–150 g
+
+CALIBRATION:
+- Judge each item on its own. Do NOT scale portions up so the plate totals a "proper meal" — small plates and single components are common, and a low answer is often correct.
+- If torn between two values, take the LOWER one. Over-estimating portions is the most common failure mode.
+- Count food only, not the plate, cutlery or packaging.
+
+STEP 2 — DENSITY per 100 g, for the food AS PREPARED.
 ${MACRO_ANCHORS}
+- Frying, breading, roasting in oil and dressings raise fat/carb density well above the raw item — reflect that in the density rather than adding a separate item, unless the fat is a distinct visible pool.
+- Visible pooled oil, glossy coating, melted cheese or cream means added fat: a sauteed vegetable carries ~5-8 g fat per 100 g, a dry-roasted one does not.
+- Densities must be self-consistent: kcal_per_100g should be close to 4*protein + 4*carbs + 9*fat per 100 g. Check before answering.
+- Use the anchors above or standard USDA values. Do NOT invent numbers.
 
-RULES:
-- Total kcal must equal the sum of all items (no rounding errors >5 kcal).
-- Judge each portion on its own merits. Do NOT assume a plate must add up to a "normal meal" size:
-  a small side, a single component, or a light snack is often 80–250 kcal and that is a correct answer.
-  Never revise an estimate upward just because the total looks low.
-- Set confidence "high" when portions are clearly visible or labeled, "medium" for visible food with estimated portions, "low" when food is obscured or ambiguous.
+Set confidence "high" when portions are clearly visible or labeled, "medium" for visible food with estimated portions, "low" when food is obscured or ambiguous.
 
 ${CLARIFYING_QUESTION_GUIDANCE}
 
 ${mealLangInstruction(lang)}
 
 JSON schema (output only this, nothing else):
-${mealJsonSchema(lang)}`;
+{
+  "description": ${lang === "he" ? '"תיאור קצר של הארוחה בעברית"' : '"short meal description in English"'},
+  "items": [
+    {
+      "name": ${lang === "he" ? '"שם המאכל בעברית"' : '"food item name in English"'},
+      "mass_g": number,
+      "kcal_per_100g": number,
+      "protein_per_100g": number,
+      "fat_per_100g": number,
+      "carbs_per_100g": number
+    }
+  ],
+  "confidence": "low" | "medium" | "high",
+  "notes": ${lang === "he" ? '"משפט קצר בעברית או מחרוזת ריקה"' : '"one short sentence or empty string"'},
+  "clarifying_question": ${lang === "he" ? '"שאלת המשך קצרה בעברית או מחרוזת ריקה"' : '"short follow-up question or empty string"'}
+}`;
 }
 
 export function mealTextPrompt(lang = "en"): string {

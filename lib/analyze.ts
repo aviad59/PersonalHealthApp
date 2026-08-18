@@ -222,6 +222,24 @@ function normalizeAnalysis(d: any, truncated: boolean): any {
   const items = Array.isArray(d.items) ? d.items : [];
   if (items.length === 0) throw new Error("model returned no food items");
 
+  // Photo analysis asks for mass + per-100g density and leaves the arithmetic
+  // to us (the Nutrition5k factorization). Text/repeat mode still returns
+  // macros directly, and a model can always ignore the schema — so detect the
+  // shape rather than assuming it.
+  const looksLikeDensities = items.some(
+    (it: any) => it && it.kcal_per_100g !== undefined && it.mass_g !== undefined,
+  );
+  if (looksLikeDensities) {
+    const converted = densitiesToAnalysis({ ...d, items });
+    return {
+      ...converted,
+      confidence: truncated ? "low" : converted.confidence,
+      notes: [converted.notes, truncated ? PARTIAL_READ_NOTE : ""]
+        .filter(Boolean)
+        .join(" "),
+    };
+  }
+
   const num = (v: any) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
