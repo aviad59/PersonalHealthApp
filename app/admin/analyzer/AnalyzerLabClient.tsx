@@ -1089,7 +1089,7 @@ export default function AnalyzerLabClient() {
                                 title={c.perception.parsed.items
                                   .map(
                                     (i: any) =>
-                                      `${i.name} — ${i.mass_g ?? "?"}g (${i.dimensions_cm ?? "?"})`,
+                                      `${i.name} — ${i.mass_g ?? "?"}g${i.reference ? ` (${i.reference})` : ""}`,
                                   )
                                   .join("\n")}
                               >
@@ -1311,9 +1311,9 @@ function AccuracyScorecard({
                 <td className="py-2 px-2 text-center">
                   {r.agg.mass ? (
                     <>
-                      <div className={cvClass(r.agg.mass.mape)}>
-                        {Math.round(r.agg.mass.mape)}%
-                      </div>
+                      {/* Within-rate on top so this column reads the same way
+                          as the macro columns beside it. */}
+                      <div>{Math.round(r.agg.mass.withinRate * 100)}%</div>
                       <div className="text-[9px] text-white/40">
                         {r.agg.mass.bias >= 0 ? "+" : "−"}
                         {Math.abs(Math.round(r.agg.mass.bias))} g bias
@@ -1334,8 +1334,9 @@ function AccuracyScorecard({
       <p className="text-[10px] text-white/45">
         avg error = mean absolute % off across the scored macros (macros too small
         for a percentage to be meaningful are skipped) · bias = mean signed error
-        (+ over-estimates, − under-estimates) · mass = portion-size error, the
-        Nutrition5k paper's key diagnostic.
+        (+ over-estimates, − under-estimates) · every macro and mass column shows
+        the share of dishes within tolerance, with mean signed error beneath ·
+        mass is portion-size accuracy, the Nutrition5k paper's key diagnostic.
       </p>
     </section>
   );

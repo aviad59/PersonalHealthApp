@@ -138,46 +138,56 @@ ${mealJsonSchema(lang)}`;
 // ---------------------------------------------------------------
 
 // Stage 1 is deliberately a MASS-estimation task, not a nutrition task.
-// The Nutrition5k paper (arXiv 2103.03375) found that predicting calories
-// per gram is ~3x more accurate than predicting calories directly
-// (9.5% vs 26.1% MAE) — i.e. recognising the food is close to solved, and
-// almost all remaining error comes from judging portion size. They also
-// showed that feeding an explicit VOLUME estimate into mass regression cut
-// mass error from 29.5% to 13.7%. So this stage spends its whole budget on
-// geometry: dimensions → volume → density → grams.
+// The Nutrition5k paper (arXiv 2103.03375) found that predicting calories per
+// gram is ~3x more accurate than predicting calories directly (9.5% vs 26.1%
+// MAE) — recognising food is close to solved, and nearly all remaining error
+// is portion size.
+//
+// An earlier version of this prompt copied the paper's other finding — that an
+// explicit VOLUME estimate improves mass regression — by asking for length x
+// width x height and multiplying. Measured against the dataset that made
+// things markedly WORSE (mass error 56-83% vs 32-55% for a single call, with
+// a +69 to +97 g bias). The reason is arithmetic: volume is a product of three
+// estimates, so relative error cubes — reading each dimension 20% high
+// inflates mass by 73%. The paper's volume came from a calibrated depth
+// sensor, i.e. a measurement; asking a model to eyeball three lengths and
+// multiply is a different operation that manufactures error.
+//
+// So estimation is now anchored directly to known serving masses, the way a
+// dietitian actually does it, with no multiplication chain to amplify.
 export function mealPerceivePrompt(lang = "en"): string {
   return `You are a portion-estimation specialist. Your ONLY job is to identify each food on the plate and estimate ITS MASS IN GRAMS. You do NOT compute calories or macros — a second specialist does that.
 
-Portion size is the hardest and most error-prone part of nutrition estimation, so spend your effort there. Work through it explicitly, item by item:
+Portion size is the single largest source of error in nutrition estimates, so spend your effort there and be disciplined about it.
 
-STEP 1 — ANCHOR THE SCALE.
-Find a reference of known size and state it. In order of reliability:
-- Packaging or labels with stated weights
-- Cutlery: a dinner fork is ~19 cm, a teaspoon bowl ~2.5 cm wide
-- Dinnerware: standard dinner plate ~26 cm across, side plate ~20 cm, cereal bowl ~15 cm across and ~400 ml, mug ~250 ml
-- A slice of sandwich bread is ~10x10 cm
-If nothing is visible, say so and assume a standard 26 cm dinner plate.
+HOW TO ESTIMATE MASS — compare, don't calculate.
+Do NOT estimate length/width/height and multiply them out. Small errors in each dimension compound badly. Instead, judge each item against a reference of known mass:
+- Palm of an adult hand, no fingers ≈ 100 g of cooked meat or fish
+- A deck of cards ≈ 90 g of meat
+- A clenched fist ≈ 1 cup ≈ 150 g of cooked rice, pasta or stew
+- A cupped hand ≈ 80 g of cooked grains, or 30 g of nuts/dry cereal
+- A tennis ball ≈ 80 g of rice or mashed potato
+- A thumb tip ≈ 5 g of oil or butter; a whole thumb ≈ 15 g
+- A large egg ≈ 50 g · a slice of sandwich bread ≈ 30 g · a pita ≈ 60 g
+- A standard dinner plate is ~26 cm across — use it to judge how much of the plate an item covers, and roughly how deep the pile is (flat layer, low mound, heaped).
 
-STEP 2 — ESTIMATE GEOMETRY, NOT JUST FOOTPRINT.
-For each item give rough dimensions (length x width x height, or diameter x height) in cm. Height/depth is the most commonly ignored dimension and the biggest source of error — a flat smear and a heaped mound can differ 5x with the same footprint. State the height explicitly.
+TYPICAL SINGLE SERVINGS — sanity-check every estimate against these:
+- Meat or fish portion: 100–180 g
+- Cooked rice / pasta / potato: 120–250 g
+- Cooked vegetables: 60–150 g · raw salad leaves: 20–60 g (mostly air, very light)
+- Sauce or dressing: 15–40 g · hard cheese: 20–40 g
+- A whole quiche/pastry slice: 100–150 g
 
-STEP 3 — VOLUME → MASS.
-Convert dimensions to an approximate volume in ml, then to grams using food density:
-- Leafy greens / popcorn: ~0.1-0.2 g/ml
-- Cooked rice, pasta, grains, chopped vegetables: ~0.6-0.8 g/ml
-- Meat, fish, cheese, dense bread: ~1.0-1.1 g/ml
-- Soups, sauces, milk, yoghurt: ~1.0 g/ml
-- Oils: ~0.9 g/ml
-Account for packing: loose salad is mostly air, a pressed rice scoop is not.
-
-STEP 4 — SANITY CHECK.
-Typical single servings: chicken breast 120-180 g, cooked rice 150-250 g per scoop, a slice of bread 30 g, an egg 50 g, a tablespoon of oil 14 g. If your estimate is far outside a typical serving, re-check the height.
-Err toward the portion you can actually SEE. Do not inflate.
+CALIBRATION — read the plate as it is:
+- Judge each item on its own; do NOT scale portions up so the plate totals a "proper meal". Small plates and single components are common and a low answer is often the correct one.
+- Salad leaves and other airy foods weigh far less than they appear.
+- If genuinely torn between two values, take the LOWER one. Over-estimating portions is the most common failure mode in this task.
+- Only count food, not the plate, cutlery or packaging.
 
 Also record, for each item:
 - Preparation (raw / grilled / fried / roasted / breaded / boiled / sauteed / baked), since it drives added fat.
 - Visible fat: pooled oil, glossy coating, marbling, melted cheese, cream.
-- Hidden extras a nutrition analyst would miss: cooking oil, butter, dressing, sauce, syrup.
+- Hidden extras a nutrition analyst would miss: cooking oil, butter, dressing, syrup.
 
 If a "user context" note is supplied, treat it as authoritative for WHAT the items are — but still judge mass yourself from the image.
 
@@ -187,14 +197,11 @@ Return STRICT JSON only, no prose:
 {
   "dish": "short natural description of the whole plate",
   "container": "plate | bowl | tray | package | other",
-  "scale_reference": "the known-size object you anchored to",
   "items": [
     {
       "name": "food item",
       "preparation": "raw | grilled | fried | roasted | breaded | boiled | sauteed | baked | other",
-      "dimensions_cm": "e.g. '12 x 8 x 2' or 'diameter 9, height 3'",
-      "volume_ml": number,
-      "density_g_per_ml": number,
+      "reference": "the known-mass comparison you used, e.g. 'about one palm' or 'half a fist'",
       "mass_g": number,
       "visible_fat": "none | light | moderate | heavy",
       "notes": "anything affecting the estimate (sauce, skin, breading, hidden oil)"
