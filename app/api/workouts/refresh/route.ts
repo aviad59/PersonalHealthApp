@@ -4,6 +4,8 @@ import {
   pullRecentWorkouts,
   workoutDurationMin,
   hasHevyKey,
+  hevyKeyEnvVarName,
+  hevyKeyMissingMessage,
   HevyWorkout,
 } from "@/lib/hevy";
 import {
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
   const userId = await getCurrentUserIdOrDefault();
   if (!(await hasHevyKey(userId))) {
     return NextResponse.json(
-      { ok: false, error: "HEVY_API_KEY not set" },
+      { ok: false, error: hevyKeyMissingMessage(await hevyKeyEnvVarName(userId)) },
       { status: 400 },
     );
   }

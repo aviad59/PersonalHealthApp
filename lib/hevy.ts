@@ -10,25 +10,51 @@ import { getUserConfig } from "@/lib/user";
 
 const BASE = "https://api.hevyapp.com/v1";
 
-// Per-user Hevy key env var. Each workouts-enabled user needs their OWN key so
-// we never pull another user's workouts. The env var name is a field on the
-// user's config (`hevyKeyEnv`), defaulting to `HEVY_API_KEY_<ID>` — so there
-// are no per-user branches here and adding a user needs no code change.
+// Each workouts-enabled user needs their OWN key so we never pull another
+// user's workouts. Two ways to supply it, checked in this order:
+//
+//   1. `hevyApiKey` on the user — the key itself, set from the admin panel.
+//      Adding a user then needs no deploy.
+//   2. `hevyKeyEnv` — the NAME of an environment variable holding the key,
+//      defaulting to `HEVY_API_KEY_<ID>`. Keeps the key out of the database
+//      for anyone who prefers that, and is how this worked originally.
 async function hevyEnvVar(userId?: string): Promise<string> {
   if (!userId) return "HEVY_API_KEY";
   const cfg = await getUserConfig(userId);
   return cfg.hevyKeyEnv || `HEVY_API_KEY_${userId.toUpperCase()}`;
 }
 
-export async function hevyKey(userId?: string): Promise<string> {
+async function resolveHevyKey(
+  userId?: string,
+): Promise<{ key: string | null; envVar: string }> {
   const envVar = await hevyEnvVar(userId);
-  const k = process.env[envVar];
-  if (!k) throw new Error(`${envVar} is not set. Add it to the environment.`);
-  return k;
+  if (userId) {
+    const cfg = await getUserConfig(userId);
+    const stored = cfg.hevyApiKey?.trim();
+    if (stored) return { key: stored, envVar };
+  }
+  return { key: process.env[envVar] || null, envVar };
+}
+
+export async function hevyKey(userId?: string): Promise<string> {
+  const { key, envVar } = await resolveHevyKey(userId);
+  if (!key) throw new Error(hevyKeyMissingMessage(envVar));
+  return key;
 }
 
 export async function hasHevyKey(userId?: string): Promise<boolean> {
-  return !!process.env[await hevyEnvVar(userId)];
+  return !!(await resolveHevyKey(userId)).key;
+}
+
+/** Names the variable actually checked — the old message was a hardcoded
+ *  "HEVY_API_KEY not set" that never said which one was missing. */
+export function hevyKeyMissingMessage(envVar: string): string {
+  return `No Hevy API key for this user. Paste the key into the admin panel, or set the ${envVar} environment variable.`;
+}
+
+/** The env var this user's key would come from, for diagnostics. */
+export async function hevyKeyEnvVarName(userId?: string): Promise<string> {
+  return hevyEnvVar(userId);
 }
 
 async function get<T>(path: string, userId?: string): Promise<T> {

@@ -30,6 +30,9 @@ export async function GET() {
       isAdmin: r.is_admin === 1,
       trainingNotes: r.training_notes,
       hevyKeyEnv: r.hevy_key_env,
+      // Never send the key itself back to the browser — only whether one is
+      // stored, so the UI can show "set" without leaking it.
+      hasHevyApiKey: !!r.hevy_api_key,
       createdAt: r.created_at,
     })),
   });
@@ -75,6 +78,10 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof body.hevyKeyEnv === "string" || body.hevyKeyEnv === null) {
     patch.hevy_key_env = body.hevyKeyEnv ? String(body.hevyKeyEnv).trim() : null;
+  }
+  if (body.hevyApiKey !== undefined) {
+    // Empty string clears it, so a key can be removed as well as set.
+    patch.hevy_api_key = body.hevyApiKey ? String(body.hevyApiKey).trim() : null;
   }
 
   await updateUserRow(id, patch);

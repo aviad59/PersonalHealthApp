@@ -38,6 +38,8 @@ export type UserConfig = {
   // Name of the env var holding this user's Hevy API key. Defaults to
   // `HEVY_API_KEY_<ID>` (uppercased) when omitted.
   hevyKeyEnv?: string;
+  /** The Hevy API key itself, when stored on the user rather than in env. */
+  hevyApiKey?: string;
 };
 
 function rowToConfig(r: UserRow): UserConfig {
@@ -52,6 +54,7 @@ function rowToConfig(r: UserRow): UserConfig {
     hasWorkouts: r.has_workouts === 1,
     ...(r.training_notes ? { trainingNotes: r.training_notes } : {}),
     ...(r.hevy_key_env ? { hevyKeyEnv: r.hevy_key_env } : {}),
+    ...(r.hevy_api_key ? { hevyApiKey: r.hevy_api_key } : {}),
   };
 }
 

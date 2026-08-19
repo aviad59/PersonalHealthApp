@@ -12,6 +12,7 @@ type AdminUser = {
   isAdmin: boolean;
   trainingNotes: string | null;
   hevyKeyEnv: string | null;
+  hasHevyApiKey?: boolean;
   createdAt: string;
 };
 
@@ -132,6 +133,8 @@ function UserCard({
   const [name, setName] = useState(user.displayName);
   const [notes, setNotes] = useState(user.trainingNotes ?? "");
   const [hevy, setHevy] = useState(user.hevyKeyEnv ?? "");
+  // The stored key is never sent to the browser; blank means "leave as is".
+  const [hevyKey, setHevyKey] = useState("");
   const [open, setOpen] = useState(false);
 
   // Keep local edit fields in sync when the row is refreshed from the server.
@@ -144,7 +147,8 @@ function UserCard({
   const dirty =
     name.trim() !== user.displayName ||
     notes !== (user.trainingNotes ?? "") ||
-    hevy.trim() !== (user.hevyKeyEnv ?? "");
+    hevy.trim() !== (user.hevyKeyEnv ?? "") ||
+    hevyKey.trim() !== "";
 
   return (
     <div className="card p-4 space-y-3">
@@ -223,7 +227,18 @@ function UserCard({
               className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
             />
           </Field>
-          <Field label="Hevy key env var (blank = HEVY_API_KEY_ID)">
+          <Field
+            label={`Hevy API key ${user.hasHevyApiKey ? "(stored — type to replace)" : "(paste the key itself)"}`}
+          >
+            <input
+              type="password"
+              value={hevyKey}
+              onChange={(e) => setHevyKey(e.target.value)}
+              placeholder={user.hasHevyApiKey ? "•••••••• stored" : "paste your Hevy API key"}
+              className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Advanced: env var name instead (blank = HEVY_API_KEY_ID)">
             <input
               value={hevy}
               onChange={(e) => setHevy(e.target.value)}
@@ -245,6 +260,8 @@ function UserCard({
                 displayName: name.trim() || user.id,
                 trainingNotes: notes.trim() ? notes : null,
                 hevyKeyEnv: hevy.trim() ? hevy.trim() : null,
+                // Only send when typed, so saving other fields doesn't wipe it.
+                ...(hevyKey.trim() ? { hevyApiKey: hevyKey.trim() } : {}),
               } as Partial<AdminUser>)
             }
             disabled={busy || !dirty}

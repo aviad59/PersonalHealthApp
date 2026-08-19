@@ -165,6 +165,10 @@ const COLUMN_ADDS: { sql: string }[] = [
   // Which half of the body training should be weighted toward, used by the
   // workout score's focus component.
   { sql: "ALTER TABLE user_profile ADD COLUMN training_focus TEXT NOT NULL DEFAULT 'upper'" },
+  // The Hevy key itself, so adding a user no longer requires a deploy to set
+  // an environment variable. hevy_key_env (an env var NAME) still works and
+  // takes second place, so existing deployments are unaffected.
+  { sql: "ALTER TABLE users ADD COLUMN hevy_api_key TEXT" },
 ];
 
 // Indexes that reference columns added by COLUMN_ADDS — they MUST run after
@@ -1296,12 +1300,13 @@ export type UserRow = {
   is_admin: number;
   training_notes: string | null;
   hevy_key_env: string | null;
+  hevy_api_key: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const USER_COLUMNS =
-  "id, email, display_name, status, has_workouts, is_admin, training_notes, hevy_key_env, created_at, updated_at";
+  "id, email, display_name, status, has_workouts, is_admin, training_notes, hevy_key_env, hevy_api_key, created_at, updated_at";
 
 export async function getAllUserRows(): Promise<UserRow[]> {
   const db = await getDb();
@@ -1346,6 +1351,7 @@ export async function updateUserRow(
     is_admin: boolean;
     training_notes: string | null;
     hevy_key_env: string | null;
+    hevy_api_key: string | null;
   }>,
 ): Promise<void> {
   const sets: string[] = [];
@@ -1361,6 +1367,7 @@ export async function updateUserRow(
   if (patch.is_admin !== undefined) push("is_admin", patch.is_admin ? 1 : 0);
   if (patch.training_notes !== undefined) push("training_notes", patch.training_notes);
   if (patch.hevy_key_env !== undefined) push("hevy_key_env", patch.hevy_key_env);
+  if (patch.hevy_api_key !== undefined) push("hevy_api_key", patch.hevy_api_key);
   if (sets.length === 0) return;
   sets.push("updated_at = datetime('now')");
   const db = await getDb();
