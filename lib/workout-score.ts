@@ -15,7 +15,7 @@
 // score.
 
 import { HevyWorkout, inferMuscleGroups, avgRpeAcrossWorkouts } from "@/lib/hevy";
-import { dateKey, diffDaysKey, todayStr } from "@/lib/db";
+import { dateKey, diffDaysKey, todayStr, startOfWeekStr } from "@/lib/db";
 
 /** Which part of the body the user wants their training weighted toward. */
 export type TrainingFocus = "upper" | "balanced" | "lower";
@@ -48,6 +48,12 @@ export type WorkoutScoreResult = {
   focusTarget: TrainingFocus;
   /** Distinct training days in the last 7. */
   sessionsLast7: number;
+  /** Distinct training days since the start of THIS calendar week. */
+  sessionsThisWeek: number;
+  /** Which day of the week it is, 1 on Sunday .. 7 on Saturday. */
+  daysIntoWeek: number;
+  /** Sessions you would be expected to have done by now, pro-rated. */
+  expectedByNow: number;
   weeklyTarget: number;
   /** Hard (non-warmup) sets in the last 7 days — the standard load metric. */
   hardSetsLast7: number;
@@ -100,6 +106,9 @@ const REGION_POINTS: Record<string, number> = { push: 7, pull: 7, legs: 7, core:
 const FOCUS_TARGET_SHARE = 0.7;
 
 const DEFAULT_WEEKLY_TARGET = 3;
+
+// Weeks start on Sunday here, matching startOfWeekStr().
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -194,11 +203,29 @@ export function computeWorkoutScore(
   );
 
   // ---- 1. Consistency ----
+  // Judged against a PRO-RATED target, not the whole week's. Scoring the full
+  // target from Sunday morning marks you down for workouts that aren't due
+  // yet: by Tuesday of a 4-session week you owe roughly one, not four.
+  //
+  // The +1 on both sides is a one-session grace. Without it the first day or
+  // two of the week divides a real zero by a small expectation and lands on
+  // zero regardless, which is the same unfairness in a different place.
+  const weekStart = startOfWeekStr();
+  const sessionsThisWeek = new Set(
+    dated.filter((x) => x.day >= weekStart && x.day <= today).map((x) => x.day),
+  ).size;
+  const daysIntoWeek = clamp(diffDaysKey(today, weekStart) + 1, 1, 7);
+  const expectedByNow = (target * daysIntoWeek) / 7;
+  const pace = (sessionsThisWeek + 1) / (expectedByNow + 1);
+
   const consistency: ScoreComponent = {
-    score: Math.round(30 * clamp(sessionsLast7 / target, 0, 1)),
+    score: Math.round(30 * clamp(pace, 0, 1)),
     max: 30,
     available: true,
-    detail: `${sessionsLast7} / ${target} sessions`,
+    detail:
+      sessionsThisWeek >= target
+        ? `${sessionsThisWeek} / ${target} this week — target met`
+        : `${sessionsThisWeek} / ${target} this week · ~${expectedByNow.toFixed(1)} due by now`,
   };
 
   // ---- 2. Progression: are the lifts getting stronger? ----
@@ -364,16 +391,17 @@ export function computeWorkoutScore(
   if (dated.length === 0) {
     reasons.push("no workouts synced yet");
   } else {
-    if (sessionsLast7 === 0) {
+    if (sessionsThisWeek >= target) {
+      reasons.push(`${sessionsThisWeek} sessions — weekly target met`);
+    } else if (sessionsThisWeek === 0 && daysSinceLastSession !== null) {
+      reasons.push(`${daysSinceLastSession} days since your last session`);
+    } else if (sessionsThisWeek + 0.5 < expectedByNow) {
+      // Only call it "behind" against what is actually due by today.
       reasons.push(
-        daysSinceLastSession === null
-          ? "no sessions this week"
-          : `${daysSinceLastSession} days since your last session`,
+        `${sessionsThisWeek} of ${target} this week — behind pace for ${DAY_NAMES[daysIntoWeek - 1]}`,
       );
-    } else if (sessionsLast7 < target) {
-      reasons.push(`${sessionsLast7} of ${target} sessions so far`);
     } else {
-      reasons.push(`${sessionsLast7} sessions — target met`);
+      reasons.push(`${sessionsThisWeek} of ${target} this week — on pace`);
     }
     if (neglectedRegions.length && sessionsLast7 > 0) {
       reasons.push(`no ${neglectedRegions.join(" or ")} work this week`);
@@ -405,6 +433,9 @@ export function computeWorkoutScore(
     components,
     focusTarget,
     sessionsLast7,
+    sessionsThisWeek,
+    daysIntoWeek,
+    expectedByNow: Math.round(expectedByNow * 10) / 10,
     weeklyTarget: target,
     hardSetsLast7,
     setsByRegion,
