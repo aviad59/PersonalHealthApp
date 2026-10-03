@@ -21,6 +21,13 @@ type Stats = {
   averages: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
   totals: { calories: number; protein_g: number; fat_g: number; carbs_g: number };
   targets: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
+  /** Sedentary reference floor (DRI), not a goal. Calories can be null. */
+  minimums: {
+    calories: number | null;
+    protein_g: number;
+    fat_g: number;
+    carbs_g: number;
+  } | null;
   daysLogged: number;
   proteinHitRate: number | null;
   bestProtein: DayBucket | null;
@@ -61,13 +68,15 @@ export default function StatsPage() {
   }, [days]);
 
   const target = data?.targets ? data.targets[metric] : null;
+  const minimum = data?.minimums ? data.minimums[metric] : null;
   const max = useMemo(() => {
     if (!data) return 0;
     let m = 0;
     for (const d of data.series) m = Math.max(m, d[metric]);
     if (target) m = Math.max(m, target);
+    if (minimum) m = Math.max(m, minimum);
     return m || 1;
-  }, [data, metric, target]);
+  }, [data, metric, target, minimum]);
 
   const metricLabel: Record<typeof metric, string> = {
     calories: t(lang, "macro_calories"),
@@ -121,28 +130,36 @@ export default function StatsPage() {
                 label={t(lang, "macro_kcal")}
                 value={data.averages.calories}
                 target={data.targets?.calories}
+                minimum={data.minimums?.calories ?? null}
                 ofTarget={t(lang, "stats_of_target")}
+                belowMinLabel={t(lang, "stats_below_min")}
               />
               <Stat
                 label={t(lang, "macro_protein")}
                 value={data.averages.protein_g}
                 unit="g"
                 target={data.targets?.protein_g}
+                minimum={data.minimums?.protein_g ?? null}
                 ofTarget={t(lang, "stats_of_target")}
+                belowMinLabel={t(lang, "stats_below_min")}
               />
               <Stat
                 label={t(lang, "macro_fat")}
                 value={data.averages.fat_g}
                 unit="g"
                 target={data.targets?.fat_g}
+                minimum={data.minimums?.fat_g ?? null}
                 ofTarget={t(lang, "stats_of_target")}
+                belowMinLabel={t(lang, "stats_below_min")}
               />
               <Stat
                 label={t(lang, "macro_carbs")}
                 value={data.averages.carbs_g}
                 unit="g"
                 target={data.targets?.carbs_g}
+                minimum={data.minimums?.carbs_g ?? null}
                 ofTarget={t(lang, "stats_of_target")}
+                belowMinLabel={t(lang, "stats_below_min")}
               />
             </div>
           </section>
@@ -175,6 +192,7 @@ export default function StatsPage() {
               metric={metric}
               max={max}
               target={target ?? null}
+              minimum={minimum ?? null}
               unit={metricUnit[metric]}
               lang={lang}
             />
@@ -267,15 +285,22 @@ function Stat({
   value,
   unit,
   target,
+  minimum,
   ofTarget,
+  belowMinLabel,
 }: {
   label: string;
   value: number;
   unit?: string;
   target?: number;
+  minimum?: number | null;
   ofTarget: string;
+  belowMinLabel: string;
 }) {
   const pct = target ? Math.min(150, Math.round((value / target) * 100)) : null;
+  // Under the sedentary floor is a different kind of problem from missing a
+  // training target, so it gets its own line rather than a redder percentage.
+  const belowMin = !!minimum && value > 0 && value < minimum;
   return (
     <div className="text-center">
       <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
@@ -292,6 +317,11 @@ function Stat({
           {pct}% {ofTarget}
         </div>
       )}
+      {belowMin && (
+        <div className="text-[9px] mt-0.5 text-amber-500" title={`min ${minimum}`}>
+          ↓ {belowMinLabel}
+        </div>
+      )}
     </div>
   );
 }
@@ -301,6 +331,7 @@ function BarChart({
   metric,
   max,
   target,
+  minimum,
   unit,
   lang,
 }: {
@@ -308,6 +339,7 @@ function BarChart({
   metric: "calories" | "protein_g" | "fat_g" | "carbs_g";
   max: number;
   target: number | null;
+  minimum: number | null;
   unit: string;
   lang: Lang;
 }) {
@@ -316,6 +348,17 @@ function BarChart({
   return (
     <div>
       <div className="relative" style={{ height: HEIGHT + 16 }}>
+        {/* Floor first, so the target line draws over it if they are close. */}
+        {minimum ? (
+          <div
+            className="absolute left-0 right-0 border-t border-dotted border-amber-500/45"
+            style={{ top: HEIGHT - (minimum / max) * HEIGHT }}
+          >
+            <span className="absolute -top-3.5 left-0 text-[9px] text-amber-500/80">
+              {t(lang, "stats_minimum")} {minimum}
+            </span>
+          </div>
+        ) : null}
         {target ? (
           <div
             className="absolute left-0 right-0 border-t border-dashed border-accent-brand/50"

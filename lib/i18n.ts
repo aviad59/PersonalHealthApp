@@ -119,6 +119,8 @@ const en = {
   stats_breakdown: "Daily breakdown",
   stats_no_meals: "No meals logged",
   stats_of_target: "of target",
+  stats_minimum: "min",
+  stats_below_min: "below minimum",
   stats_per_day: "per day",
   // Profile
   profile_title: "Profile",
@@ -298,6 +300,8 @@ const he: typeof en = {
   stats_breakdown: "פירוט יומי",
   stats_no_meals: "לא תועדו ארוחות",
   stats_of_target: "מהיעד",
+  stats_minimum: "מינימום",
+  stats_below_min: "מתחת למינימום",
   stats_per_day: "ליום",
   // Profile
   profile_title: "פרופיל",

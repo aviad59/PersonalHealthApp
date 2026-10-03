@@ -6,6 +6,7 @@ import {
   todayStr,
 } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
+import { macroMinimums } from "@/lib/calc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,6 +107,16 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
+  // The sedentary reference floor, shown alongside the goal so a short day is
+  // readable as "under what a body needs" rather than only "under target".
+  const minimums = profile?.weight_kg
+    ? macroMinimums({
+        bodyWeightKg: profile.weight_kg,
+        bmr: profile.bmr,
+        targetCalories: profile.goal_calories,
+      })
+    : null;
+
   let proteinHitRate: number | null = null;
   if (targets && logged.length > 0) {
     const threshold = targets.protein_g * 0.9;
@@ -121,6 +132,7 @@ export async function GET(req: NextRequest) {
     averages,
     totals,
     targets,
+    minimums,
     daysLogged: logged.length,
     proteinHitRate,
     bestProtein,

@@ -152,6 +152,45 @@ export function macroTargets(opts: {
   };
 }
 
+/**
+ * The floor a sedentary adult needs — NOT a goal, and deliberately unrelated
+ * to goal mode. These are the published reference intakes, so they sit well
+ * below the training targets macroTargets() produces and are only interesting
+ * when a day falls short of them.
+ *
+ * Sources (US Institute of Medicine / NASEM Dietary Reference Intakes, 2005):
+ *  - Protein RDA: 0.8 g per kg of body weight. Covers 97.5% of healthy
+ *    sedentary adults; it is a deficiency threshold, not an optimum.
+ *  - Carbohydrate RDA: a flat 130 g/day, set from the average glucose the
+ *    brain consumes. It does not scale with body size.
+ *  - Fat: there is no RDA. The Acceptable Macronutrient Distribution Range is
+ *    20-35% of energy, so 20% of the calorie target is the accepted floor —
+ *    below it, essential fatty acid and fat-soluble vitamin intake suffer.
+ *  - Calories: BMR. Not a DRI, but eating under your resting requirement for
+ *    any length of time is the practical floor.
+ */
+export function macroMinimums(opts: {
+  bodyWeightKg: number;
+  bmr: number | null | undefined;
+  targetCalories: number | null | undefined;
+}): {
+  calories: number | null;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+} {
+  const { bodyWeightKg, bmr, targetCalories } = opts;
+  // The AMDR is a share of what you actually eat, so it keys off the calorie
+  // target; fall back to BMR when no target has been set yet.
+  const energyBasis = targetCalories || bmr || 0;
+  return {
+    calories: bmr ? Math.round(bmr) : null,
+    protein_g: Math.round(bodyWeightKg * 0.8),
+    fat_g: Math.round((energyBasis * 0.2) / 9),
+    carbs_g: 130,
+  };
+}
+
 export function weeklyWorkoutTarget(activity: ActivityLevel): {
   sessions: number;
   note: string;
