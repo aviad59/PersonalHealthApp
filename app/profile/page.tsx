@@ -38,6 +38,13 @@ export default function ProfilePage() {
   const [preview, setPreview] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // Kitchen notes live in their own state + their own PATCH. They aren't
+  // derived from body metrics, so they must not ride along with the
+  // "Save & recalculate" flow.
+  const [foodNotes, setFoodNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+
   // --- CSV backfill state ---
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [useAi, setUseAi] = useState(true);
@@ -56,6 +63,7 @@ export default function ProfilePage() {
       const r = await fetch("/api/profile", { cache: "no-store" });
       const j = await r.json();
       setProfile(j.profile);
+      setFoodNotes(j.profile?.food_notes ?? "");
       setLoading(false);
     })();
   }, []);
@@ -127,6 +135,29 @@ export default function ProfilePage() {
     setTextSizeCookie(size);
     applyTextSize(size);
     window.dispatchEvent(new CustomEvent("textsizechange", { detail: size }));
+  }
+
+  async function saveFoodNotes() {
+    setNotesSaving(true);
+    setNotesSaved(false);
+    setErr(null);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ food_notes: foodNotes }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "save failed");
+      // Echo the server's trimmed/capped value back so the box shows exactly
+      // what the analyzer will read.
+      setFoodNotes(j.profile?.food_notes ?? "");
+      setNotesSaved(true);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setNotesSaving(false);
+    }
   }
 
   async function setLanguage(newLang: "en" | "he") {
@@ -384,6 +415,40 @@ export default function ProfilePage() {
         <Row k={t(lang, "macro_fat")} v={`${profile.goal_fat_g} g`} emphasize />
         <Row k={t(lang, "macro_carbs")} v={`${profile.goal_carbs_g} g`} emphasize />
         <Row k={t(lang, "profile_workouts_wk")} v={`${profile.weekly_workout_target}`} />
+      </section>
+
+      <section className="card p-5 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+          {t(lang, "profile_food_notes")}
+        </h2>
+        <p className="text-xs text-white/50 leading-relaxed">
+          {t(lang, "profile_food_notes_help")}
+        </p>
+        <textarea
+          value={foodNotes}
+          dir={/[֐-׿]/.test(foodNotes) ? "rtl" : "ltr"}
+          onChange={(e) => {
+            setFoodNotes(e.target.value);
+            setNotesSaved(false);
+          }}
+          placeholder={t(lang, "profile_food_notes_ph")}
+          rows={5}
+          maxLength={1500}
+          className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] resize-none"
+        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={saveFoodNotes}
+            disabled={notesSaving}
+            className="rounded-xl border border-border bg-bg-elev px-4 py-2 text-sm font-medium disabled:opacity-40"
+          >
+            {notesSaving ? t(lang, "profile_saving") : t(lang, "profile_food_notes_save")}
+          </button>
+          {notesSaved && (
+            <span className="text-xs text-accent-brand">{t(lang, "profile_food_notes_saved")}</span>
+          )}
+          <span className="ms-auto text-[11px] text-white/35">{foodNotes.length}/1500</span>
+        </div>
       </section>
 
       <WeightLogSection

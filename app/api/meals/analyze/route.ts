@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { anthropic, CLAUDE_MODEL, CLAUDE_FAST_MODEL, extractJson } from "@/lib/anthropic";
 import { mealVisionPrompt, mealTextPrompt } from "@/lib/prompts";
+import { getProfile } from "@/lib/db";
+import { getCurrentUserIdOrDefault } from "@/lib/user-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +18,20 @@ type BaseMeal = {
 
 export async function POST(req: NextRequest) {
   const lang = req.cookies.get("lang")?.value || "en";
+
+  // Kicked off before the body is read so the DB round trip overlaps with
+  // form parsing and base64 encoding instead of adding to analyze latency.
+  // A profile read failure must never block logging a meal, so it degrades
+  // to "no notes" rather than erroring the request.
+  const foodNotesPromise = (async () => {
+    try {
+      const profile = await getProfile(getCurrentUserIdOrDefault());
+      return profile?.food_notes ?? null;
+    } catch {
+      return null;
+    }
+  })();
+
   const form = await req.formData();
   const file = form.get("photo");
   const hint = (form.get("hint") as string | null)?.trim() || "";
@@ -63,7 +79,7 @@ export async function POST(req: NextRequest) {
       const resp = await anthropic().messages.create({
         model: CLAUDE_FAST_MODEL,
         max_tokens: 800,
-        system: mealVisionPrompt(lang),
+        system: mealVisionPrompt(lang, await foodNotesPromise),
         messages: [
           {
             role: "user",
@@ -99,7 +115,7 @@ export async function POST(req: NextRequest) {
     const resp = await anthropic().messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 800,
-      system: mealTextPrompt(lang),
+      system: mealTextPrompt(lang, await foodNotesPromise),
       messages: [{ role: "user", content: userMessage }],
     });
     const body = resp.content

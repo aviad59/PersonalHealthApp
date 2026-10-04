@@ -131,6 +131,11 @@ const COLUMN_ADDS: { sql: string }[] = [
   { sql: "ALTER TABLE meals    ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE insights ADD COLUMN user_id TEXT NOT NULL DEFAULT 'idan'" },
   { sql: "ALTER TABLE user_profile ADD COLUMN language TEXT NOT NULL DEFAULT 'en'" },
+  // food_notes: standing dietary context the user writes once ("I cook in
+  // olive oil", "my rice bowl is ~250 g cooked"). Fed to the meal analyzer
+  // as portion/ingredient priors — the single largest error source we
+  // measured was portion mass, and these are user-specific anchors for it.
+  { sql: "ALTER TABLE user_profile ADD COLUMN food_notes TEXT" },
 ];
 
 // Per-user variants of the tables that previously had a `date` primary key
@@ -356,6 +361,7 @@ export type Profile = {
   weekly_volume_note: string | null;
   goal_mode: string;
   language: string;
+  food_notes: string | null;
   updated_at: string;
 };
 

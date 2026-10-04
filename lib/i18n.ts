@@ -141,6 +141,13 @@ const en = {
   profile_goal_mode: "Goal mode",
   profile_workouts_per_week: "Workouts per week",
   profile_workouts_note: "Overrides the activity-based default. Recovery & weekly insights use this number.",
+  profile_food_notes: "Kitchen notes",
+  profile_food_notes_help:
+    "How you actually cook and eat. The photo analyzer reads this on every meal, so portion sizes and ingredients you state here replace its generic guesses.",
+  profile_food_notes_ph:
+    "e.g. I cook everything in olive oil. My rice bowl is about 250 g cooked. I use 5% ground beef. Coffee is always with 2% milk, no sugar.",
+  profile_food_notes_save: "Save notes",
+  profile_food_notes_saved: "Saved",
   profile_current_goals: "Current goals",
   profile_body_fat: "Body fat",
   profile_lean_mass: "Lean mass",
@@ -322,6 +329,13 @@ const he: typeof en = {
   profile_goal_mode: "מטרה",
   profile_workouts_per_week: "אימונים בשבוע",
   profile_workouts_note: "עוקף את ברירת המחדל. ההתאוששות והתובנות השבועיות משתמשות במספר זה.",
+  profile_food_notes: "הערות מהמטבח",
+  profile_food_notes_help:
+    "איך אתה באמת מבשל ואוכל. ניתוח התמונות קורא את זה בכל ארוחה, כך שגדלי מנות ומרכיבים שתציין כאן מחליפים את ההערכות הכלליות שלו.",
+  profile_food_notes_ph:
+    "לדוגמה: אני מבשל הכל בשמן זית. קערת האורז שלי היא בערך 250 גרם מבושל. אני משתמש בבשר טחון 5%. קפה תמיד עם חלב 2%, בלי סוכר.",
+  profile_food_notes_save: "שמור הערות",
+  profile_food_notes_saved: "נשמר",
   profile_current_goals: "יעדים נוכחיים",
   profile_body_fat: "אחוז שומן",
   profile_lean_mass: "מסת גוף רזה",

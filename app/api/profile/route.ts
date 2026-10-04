@@ -115,19 +115,60 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, profile: await getProfile(userId) });
 }
 
+// Partial updates for profile fields that are NOT derived from body metrics.
+// Deliberately separate from POST: that handler recomputes every goal from the
+// measurements and is also used by onboarding, so routing food_notes through it
+// would blank the notes every time someone saved their weight.
 export async function PATCH(req: NextRequest) {
   const json = await req.json().catch(() => ({}));
-  const { language } = json;
-  if (language !== "en" && language !== "he") {
-    return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
+  const hasLanguage = "language" in json;
+  const hasFoodNotes = "food_notes" in json;
+
+  if (!hasLanguage && !hasFoodNotes) {
+    return NextResponse.json(
+      { error: "nothing to update: send language and/or food_notes" },
+      { status: 400 },
+    );
   }
+
   const userId = getCurrentUserIdOrDefault();
   const db = await getDb();
-  await db.execute({
-    sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",
-    args: [language, userId],
-  });
-  const resp = NextResponse.json({ ok: true });
-  resp.cookies.set("lang", language, { path: "/", maxAge: 31536000, sameSite: "lax" });
+
+  let language: "en" | "he" | null = null;
+  if (hasLanguage) {
+    if (json.language !== "en" && json.language !== "he") {
+      return NextResponse.json({ error: "language must be en or he" }, { status: 400 });
+    }
+    language = json.language;
+  }
+
+  if (hasFoodNotes) {
+    const raw = json.food_notes;
+    if (raw !== null && typeof raw !== "string") {
+      return NextResponse.json(
+        { error: "food_notes must be a string or null" },
+        { status: 400 },
+      );
+    }
+    // Matches the cap the prompt builder enforces, so what the user sees
+    // saved is exactly what the analyzer will receive.
+    const trimmed = (raw ?? "").trim().slice(0, 1500);
+    await db.execute({
+      sql: "UPDATE user_profile SET food_notes = ?, updated_at = datetime('now') WHERE user_id = ?",
+      args: [trimmed || null, userId],
+    });
+  }
+
+  if (language) {
+    await db.execute({
+      sql: "UPDATE user_profile SET language = ? WHERE user_id = ?",
+      args: [language, userId],
+    });
+  }
+
+  const resp = NextResponse.json({ ok: true, profile: await getProfile(userId) });
+  if (language) {
+    resp.cookies.set("lang", language, { path: "/", maxAge: 31536000, sameSite: "lax" });
+  }
   return resp;
 }
