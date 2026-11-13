@@ -14,12 +14,15 @@ export const dynamic = "force-dynamic";
 // latest-insight card need. Excludes workout/recovery so it returns fast.
 // /api/today/training fills in those follow-up sections.
 export async function GET() {
+  const t0 = performance.now();
   const userId = await getCurrentUserIdOrDefault();
+  const t1 = performance.now();
   const [profile, meals, latestInsight] = await Promise.all([
     getProfile(userId),
     getMealsByDateLite(userId, todayStr()),
     getLatestInsight(userId),
   ]);
+  const t2 = performance.now();
   const today = todayStr();
 
   const totals = meals.reduce(
@@ -66,6 +69,12 @@ export async function GET() {
           tags: latestInsight.tags_json ? safeParse(latestInsight.tags_json) : [],
         }
       : null,
+  }, {
+    // Visible in DevTools → Network → Timing. `auth` includes the roster
+    // lookup (and DB init on a cold instance); `db` is the three reads.
+    headers: {
+      "Server-Timing": `auth;dur=${(t1 - t0).toFixed(1)}, db;dur=${(t2 - t1).toFixed(1)}`,
+    },
   });
 }
 
