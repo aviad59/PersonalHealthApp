@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { ACTIVITY_LABELS, computeGoalsFromMetrics, ActivityLevel, GoalMode } from "@/lib/calc";
 import WeightLogSection from "@/components/WeightLogSection";
+import { clearCachedAppData } from "@/lib/client-cache";
 import MeasurementsSection from "@/components/MeasurementsSection";
 import { useLang } from "@/components/LangProvider";
 import { t, TKey, type TextSize, readTextSizeCookie, setTextSizeCookie, applyTextSize } from "@/lib/i18n";
@@ -29,6 +30,15 @@ type Conflict = {
     carbs_g: number;
   };
 };
+
+const PROFILE_CACHE_KEY = "profile-v1";
+
+function lsGet<T>(key: string): T | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : null; } catch { return null; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
 
 export default function ProfilePage() {
   const lang = useLang();
@@ -58,17 +68,33 @@ export default function ProfilePage() {
   // default so the common settings stay uncluttered.
   const [extraOpen, setExtraOpen] = useState(false);
 
+  const editedRef = useRef(false);
+
   useEffect(() => {
     setTextSize(readTextSizeCookie());
-    (async () => {
-      const r = await fetch("/api/profile", { cache: "no-store" });
-      const j = await r.json();
-      setProfile(j.profile);
+    // Paint the last-seen profile instantly on tab switch, then refresh.
+    const cached = lsGet<any>(PROFILE_CACHE_KEY);
+    if (cached) {
+      setProfile(cached);
       setLoading(false);
+    }
+    (async () => {
+      try {
+        const r = await fetch("/api/profile", { cache: "no-store" });
+        const j = await r.json();
+        // Don't clobber edits made while the cached copy was on screen.
+        if (!editedRef.current) setProfile(j.profile);
+        if (j.profile) lsSet(PROFILE_CACHE_KEY, j.profile);
+      } catch {
+        // non-fatal — cached profile (if any) stays on screen
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
   function update<K extends string>(k: K, v: any) {
+    editedRef.current = true;
     setProfile((p: any) => ({ ...p, [k]: v }));
     setSavedMsg(null);
   }
@@ -123,6 +149,7 @@ export default function ProfilePage() {
         throw new Error(j.error || "save failed");
       }
       setProfile(j.profile);
+      lsSet(PROFILE_CACHE_KEY, j.profile);
       setPreview(null);
       // Explicit confirmation with the freshly-computed targets, so it's
       // obvious the recalculation happened (otherwise the numbers update
@@ -991,7 +1018,10 @@ function CurrentUserCard() {
       {/* Actions row — separated from identity so they don't crowd the name */}
       <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
         <button
-          onClick={() => signOut({ callbackUrl: "/signin" })}
+          onClick={async () => {
+            await clearCachedAppData();
+            signOut({ callbackUrl: "/signin" });
+          }}
           className="text-xs font-medium text-white/50 hover:text-white/80 transition-colors"
         >
           {t(lang, "profile_sign_out")}

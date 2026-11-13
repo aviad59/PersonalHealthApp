@@ -3,8 +3,15 @@
 // Strategy:
 // - Pre-cache the next/static immutable assets and the meta files on install
 //   so the app shell boots fast.
-// - For HTML navigations: network-first, fall back to the cached shell when
-//   offline so the user always sees SOMETHING.
+// - For navigations to the app's tab pages (prerendered, no personal data in
+//   the HTML): stale-while-revalidate, so opening the app paints from cache
+//   instantly and the background fetch keeps the copy current. If that fetch
+//   gets bounced to /signin the cached copy is dropped, so the next open
+//   goes to the network.
+// - For other HTML navigations: network-first, fall back to the cached shell
+//   when offline so the user always sees SOMETHING.
+// - For Next.js RSC payloads (client-side navigation): network-only. They're
+//   build-specific, and cache-first used to pin them forever.
 // - For Next.js build assets (/_next/static/...): cache-first, immutable.
 // - For all API requests (/api/...): network-only, no caching. Personalised
 //   data should never be served from a stale cache.
@@ -19,12 +26,20 @@
 // every cache that doesn't start with the current VERSION, so old cached
 // CSS/HTML shells are cleared and the new UI shows up without the user
 // having to reinstall the PWA.
-const VERSION = "health-v6";
+// v7: drops the RSC payloads v6 cached by mistake.
+const VERSION = "health-v7";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PHOTO_CACHE = `${VERSION}-photos`;
 
+// Tab pages that are prerendered at build time, so their HTML is the same for
+// every user and safe to serve from cache. Keep in sync with the `○` routes in
+// `next build` output.
+const STATIC_PAGES = new Set(["/", "/stats", "/meals/log", "/coach", "/profile", "/workouts", "/insights"]);
+
+// "/" is deliberately not precached: the SW usually installs on /signin, and
+// a signed-out fetch of "/" follows the redirect and would cache the sign-in
+// page as Home. Navigations populate the page cache instead.
 const PRECACHE_URLS = [
-  "/",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/icons/icon-192.png",
@@ -76,6 +91,9 @@ self.addEventListener("fetch", (event) => {
   // Other API routes — always live, never cached (personalised data).
   if (url.pathname.startsWith("/api/")) return;
 
+  // RSC payloads for client-side navigation — always live.
+  if (req.headers.get("RSC") === "1" || url.searchParams.has("_rsc")) return;
+
   // Next build assets — content-hashed, safe to cache forever.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(cacheFirst(req, SHELL_CACHE));
@@ -84,7 +102,11 @@ self.addEventListener("fetch", (event) => {
 
   // HTML navigations — network first, shell fallback when offline.
   if (req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html")) {
-    event.respondWith(networkFirstHtml(req));
+    if (STATIC_PAGES.has(url.pathname) && !url.search) {
+      event.respondWith(staleWhileRevalidateHtml(event, req));
+    } else {
+      event.respondWith(networkFirstHtml(req));
+    }
     return;
   }
 
@@ -157,6 +179,34 @@ if ("widgets" in self) {
   self.addEventListener("widgetuninstall", () => {
     // Nothing to clean up
   });
+}
+
+async function staleWhileRevalidateHtml(event, req) {
+  const cache = await caches.open(SHELL_CACHE);
+  const hit = await cache.match(req);
+  const refresh = fetch(req).then(async (res) => {
+    // Navigation fetches don't follow redirects, so a signed-out user shows
+    // up as an opaque redirect to /signin — forget the page rather than keep
+    // serving it.
+    if (res.type === "opaqueredirect") await cache.delete(req);
+    else if (res.ok) await cache.put(req, res.clone());
+    return res;
+  });
+  if (hit) {
+    event.waitUntil(refresh.catch(() => {}));
+    return hit;
+  }
+  try {
+    return await refresh;
+  } catch {
+    return (
+      (await cache.match("/")) ||
+      new Response("Offline — please reconnect to continue.", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      })
+    );
+  }
 }
 
 async function networkFirstHtml(req) {
