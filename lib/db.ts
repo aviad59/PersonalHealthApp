@@ -274,6 +274,28 @@ const PER_USER_TABLES = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Quick-snap inbox: a meal photo + the user's note captured at eating
+  -- time, analyzed in the background, waiting for the user to confirm it
+  -- into a real meal. Kept out of the meals table so day totals and stats never
+  -- count an unconfirmed estimate. Photos live in Blob like meal photos;
+  -- confirming moves the pathnames over to the new meals row.
+  CREATE TABLE IF NOT EXISTS meal_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    photo_path TEXT,
+    photo_thumb TEXT,
+    photo_path_2 TEXT,
+    photo_thumb_2 TEXT,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',   -- 'pending' | 'analyzing' | 'ready' | 'error'
+    analysis_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_meal_drafts_user ON meal_drafts(user_id, created_at);
+
   -- Goal history: a snapshot of macro/calorie goals with the date they
   -- became effective. Lets past days be judged against the goal in effect
   -- then, instead of re-scoring history against a newly-raised target.
@@ -754,6 +776,145 @@ export async function getMealPhoto(
   });
   const row = res.rows[0] as unknown as { photo_path: string | null } | undefined;
   return row?.photo_path ?? null;
+}
+
+export type NewMeal = {
+  date: string;
+  description?: string | null;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  items?: unknown[] | null;
+  confidence?: string | null;
+  icon?: string | null;
+  note?: string | null;
+  /** Blob pathnames (already uploaded) and inline thumbnail data URIs. */
+  photo_path?: string | null;
+  photo_thumb?: string | null;
+  photo_path_2?: string | null;
+  photo_thumb_2?: string | null;
+};
+
+/** Insert a meal row; returns its id. Shared by the direct save and the
+ *  quick-snap confirm, which arrives with its photos already in Blob. */
+export async function insertMeal(userId: string, m: NewMeal): Promise<number> {
+  const db = await getDb();
+
+  // Inherit the icon from a previous meal with the same description, so a
+  // re-logged "identical meal" keeps its chosen icon without re-picking.
+  let inheritedIcon: string | null = null;
+  if (m.description) {
+    const prior = await db.execute({
+      sql: "SELECT icon FROM meals WHERE user_id = ? AND description = ? AND icon IS NOT NULL ORDER BY id DESC LIMIT 1",
+      args: [userId, m.description],
+    });
+    inheritedIcon = (prior.rows[0] as any)?.icon ?? null;
+  }
+
+  const ins = await db.execute({
+    sql: `INSERT INTO meals (
+        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence, icon, user_note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      userId,
+      m.date,
+      m.photo_path ?? null,
+      m.photo_thumb ?? null,
+      m.photo_path_2 ?? null,
+      m.photo_thumb_2 ?? null,
+      m.description ?? null,
+      m.calories,
+      m.protein_g,
+      m.fat_g,
+      m.carbs_g,
+      m.items ? JSON.stringify(m.items) : null,
+      m.confidence ?? null,
+      // An explicit icon from the client (e.g. the creatine shortcut) wins;
+      // otherwise inherit from a prior meal with the same description.
+      m.icon ?? inheritedIcon,
+      m.note?.trim() ? m.note.trim() : null,
+    ],
+  });
+  return Number(ins.lastInsertRowid ?? 0);
+}
+
+// ---------------------------------------------------------------
+// Quick-snap inbox (meal_drafts)
+// ---------------------------------------------------------------
+
+export type MealDraftStatus = "pending" | "analyzing" | "ready" | "error";
+
+export type MealDraftRow = {
+  id: number;
+  date: string;
+  photo_path: string | null;
+  photo_thumb: string | null;
+  photo_path_2: string | null;
+  photo_thumb_2: string | null;
+  note: string | null;
+  status: MealDraftStatus;
+  analysis_json: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const DRAFT_COLUMNS =
+  "id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, note, status, analysis_json, error, created_at, updated_at";
+
+export async function createMealDraft(
+  userId: string,
+  d: Pick<MealDraftRow, "date" | "photo_path" | "photo_thumb" | "photo_path_2" | "photo_thumb_2" | "note">,
+): Promise<number> {
+  const db = await getDb();
+  const ins = await db.execute({
+    sql: `INSERT INTO meal_drafts (user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, note)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [userId, d.date, d.photo_path, d.photo_thumb, d.photo_path_2, d.photo_thumb_2, d.note],
+  });
+  return Number(ins.lastInsertRowid ?? 0);
+}
+
+export async function listMealDrafts(userId: string): Promise<MealDraftRow[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ${DRAFT_COLUMNS} FROM meal_drafts WHERE user_id = ? ORDER BY date, created_at`,
+    args: [userId],
+  });
+  return res.rows as unknown as MealDraftRow[];
+}
+
+export async function getMealDraft(userId: string, id: number): Promise<MealDraftRow | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ${DRAFT_COLUMNS} FROM meal_drafts WHERE id = ? AND user_id = ?`,
+    args: [id, userId],
+  });
+  return (res.rows[0] as unknown as MealDraftRow) ?? null;
+}
+
+export async function updateMealDraft(
+  userId: string,
+  id: number,
+  fields: Partial<Pick<MealDraftRow, "status" | "analysis_json" | "error" | "date" | "note">>,
+): Promise<void> {
+  const keys = Object.keys(fields) as (keyof typeof fields)[];
+  if (!keys.length) return;
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE meal_drafts SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = datetime('now')
+          WHERE id = ? AND user_id = ?`,
+    args: [...keys.map((k) => fields[k] ?? null), id, userId],
+  });
+}
+
+export async function deleteMealDraft(userId: string, id: number): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM meal_drafts WHERE id = ? AND user_id = ?",
+    args: [id, userId],
+  });
 }
 
 // Aggregated per-day totals for stats. Done in SQL so we transfer 1 row

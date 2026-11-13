@@ -19,6 +19,34 @@ export async function uploadMealPhoto(
   return result.pathname;
 }
 
+function mimeForExt(ext: string | undefined): string {
+  const cleanExt = (ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
+  return cleanExt === "png" ? "image/png" :
+    cleanExt === "webp" ? "image/webp" :
+    cleanExt === "gif" ? "image/gif" :
+    "image/jpeg";
+}
+
+// Full-size photos go to Blob storage (private) — only a short pathname is
+// stored in the row, instead of a 150-350KB base64 blob that would
+// otherwise bloat every page read of that row.
+export async function uploadMealPhotoBase64(
+  userId: string,
+  base64: string | undefined,
+  ext: string | undefined,
+): Promise<string | null> {
+  if (!base64) return null;
+  const buffer = Buffer.from(base64, "base64");
+  return uploadMealPhoto(buffer, mimeForExt(ext), `meals/${userId}/${Date.now()}`);
+}
+
+// Thumbnails are tiny (~5-10KB) and shown inline for every meal in a list,
+// so they stay as base64 in the row — that's cheaper than N extra round
+// trips to Blob just to render a day's worth of thumbnails.
+export function thumbDataUri(base64: string | undefined): string | null {
+  return base64 ? `data:image/jpeg;base64,${base64}` : null;
+}
+
 export async function fetchMealPhoto(
   pathname: string,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {

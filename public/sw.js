@@ -19,9 +19,13 @@
 // every cache that doesn't start with the current VERSION, so old cached
 // CSS/HTML shells are cleared and the new UI shows up without the user
 // having to reinstall the PWA.
-const VERSION = "health-v6";
+const VERSION = "health-v7";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PHOTO_CACHE = `${VERSION}-photos`;
+// Photos shared in from the Android gallery (manifest share_target), held
+// until /meals/log picks them up. Not versioned — a share must survive an SW
+// update — and the page empties it once read. Name must match the page.
+const SHARED_PHOTOS_CACHE = "shared-photos";
 
 const PRECACHE_URLS = [
   "/",
@@ -50,7 +54,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => !k.startsWith(VERSION))
+          .filter((k) => !k.startsWith(VERSION) && k !== SHARED_PHOTOS_CACHE)
           .map((k) => caches.delete(k)),
       ),
     ),
@@ -60,6 +64,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+
+  // Share → Health from the gallery arrives as a multipart POST. Stash the
+  // files and hand off to the batch logger, which reads them from the cache.
+  if (req.method === "POST" && new URL(req.url).pathname === "/share-target") {
+    event.respondWith(receiveSharedPhotos(req));
+    return;
+  }
+
   if (req.method !== "GET") return; // never cache POSTs/PATCHes etc
 
   const url = new URL(req.url);
@@ -91,6 +103,33 @@ self.addEventListener("fetch", (event) => {
   // Same-origin static (icons, manifest, etc.) — cache first.
   event.respondWith(cacheFirst(req, SHELL_CACHE));
 });
+
+async function receiveSharedPhotos(req) {
+  try {
+    const form = await req.formData();
+    const files = form.getAll("photos").filter((f) => f instanceof File);
+    const cache = await caches.open(SHARED_PHOTOS_CACHE);
+    const stamp = Date.now();
+    await Promise.all(
+      files.map((f, i) =>
+        cache.put(
+          `/shared-photos/${stamp}-${i}`,
+          new Response(f, {
+            headers: {
+              "content-type": f.type || "image/jpeg",
+              // Kept so the page can fall back to mtime when a photo has no EXIF.
+              "x-last-modified": String(f.lastModified || ""),
+              "x-name": encodeURIComponent(f.name || "shared.jpg"),
+            },
+          }),
+        ),
+      ),
+    );
+  } catch {
+    // Fall through — the logger just opens without photos.
+  }
+  return Response.redirect("/meals/log?shared=1", 303);
+}
 
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb, getMealsByDateLite, todayStr } from "@/lib/db";
+import { getMealsByDateLite, insertMeal, todayStr } from "@/lib/db";
 import { getCurrentUserIdOrDefault } from "@/lib/user-server";
-import { uploadMealPhoto } from "@/lib/blob";
+import { uploadMealPhotoBase64, thumbDataUri } from "@/lib/blob";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,31 +31,6 @@ const SaveSchema = z.object({
   photo_ext_2: z.string().optional(),
   date: z.string().optional(),
 });
-
-function mimeForExt(ext: string | undefined): string {
-  const cleanExt = (ext || "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 5).toLowerCase() || "jpg";
-  return cleanExt === "png" ? "image/png" :
-    cleanExt === "webp" ? "image/webp" :
-    cleanExt === "gif" ? "image/gif" :
-    "image/jpeg";
-}
-
-// Full-size photos go to Blob storage (private) — only a short pathname is
-// stored in the meals row, instead of a 150-350KB base64 blob that would
-// otherwise bloat every page read of that row.
-async function uploadPhoto(userId: string, base64: string | undefined, ext: string | undefined): Promise<string | null> {
-  if (!base64) return null;
-  const mime = mimeForExt(ext);
-  const buffer = Buffer.from(base64, "base64");
-  return uploadMealPhoto(buffer, mime, `meals/${userId}/${Date.now()}`);
-}
-
-// Thumbnails are tiny (~5-10KB) and shown inline for every meal in a list,
-// so they stay as base64 in the row — that's cheaper than N extra round
-// trips to Blob just to render a day's worth of thumbnails.
-function thumbDataUri(base64: string | undefined): string | null {
-  return base64 ? `data:image/jpeg;base64,${base64}` : null;
-}
 
 export async function GET(req: NextRequest) {
   const userId = await getCurrentUserIdOrDefault();
@@ -96,50 +71,28 @@ export async function POST(req: NextRequest) {
   const date = m.date ?? todayStr();
 
   const [photo_path, photo_path_2] = await Promise.all([
-    uploadPhoto(userId, m.photo_base64, m.photo_ext),
-    uploadPhoto(userId, m.photo_base64_2, m.photo_ext_2),
+    uploadMealPhotoBase64(userId, m.photo_base64, m.photo_ext),
+    uploadMealPhotoBase64(userId, m.photo_base64_2, m.photo_ext_2),
   ]);
   const photo_thumb = thumbDataUri(m.photo_thumb_base64);
   const photo_thumb_2 = thumbDataUri(m.photo_thumb_base64_2);
 
-  const db = await getDb();
-
-  // Inherit the icon from a previous meal with the same description, so a
-  // re-logged "identical meal" keeps its chosen icon without re-picking.
-  let inheritedIcon: string | null = null;
-  if (m.description) {
-    const prior = await db.execute({
-      sql: "SELECT icon FROM meals WHERE user_id = ? AND description = ? AND icon IS NOT NULL ORDER BY id DESC LIMIT 1",
-      args: [userId, m.description],
-    });
-    inheritedIcon = (prior.rows[0] as any)?.icon ?? null;
-  }
-
-  const ins = await db.execute({
-    sql: `INSERT INTO meals (
-        user_id, date, photo_path, photo_thumb, photo_path_2, photo_thumb_2, description, calories, protein_g, fat_g, carbs_g, items_json, confidence, icon, user_note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      userId,
-      date,
-      photo_path,
-      photo_thumb,
-      photo_path_2,
-      photo_thumb_2,
-      m.description ?? null,
-      m.calories,
-      m.protein_g,
-      m.fat_g,
-      m.carbs_g,
-      m.items ? JSON.stringify(m.items) : null,
-      m.confidence ?? null,
-      // An explicit icon from the client (e.g. the creatine shortcut) wins;
-      // otherwise inherit from a prior meal with the same description.
-      m.icon ?? inheritedIcon,
-      m.note?.trim() ? m.note.trim() : null,
-    ],
+  const mealId = await insertMeal(userId, {
+    date,
+    description: m.description,
+    calories: m.calories,
+    protein_g: m.protein_g,
+    fat_g: m.fat_g,
+    carbs_g: m.carbs_g,
+    items: m.items,
+    confidence: m.confidence,
+    icon: m.icon,
+    note: m.note,
+    photo_path,
+    photo_thumb,
+    photo_path_2,
+    photo_thumb_2,
   });
-  const mealId = Number(ins.lastInsertRowid ?? 0);
 
   // Just a fast DB insert — the client renders its own deterministic
   // "day so far" summary after reloading the meal list.
