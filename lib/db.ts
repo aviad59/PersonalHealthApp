@@ -25,6 +25,12 @@ function client(): Client {
 
 // One schema string; libSQL `executeMultiple` runs them all sequentially.
 const SCHEMA = `
+  -- Records which SCHEMA_VERSION the migration last ran at (see ensureInit).
+  CREATE TABLE IF NOT EXISTS app_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     age INTEGER NOT NULL,
@@ -126,7 +132,8 @@ const SCHEMA = `
 
 // Idempotent column adds for tables that already exist on long-running
 // deployments. SQLite has no `ADD COLUMN IF NOT EXISTS`, so we attempt the
-// add and swallow "duplicate column" errors.
+// add and swallow "duplicate column" errors. Adding an entry here (or any
+// table/index above) needs a SCHEMA_VERSION bump, or existing DBs skip it.
 const COLUMN_ADDS: { sql: string }[] = [
   // photo_thumb: tiny (~5–10 KB) JPEG data URI saved at upload time so the
   // home/meals-list views can inline it directly in HTML and skip both the
@@ -358,42 +365,6 @@ const PER_USER_TABLES = `
   );
 `;
 
-// One-time copy of the legacy single-row / date-keyed tables into the new
-// per-user variants. INSERT OR IGNORE means we never overwrite anything
-// once data is in the new tables, and we never delete or modify the old
-// tables — they remain as a safety net.
-const ONE_TIME_USER_MIGRATIONS: { sql: string }[] = [
-  {
-    sql: `INSERT OR IGNORE INTO user_profile (
-            user_id, age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm,
-            activity_level, body_fat_pct, lean_mass_kg, bmr, tdee,
-            goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
-            weekly_workout_target, weekly_volume_note, goal_mode, updated_at
-          )
-          SELECT 'idan', age, sex, height_cm, weight_kg, neck_cm, waist_cm, hips_cm,
-                 activity_level, body_fat_pct, lean_mass_kg, bmr, tdee,
-                 goal_calories, goal_protein_g, goal_fat_g, goal_carbs_g,
-                 weekly_workout_target, weekly_volume_note, goal_mode, updated_at
-            FROM profile WHERE id = 1`,
-  },
-  {
-    sql: `INSERT OR IGNORE INTO user_suggestions (
-            user_id, date, body, meals_count, totals_calories,
-            totals_protein_g, created_at, updated_at
-          )
-          SELECT 'idan', date, body, meals_count, totals_calories,
-                 totals_protein_g, created_at, updated_at
-            FROM suggestions`,
-  },
-  {
-    sql: `INSERT OR IGNORE INTO user_weight_log (
-            user_id, date, weight_kg, note, created_at, updated_at
-          )
-          SELECT 'idan', date, weight_kg, note, created_at, updated_at
-            FROM weight_log`,
-  },
-];
-
 /**
  * Bootstrap the very first admin from the environment so a FRESH database has
  * someone who can sign in and approve everyone else — without any personal
@@ -414,22 +385,71 @@ async function seedBootstrapAdmin(c: Client): Promise<void> {
   // it back to active+admin with this email. This makes ADMIN_EMAIL a reliable
   // "restore my access" lever even if the account was left pending/disabled.
   // display_name is only set on insert (COALESCE keeps any admin-chosen name).
+  // Both statements go in one batch — a single round trip, since this runs on
+  // every cold start.
+  await c.batch(
+    [
+      {
+        sql: `INSERT INTO users (id, email, display_name, status, has_workouts, is_admin)
+              VALUES (?, ?, ?, 'active', 1, 1)
+              ON CONFLICT(id) DO UPDATE SET
+                email = excluded.email,
+                status = 'active',
+                is_admin = 1,
+                updated_at = datetime('now')`,
+        args: [id, email, name],
+      },
+      // If the admin got recorded as a separate pending row (keyed by their
+      // email) during a lockout window, remove that stray so it doesn't shadow
+      // the real admin id or clutter the roster. Only ever deletes a *pending*
+      // duplicate.
+      {
+        sql: `DELETE FROM users WHERE email = ? AND id != ? AND status = 'pending'`,
+        args: [email, id],
+      },
+    ],
+    "write",
+  );
+}
+
+// Bump whenever SCHEMA, PER_USER_TABLES, COLUMN_ADDS or POST_COLUMN_INDEXES
+// change. A cold start whose DB already records this version skips the whole
+// migration (~20 sequential round trips) and pays a single read instead.
+const SCHEMA_VERSION = 1;
+
+async function storedSchemaVersion(c: Client): Promise<number> {
+  try {
+    const res = await c.execute(
+      "SELECT value FROM app_meta WHERE key = 'schema_version'",
+    );
+    return Number(res.rows[0]?.value ?? 0);
+  } catch {
+    // app_meta doesn't exist yet (fresh or pre-versioning DB) — migrate.
+    return 0;
+  }
+}
+
+async function migrate(c: Client): Promise<void> {
+  await c.executeMultiple(SCHEMA);
+  await c.executeMultiple(PER_USER_TABLES);
+  for (const m of COLUMN_ADDS) {
+    try {
+      await c.execute(m.sql);
+    } catch (err: any) {
+      // libSQL surfaces "duplicate column name" when the migration has
+      // already been applied — that's the expected steady state.
+      const msg = String(err?.message || err);
+      if (!/duplicate column/i.test(msg)) throw err;
+    }
+  }
+  // Indexes that need columns added above to exist first.
+  for (const idx of POST_COLUMN_INDEXES) {
+    await c.execute(idx.sql);
+  }
   await c.execute({
-    sql: `INSERT INTO users (id, email, display_name, status, has_workouts, is_admin)
-          VALUES (?, ?, ?, 'active', 1, 1)
-          ON CONFLICT(id) DO UPDATE SET
-            email = excluded.email,
-            status = 'active',
-            is_admin = 1,
-            updated_at = datetime('now')`,
-    args: [id, email, name],
-  });
-  // If the admin got recorded as a separate pending row (keyed by their email)
-  // during a lockout window, remove that stray so it doesn't shadow the real
-  // admin id or clutter the roster. Only ever deletes a *pending* duplicate.
-  await c.execute({
-    sql: `DELETE FROM users WHERE email = ? AND id != ? AND status = 'pending'`,
-    args: [email, id],
+    sql: `INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    args: [String(SCHEMA_VERSION)],
   });
 }
 
@@ -437,34 +457,7 @@ async function ensureInit(): Promise<void> {
   if (!_initPromise) {
     _initPromise = (async () => {
       const c = client();
-      await c.executeMultiple(SCHEMA);
-      // Per-user tables created BEFORE we copy data into them.
-      await c.executeMultiple(PER_USER_TABLES);
-      for (const m of COLUMN_ADDS) {
-        try {
-          await c.execute(m.sql);
-        } catch (err: any) {
-          // libSQL surfaces "duplicate column name" when the migration has
-          // already been applied — that's the expected steady state.
-          const msg = String(err?.message || err);
-          if (!/duplicate column/i.test(msg)) throw err;
-        }
-      }
-      // Indexes that need columns added above to exist first.
-      for (const idx of POST_COLUMN_INDEXES) {
-        await c.execute(idx.sql);
-      }
-      // Backfill idan's data from legacy tables. Each statement is
-      // INSERT OR IGNORE so it never overwrites or modifies existing rows.
-      for (const m of ONE_TIME_USER_MIGRATIONS) {
-        try {
-          await c.execute(m.sql);
-        } catch (err: any) {
-          // Legacy tables might not exist on a fresh DB — that's fine.
-          const msg = String(err?.message || err);
-          if (!/no such table/i.test(msg)) throw err;
-        }
-      }
+      if ((await storedSchemaVersion(c)) < SCHEMA_VERSION) await migrate(c);
       // Ensure a signable admin exists (from ADMIN_EMAIL) on fresh databases.
       await seedBootstrapAdmin(c);
     })().catch((err) => {
