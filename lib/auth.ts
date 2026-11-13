@@ -34,11 +34,17 @@ export const authOptions: AuthOptions = {
       const u = await getActiveUserByEmail(token.email as string | undefined);
       token.appUserId = u?.id ?? null;
       token.isAdmin = u?.isAdmin ?? false;
+      // Carried on the session so the Home page can be a static shell that
+      // reads these client-side instead of hitting the DB before first paint.
+      token.hasWorkouts = u?.hasWorkouts ?? false;
+      token.displayName = u?.displayName ?? null;
       return token;
     },
     async session({ session, token }) {
       (session as any).appUserId = token.appUserId as UserId | null;
       (session as any).isAdmin = (token.isAdmin as boolean) ?? false;
+      (session as any).hasWorkouts = (token.hasWorkouts as boolean) ?? false;
+      (session as any).displayName = (token.displayName as string | null) ?? null;
       return session;
     },
   },

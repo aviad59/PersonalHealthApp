@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Image from "next/image";
 import MacroRing from "@/components/MacroRing";
 import InsightCard from "@/components/InsightCard";
@@ -118,15 +120,19 @@ const HOME_CACHE_KEY = "home-today-v1";
 // left `training` truthy with no score, so the card silently rendered nothing
 // until a refetch landed — and not at all if the refetch failed.
 const HOME_TRAINING_KEY = "home-training-v2";
+// Who's signed in (greeting name + workouts flag). Cached so a cold open can
+// render the header before /api/auth/session has answered.
+const HOME_USER_KEY = "home-user-v1";
 
-export default function HomeClient({
-  hasWorkouts,
-  userDisplayName,
-}: {
-  hasWorkouts: boolean;
-  userDisplayName: string;
-}) {
+type HomeUser = { name: string; hasWorkouts: boolean };
+
+export default function HomeClient() {
   const lang = useLang();
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [user, setUser] = useState<HomeUser | null>(null);
+  const hasWorkouts = user?.hasWorkouts ?? false;
+  const userDisplayName = user?.name ?? "";
   const [data, setData] = useState<Today | null>(null);
   const [training, setTraining] = useState<Training | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -168,6 +174,25 @@ export default function HomeClient({
   }
 
   useEffect(() => {
+    const cached = lsGet<HomeUser>(HOME_USER_KEY);
+    if (cached) setUser(cached);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    // Greet with the person's real (Google) first name, not the roster label
+    // (which for the bootstrap admin may just be "Admin"). Fall back to the
+    // roster display name if the session has no name.
+    const firstName = session.user?.name?.trim().split(/\s+/)[0];
+    const next: HomeUser = {
+      name: firstName || (session as any).displayName || "",
+      hasWorkouts: (session as any).hasWorkouts === true,
+    };
+    setUser(next);
+    lsSet(HOME_USER_KEY, next);
+  }, [session]);
+
+  useEffect(() => {
     // Hydrate from the previous session's snapshot immediately so the
     // page paints with real-looking content on click instead of a blank
     // skeleton, then quietly refresh from the API in the background.
@@ -180,20 +205,25 @@ export default function HomeClient({
       setData(cachedToday);
       setLoading(false);
     }
-    if (hasWorkouts) {
-      const cachedTraining = lsGet<Training>(HOME_TRAINING_KEY);
-      // Belt and braces alongside the key bump: only trust a cached payload
-      // that actually carries the fields this build renders.
-      if (cachedTraining && "workoutScore" in cachedTraining) {
-        setTraining(cachedTraining);
-      }
-    }
 
     (async () => {
       try {
         const r = await fetch("/api/today", { cache: "no-store" });
+        // The page itself can come from the service worker's cache, so an
+        // expired session only shows up here: the middleware bounces the API
+        // call to the sign-in page.
+        if (r.redirected && new URL(r.url).pathname === "/signin") {
+          window.location.assign("/signin");
+          return;
+        }
         const j = await r.json();
         if (j && !j.error) {
+          // A freshly-approved user has no profile yet — send them through
+          // onboarding once so the app has their metrics/goals first.
+          if (!j.profile) {
+            router.replace("/onboarding");
+            return;
+          }
           setData(j);
           lsSet(HOME_CACHE_KEY, j);
         }
@@ -203,26 +233,34 @@ export default function HomeClient({
         setLoading(false);
       }
     })();
+  }, [router]);
 
-    if (hasWorkouts) {
-      (async () => {
-        try {
-          // Show cached training immediately from the panel above, then:
-          // 1) GET /api/workouts warms the workout cache and auto-syncs
-          //    from Hevy if it's >10min stale (cheap when fresh) — this is
-          //    the "auto-sync on open" so the Workouts tab isn't needed.
-          // 2) Re-read /api/today/training so the week counter + workout score
-          //    reflect the freshly-synced sessions.
-          await fetch("/api/workouts", { cache: "no-store" }).catch(() => {});
-          const r = await fetch("/api/today/training", { cache: "no-store" });
-          const j = await r.json();
-          setTraining(j);
-          lsSet(HOME_TRAINING_KEY, j);
-        } catch {
-          // non-fatal
-        }
-      })();
+  useEffect(() => {
+    if (!hasWorkouts) return;
+    const cachedTraining = lsGet<Training>(HOME_TRAINING_KEY);
+    // Belt and braces alongside the key bump: only trust a cached payload
+    // that actually carries the fields this build renders.
+    if (cachedTraining && "workoutScore" in cachedTraining) {
+      setTraining(cachedTraining);
     }
+
+    (async () => {
+      try {
+        // Show cached training immediately from the panel above, then:
+        // 1) GET /api/workouts warms the workout cache and auto-syncs
+        //    from Hevy if it's >10min stale (cheap when fresh) — this is
+        //    the "auto-sync on open" so the Workouts tab isn't needed.
+        // 2) Re-read /api/today/training so the week counter + workout score
+        //    reflect the freshly-synced sessions.
+        await fetch("/api/workouts", { cache: "no-store" }).catch(() => {});
+        const r = await fetch("/api/today/training", { cache: "no-store" });
+        const j = await r.json();
+        setTraining(j);
+        lsSet(HOME_TRAINING_KEY, j);
+      } catch {
+        // non-fatal
+      }
+    })();
   }, [hasWorkouts]);
 
   if (err) return <div className="p-6 text-red-400">{err}</div>;

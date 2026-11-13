@@ -10,7 +10,7 @@
 // This module is SERVER-ONLY now (it reads the DB). It must not be imported
 // from client components — the browser has no DB access. Server components,
 // API routes, and the NextAuth callbacks import it. Auth-critical lookups run
-// often, so results are cached in-memory for a few seconds.
+// often, so results are cached in-memory for up to a minute.
 
 import {
   getAllUserRows,
@@ -60,8 +60,10 @@ function rowToConfig(r: UserRow): UserConfig {
 
 // Short-lived in-memory cache of the whole roster. The roster is tiny and
 // changes rarely, but auth reads it on many requests, so we avoid a DB round
-// trip on each. Admin writes call invalidateUserCache() for an instant refresh.
-const CACHE_TTL_MS = 10_000;
+// trip on each. Admin writes call invalidateUserCache() for an instant refresh
+// on that instance; other warm instances pick a change up within the TTL, so a
+// revoked user keeps access for at most a minute.
+const CACHE_TTL_MS = 60_000;
 let _cache: { users: UserConfig[]; at: number } | null = null;
 
 export function invalidateUserCache(): void {
