@@ -587,7 +587,7 @@ export default function AnalyzerLabClient() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Analyzer Lab</h1>
-          <p className="text-xs text-ink/50">
+          <p className="text-xs text-ink/70">
             Consistency checker — run the same meal repeatedly and see how much the estimate jitters.
           </p>
         </div>
@@ -603,7 +603,7 @@ export default function AnalyzerLabClient() {
       {/* ---------- IMPORT GROUND TRUTH ---------- */}
       <section className="card p-4 space-y-3">
         <h2 className="font-semibold">Import from Nutrition5k</h2>
-        <p className="text-[11px] text-ink/45 -mt-1">
+        <p className="text-[11px] text-ink/70 -mt-1">
           Google Research’s public dataset of real plated dishes weighed on a scale —
           so we know the true macros. Imports from the held-out <strong>test</strong> split
           (507 dishes with overhead photos). Photos stay in the public bucket and are
@@ -611,7 +611,7 @@ export default function AnalyzerLabClient() {
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block">
-            <span className="block text-[11px] text-ink/50 mb-1">Dishes</span>
+            <span className="block text-[11px] text-ink/70 mb-1">Dishes</span>
             <input
               type="number"
               min={1}
@@ -640,7 +640,7 @@ export default function AnalyzerLabClient() {
             onClick={backfillTruth}
             disabled={importing}
             title="Fill in ground-truth mass for dishes imported before mass was tracked"
-            className="rounded-full border border-border px-4 py-2 text-xs text-ink/70 disabled:opacity-40"
+            className="rounded-full border border-border px-4 py-2 text-xs text-ink/80 disabled:opacity-40"
           >
             Re-sync truth
           </button>
@@ -655,11 +655,11 @@ export default function AnalyzerLabClient() {
           className="w-full flex items-center justify-between text-left"
         >
           <span className="font-semibold">Add a test meal manually</span>
-          <span className="text-ink/40 text-sm">{addOpen ? "▲" : "▼"}</span>
+          <span className="text-ink/65 text-sm">{addOpen ? "▲" : "▼"}</span>
         </button>
         {addOpen && (
         <>
-        <p className="text-[11px] text-ink/45 -mt-1">
+        <p className="text-[11px] text-ink/70 -mt-1">
           No macros to enter — just a photo or description. Manual meals have no ground
           truth, so they’re measured for consistency only.
         </p>
@@ -669,7 +669,7 @@ export default function AnalyzerLabClient() {
               key={m}
               onClick={() => setMode(m)}
               className={`px-3 py-1.5 rounded-full ${
-                mode === m ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/60"
+                mode === m ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/75"
               }`}
             >
               {m === "photo" ? "Photo" : "Text"}
@@ -739,19 +739,19 @@ export default function AnalyzerLabClient() {
             <span className="font-semibold">
               Test meals {fixtures ? `(${fixtures.length})` : ""}
             </span>
-            <span className="text-ink/40 text-sm ml-auto">{listOpen ? "▲" : "▼"}</span>
+            <span className="text-ink/65 text-sm ml-auto">{listOpen ? "▲" : "▼"}</span>
           </button>
         </div>
         {listOpen && (
         <>
-        <p className="text-[11px] text-ink/40 -mt-1">
+        <p className="text-[11px] text-ink/65 -mt-1">
           The full pool a run samples from. Each run draws its dishes at random —
           nothing to pick here.
         </p>
         {!fixtures ? (
-          <p className="text-sm text-ink/40">Loading…</p>
+          <p className="text-sm text-ink/65">Loading…</p>
         ) : fixtures.length === 0 ? (
-          <p className="text-sm text-ink/40">No test meals yet. Add one above.</p>
+          <p className="text-sm text-ink/65">No test meals yet. Add one above.</p>
         ) : (
           <ul className="space-y-2">
             {fixtures.slice(0, LIST_PREVIEW).map((f) => (
@@ -765,7 +765,7 @@ export default function AnalyzerLabClient() {
                     className="w-12 h-12 rounded-lg object-cover shrink-0 bg-ink/5"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-lg bg-ink/5 shrink-0 flex items-center justify-center text-[10px] text-ink/40">
+                  <div className="w-12 h-12 rounded-lg bg-ink/5 shrink-0 flex items-center justify-center text-[10px] text-ink/65">
                     TEXT
                   </div>
                 )}
@@ -777,9 +777,9 @@ export default function AnalyzerLabClient() {
                       {f.expected_fat_g} · C{f.expected_carbs_g}
                     </div>
                   ) : f.input_text ? (
-                    <div className="text-[11px] text-ink/45 truncate">{f.input_text}</div>
+                    <div className="text-[11px] text-ink/70 truncate">{f.input_text}</div>
                   ) : (
-                    <div className="text-[11px] text-ink/35">no ground truth</div>
+                    <div className="text-[11px] text-ink/65">no ground truth</div>
                   )}
                 </div>
                 <button onClick={() => deleteFixture(f.id)} className="text-xs text-bad/80 shrink-0">
@@ -788,7 +788,7 @@ export default function AnalyzerLabClient() {
               </li>
             ))}
             {fixtures.length > LIST_PREVIEW && (
-              <li className="text-[11px] text-ink/40 px-2 pt-1">
+              <li className="text-[11px] text-ink/65 px-2 pt-1">
                 …and {fixtures.length - LIST_PREVIEW} more in the pool.
               </li>
             )}
@@ -812,14 +812,14 @@ export default function AnalyzerLabClient() {
         </div>
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <span className="block text-[11px] text-ink/50 mb-1">Models to compare</span>
+            <span className="block text-[11px] text-ink/70 mb-1">Models to compare</span>
             <div className="flex flex-wrap gap-2">
               {config?.models.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => toggle(models, m.id, setModels)}
                   className={`px-3 py-1.5 rounded-full text-xs ${
-                    models.has(m.id) ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/55"
+                    models.has(m.id) ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/75"
                   }`}
                 >
                   {m.label}
@@ -828,7 +828,7 @@ export default function AnalyzerLabClient() {
             </div>
           </div>
           <div>
-            <span className="block text-[11px] text-ink/50 mb-1">Pipeline</span>
+            <span className="block text-[11px] text-ink/70 mb-1">Pipeline</span>
             <div className="flex flex-wrap gap-2">
               {PIPELINES.map((p) => (
                 <button
@@ -844,7 +844,7 @@ export default function AnalyzerLabClient() {
                   className={`px-3 py-1.5 rounded-full text-xs ${
                     pipelines.has(p.id)
                       ? "bg-accent-brand text-on-brand"
-                      : "bg-bg-elev text-ink/55"
+                      : "bg-bg-elev text-ink/75"
                   }`}
                 >
                   {p.label}
@@ -853,7 +853,7 @@ export default function AnalyzerLabClient() {
             </div>
           </div>
           <div>
-            <span className="block text-[11px] text-ink/50 mb-1">Samples</span>
+            <span className="block text-[11px] text-ink/70 mb-1">Samples</span>
             <div className="flex flex-wrap gap-2">
               {SAMPLE_OPTIONS.map((n) => (
                 <button
@@ -874,7 +874,7 @@ export default function AnalyzerLabClient() {
                   className={`px-3 py-1.5 rounded-full text-xs ${
                     sampleCounts.has(n)
                       ? "bg-accent-brand text-on-brand"
-                      : "bg-bg-elev text-ink/55"
+                      : "bg-bg-elev text-ink/75"
                   }`}
                 >
                   {n}×
@@ -883,7 +883,7 @@ export default function AnalyzerLabClient() {
             </div>
           </div>
           <div>
-            <span className="block text-[11px] text-ink/50 mb-1">Input variant</span>
+            <span className="block text-[11px] text-ink/70 mb-1">Input variant</span>
             <div className="flex flex-wrap gap-2">
               {VARIANTS.map((v) => {
                 const key = v.includeText ? "txt" : "img";
@@ -892,7 +892,7 @@ export default function AnalyzerLabClient() {
                     key={key}
                     onClick={() => toggle(variants, key, setVariants)}
                     className={`px-3 py-1.5 rounded-full text-xs ${
-                      variants.has(key) ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/55"
+                      variants.has(key) ? "bg-accent-brand text-on-brand" : "bg-bg-elev text-ink/75"
                     }`}
                     title={
                       v.includeText
@@ -908,7 +908,7 @@ export default function AnalyzerLabClient() {
           </div>
           {pinnedDishIds?.length ? (
             <div>
-              <span className="block text-[11px] text-ink/50 mb-1">Dishes</span>
+              <span className="block text-[11px] text-ink/70 mb-1">Dishes</span>
               <div className="flex items-center gap-2">
                 <span className="rounded-lg bg-accent-sec-container text-accent-on-sec-container px-3 py-2 text-xs font-medium">
                   {pinnedDishIds.length} pinned
@@ -923,7 +923,7 @@ export default function AnalyzerLabClient() {
             </div>
           ) : (
             <label className="block">
-              <span className="block text-[11px] text-ink/50 mb-1">Dishes (random)</span>
+              <span className="block text-[11px] text-ink/70 mb-1">Dishes (random)</span>
               <input
                 type="number"
                 min={1}
@@ -955,7 +955,7 @@ export default function AnalyzerLabClient() {
                 key={tab.id}
                 onClick={() => setPromptTab(tab.id)}
                 className={`text-xs px-2.5 py-1 rounded-full ${
-                  promptTab === tab.id ? "bg-ink/15 text-ink" : "text-ink/45"
+                  promptTab === tab.id ? "bg-ink/15 text-ink" : "text-ink/70"
                 }`}
               >
                 {tab.label}
@@ -976,7 +976,7 @@ export default function AnalyzerLabClient() {
               </button>
             )}
           </div>
-          <p className="text-[10px] text-ink/40 mb-1">
+          <p className="text-[10px] text-ink/65 mb-1">
             {promptTab === "perceive"
               ? "Stage 1 of the two-stage pipeline — identifies items and portions, no macros."
               : promptTab === "quantify"
@@ -1008,11 +1008,11 @@ export default function AnalyzerLabClient() {
           {viewingRun && (
             <span className="text-[10px] text-warn">viewing a saved report</span>
           )}
-          <span className="text-ink/40 text-sm ml-auto">{historyOpen ? "▲" : "▼"}</span>
+          <span className="text-ink/65 text-sm ml-auto">{historyOpen ? "▲" : "▼"}</span>
         </button>
         {historyOpen && (
           <>
-            <p className="text-[11px] text-ink/40 -mt-1">
+            <p className="text-[11px] text-ink/65 -mt-1">
               Every run is saved automatically, so reports are never lost and prompt
               changes can be compared over time.
             </p>
@@ -1026,7 +1026,7 @@ export default function AnalyzerLabClient() {
               </button>
             )}
             {!runsList?.length ? (
-              <p className="text-sm text-ink/40">No saved reports yet.</p>
+              <p className="text-sm text-ink/65">No saved reports yet.</p>
             ) : (
               <ul className="space-y-1.5">
                 {runsList.map((r) => {
@@ -1043,7 +1043,7 @@ export default function AnalyzerLabClient() {
                         className="flex-1 min-w-0 text-left"
                       >
                         <div className="truncate font-medium">{r.label}</div>
-                        <div className="text-[10px] text-ink/45">
+                        <div className="text-[10px] text-ink/70">
                           {best
                             ? `best ${Math.round(best.agg.mape)}% · ${best.modelLabel} · ${best.pipeline} · ${best.variant}`
                             : "no scored dishes"}
@@ -1090,11 +1090,11 @@ export default function AnalyzerLabClient() {
       {resultFixtures.length > 0 && (
         <section className="card p-4 space-y-5">
           <h2 className="font-semibold">Per-dish detail</h2>
-          <p className="text-[11px] text-ink/45 -mt-2">
-            <strong className="text-ink/70">mean</strong> is the average estimate ·{" "}
-            <strong className="text-ink/70">±n%</strong> is jitter (how much the answer
+          <p className="text-[11px] text-ink/70 -mt-2">
+            <strong className="text-ink/80">mean</strong> is the average estimate ·{" "}
+            <strong className="text-ink/80">±n%</strong> is jitter (how much the answer
             wobbles across repeats) ·{" "}
-            <strong className="text-ink/70">+/−n% vs truth</strong> is the error against
+            <strong className="text-ink/80">+/−n% vs truth</strong> is the error against
             the known value, signed (+ = over-estimate).
           </p>
 
@@ -1141,7 +1141,7 @@ export default function AnalyzerLabClient() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[11px]">
-                    <thead className="text-ink/40">
+                    <thead className="text-ink/65">
                       <tr className="text-left">
                         <th className="py-1 pr-2">Model</th>
                         <th className="py-1 px-2">Pipeline</th>
@@ -1159,8 +1159,8 @@ export default function AnalyzerLabClient() {
                       {cells[0]?.expected && (
                         <tr className="border-t border-border/50 text-ok/90">
                           <td className="py-1.5 pr-2 font-medium">truth</td>
-                          <td className="py-1.5 px-2 text-ink/30">—</td>
-                          <td className="py-1.5 px-2 text-ink/30">—</td>
+                          <td className="py-1.5 px-2 text-ink/65">—</td>
+                          <td className="py-1.5 px-2 text-ink/65">—</td>
                           {MACRO_KEYS.map((k) => (
                             <td key={k} className="py-1.5 px-2 text-center nums">
                               {Math.round(cells[0].expected![k])}
@@ -1169,7 +1169,7 @@ export default function AnalyzerLabClient() {
                           <td className="py-1.5 px-2 text-center nums">
                             {cells[0].expectedMass ? `${Math.round(cells[0].expectedMass)} g` : "—"}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-ink/30">—</td>
+                          <td className="py-1.5 px-2 text-center text-ink/65">—</td>
                         </tr>
                       )}
                       {cells.map((c) => (
@@ -1188,7 +1188,7 @@ export default function AnalyzerLabClient() {
                               className={
                                 c.pipeline === "two-stage"
                                   ? "text-accent-primary"
-                                  : "text-ink/45"
+                                  : "text-ink/70"
                               }
                             >
                               {c.pipeline === "two-stage" ? "two-stage" : "single"}
@@ -1198,7 +1198,7 @@ export default function AnalyzerLabClient() {
                               // Nutrition5k paper, portion size is where nearly
                               // all the error lives, so it's the number to watch.
                               <span
-                                className="block text-[9px] text-ink/35 max-w-[9rem] truncate"
+                                className="block text-[9px] text-ink/65 max-w-[9rem] truncate"
                                 title={c.perception.parsed.items
                                   .map(
                                     (i: any) =>
@@ -1213,7 +1213,7 @@ export default function AnalyzerLabClient() {
                               </span>
                             )}
                           </td>
-                          <td className="py-1.5 px-2 text-[10px] text-ink/45">
+                          <td className="py-1.5 px-2 text-[10px] text-ink/70">
                             {c.includeText ? "photo + text" : "photo only"}
                           </td>
                           {MACRO_KEYS.map((k) => {
@@ -1251,10 +1251,10 @@ export default function AnalyzerLabClient() {
                                 </div>
                               </>
                             ) : (
-                              <span className="text-ink/25">—</span>
+                              <span className="text-ink/65">—</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-ink/40">
+                          <td className="py-1.5 px-2 text-center text-ink/65">
                             {Math.round(c.summary.meanLatencyMs)}
                           </td>
                         </tr>
@@ -1334,7 +1334,7 @@ function AccuracyScorecard({
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold">
           {title ?? "Accuracy vs truth"}
-          <span className="ml-2 text-[11px] font-normal text-ink/55">
+          <span className="ml-2 text-[11px] font-normal text-ink/75">
             {rows[0].agg.n} dish{rows[0].agg.n === 1 ? "" : "es"} scored
           </span>
         </h2>
@@ -1349,26 +1349,26 @@ function AccuracyScorecard({
           <div className="text-2xl font-extrabold tabular-nums">
             {Math.round(best.agg.mape)}%
           </div>
-          <div className="text-[10px] text-ink/55 mt-0.5">avg error (best)</div>
+          <div className="text-[10px] text-ink/75 mt-0.5">avg error (best)</div>
         </div>
         <div className="rounded-xl bg-ink/5 p-3 text-center">
           <div className="text-2xl font-extrabold tabular-nums">
             {Math.round(best.agg.perMacro.calories.withinRate * 100)}%
           </div>
-          <div className="text-[10px] text-ink/55 mt-0.5">kcal within 15%</div>
+          <div className="text-[10px] text-ink/75 mt-0.5">kcal within 15%</div>
         </div>
         <div className="rounded-xl bg-ink/5 p-3 text-center">
           <div className="text-2xl font-extrabold tabular-nums">
             {best.agg.perMacro.calories.bias >= 0 ? "+" : "−"}
             {Math.abs(Math.round(best.agg.perMacro.calories.bias))}
           </div>
-          <div className="text-[10px] text-ink/55 mt-0.5">kcal bias</div>
+          <div className="text-[10px] text-ink/75 mt-0.5">kcal bias</div>
         </div>
         <div className="rounded-xl bg-ink/5 p-3 text-center">
           <div className="text-sm font-bold leading-tight mt-1">
             {best.modelLabel}
           </div>
-          <div className="text-[10px] text-ink/55 mt-0.5">
+          <div className="text-[10px] text-ink/75 mt-0.5">
             {best.pipeline} · {best.variant}
           </div>
         </div>
@@ -1376,7 +1376,7 @@ function AccuracyScorecard({
 
       <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead className="text-ink/50">
+          <thead className="text-ink/70">
             <tr className="text-left">
               <th className="py-1 pr-2">Model</th>
               <th className="py-1 px-2">Pipeline</th>
@@ -1401,12 +1401,12 @@ function AccuracyScorecard({
                 <td className="py-2 pr-2">{r.modelLabel}</td>
                 <td
                   className={`py-2 px-2 ${
-                    r.pipeline === "two-stage" ? "text-accent-primary" : "text-ink/60"
+                    r.pipeline === "two-stage" ? "text-accent-primary" : "text-ink/75"
                   }`}
                 >
                   {r.pipeline}
                 </td>
-                <td className="py-2 px-2 text-ink/60">{r.variant}</td>
+                <td className="py-2 px-2 text-ink/75">{r.variant}</td>
                 <td className={`py-2 px-2 text-center font-bold ${cvClass(r.agg.mape)}`}>
                   {Math.round(r.agg.mape)}%
                 </td>
@@ -1418,7 +1418,7 @@ function AccuracyScorecard({
                     <div>{Math.round(r.agg.perMacro[k].withinRate * 100)}%</div>
                     {/* Mean signed error — a consistent sign means the model
                         systematically over- or under-estimates that macro. */}
-                    <div className="text-[9px] text-ink/40">
+                    <div className="text-[9px] text-ink/65">
                       {r.agg.perMacro[k].bias >= 0 ? "+" : "−"}
                       {Math.abs(Math.round(r.agg.perMacro[k].bias))} bias
                     </div>
@@ -1430,16 +1430,16 @@ function AccuracyScorecard({
                       {/* Within-rate on top so this column reads the same way
                           as the macro columns beside it. */}
                       <div>{Math.round(r.agg.mass.withinRate * 100)}%</div>
-                      <div className="text-[9px] text-ink/40">
+                      <div className="text-[9px] text-ink/65">
                         {r.agg.mass.bias >= 0 ? "+" : "−"}
                         {Math.abs(Math.round(r.agg.mass.bias))} g bias
                       </div>
                     </>
                   ) : (
-                    <span className="text-ink/25">—</span>
+                    <span className="text-ink/65">—</span>
                   )}
                 </td>
-                <td className="py-2 px-2 text-center text-ink/45">
+                <td className="py-2 px-2 text-center text-ink/70">
                   {Math.round(r.meanLatency)}
                 </td>
               </tr>
@@ -1447,7 +1447,7 @@ function AccuracyScorecard({
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-ink/45">
+      <p className="text-[10px] text-ink/70">
         avg error = mean absolute % off across the scored macros (macros too small
         for a percentage to be meaningful are skipped) · bias = mean signed error
         (+ over-estimates, − under-estimates) · every macro and mass column shows
@@ -1548,7 +1548,7 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
           className={`px-2.5 py-1 rounded-full text-[10px] ${
             metrics.has(m.id)
               ? "bg-accent-brand text-on-brand"
-              : "bg-bg-elev border border-border text-ink/55"
+              : "bg-bg-elev border border-border text-ink/75"
           }`}
         >
           {m.label}
@@ -1619,12 +1619,12 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
     return (
       <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[10px] uppercase tracking-wider text-ink/50">
+          <div className="text-[10px] uppercase tracking-wider text-ink/70">
             {combined ? "Combined index by report" : `${active[0].label} by report`}
           </div>
           {metricPicker}
         </div>
-        <p className="text-[11px] text-ink/40">
+        <p className="text-[11px] text-ink/65">
           No saved reports carry this metric yet.
         </p>
       </div>
@@ -1653,7 +1653,7 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
   return (
     <div className="rounded-xl border border-border bg-bg-elev p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-[10px] uppercase tracking-wider text-ink/50">
+        <div className="text-[10px] uppercase tracking-wider text-ink/70">
           {combined ? "Combined index by report" : `${active[0].label} by report`}
         </div>
         {metricPicker}
@@ -1769,12 +1769,12 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
                   something, so they are always listed. */}
               {combined &&
                 hover.raws.map((r) => (
-                  <div key={r} className="text-[9px] text-ink/70">
+                  <div key={r} className="text-[9px] text-ink/80">
                     {r}
                   </div>
                 ))}
-              <div className="text-[9px] text-ink/60 mt-0.5">{hover.label}</div>
-              {hover.run && <div className="text-[9px] text-ink/40">{hover.run}</div>}
+              <div className="text-[9px] text-ink/75 mt-0.5">{hover.label}</div>
+              {hover.run && <div className="text-[9px] text-ink/65">{hover.run}</div>}
             </div>
           </div>
         )}
@@ -1782,7 +1782,7 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
 
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {series.map((s, si) => (
-          <span key={s.key} className="flex items-center gap-1 text-[9px] text-ink/55">
+          <span key={s.key} className="flex items-center gap-1 text-[9px] text-ink/75">
             <span
               className="inline-block w-2.5 h-[2px] rounded-full"
               style={{ backgroundColor: SERIES_COLORS[si % SERIES_COLORS.length] }}
@@ -1792,7 +1792,7 @@ function RunHistoryChart({ runs }: { runs: SavedRun[] }) {
         ))}
       </div>
       {combined && (
-        <p className="text-[9px] text-ink/40 leading-snug">
+        <p className="text-[9px] text-ink/65 leading-snug">
           Each metric is scaled 0–100 across the points shown, then averaged. The
           index ranks configurations against each other on this chart — it is not
           a measurement, and it shifts if the reports change.

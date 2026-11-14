@@ -147,7 +147,7 @@ export default function MacroRing({
           <div className={`text-sm font-semibold ${hasOver ? "text-warn" : "text-ink"}`}>
             {Math.round(value)}
           </div>
-          <div className="text-[10px] text-ink/50">
+          <div className="text-[10px] text-ink/70">
             / {target}
             {unit}
           </div>
@@ -156,7 +156,7 @@ export default function MacroRing({
       {/* Negative margin pulls the label up over the SVG's transparent
           padding (reserved for the rarely-shown overage ring) so it sits
           right under the ring instead of floating far below. */}
-      <div className="-mt-2 text-[11px] uppercase tracking-wide text-ink/60">{label}</div>
+      <div className="-mt-2 text-[11px] uppercase tracking-wide text-ink/75">{label}</div>
     </div>
   );
 }

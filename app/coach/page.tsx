@@ -224,7 +224,7 @@ export default function CoachPage() {
         <CoachAvatar size={42} />
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-bold leading-tight">{t(lang, "coach_title")}</div>
-          <div className="flex items-center gap-1.5 text-[11px] text-ink/50 mt-0.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-ink/70 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-ok" />
             {t(lang, "coach_status")}
           </div>
@@ -232,7 +232,7 @@ export default function CoachPage() {
         {messages.length > 0 && (
           <button
             onClick={clearThread}
-            className="text-[11px] text-ink/40 hover:text-ink/70 transition-colors shrink-0"
+            className="text-[11px] text-ink/65 hover:text-ink/80 transition-colors shrink-0"
           >
             {t(lang, "coach_clear")}
           </button>
@@ -242,7 +242,7 @@ export default function CoachPage() {
       {/* Scrollable message area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {loading ? (
-          <div className="text-sm text-ink/50 px-2 pt-2">{t(lang, "coach_loading")}</div>
+          <div className="text-sm text-ink/70 px-2 pt-2">{t(lang, "coach_loading")}</div>
         ) : messages.length === 0 ? (
           <EmptyState lang={lang} onPick={(q) => send(q)} />
         ) : (
@@ -342,7 +342,7 @@ function Bubble({ msg }: { msg: Msg }) {
       <CoachAvatar size={28} />
       <div
         dir={rtl ? "rtl" : "ltr"}
-        className="max-w-[80%] rounded-2xl rounded-bl-sm bg-bg-elev border border-border text-ink/90 px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap shadow-sm"
+        className="max-w-[80%] rounded-2xl rounded-bl-sm bg-bg-elev border border-border text-ink/95 px-4 py-2.5 text-[14px] leading-snug whitespace-pre-wrap shadow-sm"
       >
         {renderContent(msg.content)}
       </div>
@@ -372,7 +372,7 @@ function EmptyState({ lang, onPick }: { lang: Lang; onPick: (q: string) => void 
       <div className="flex flex-col items-center text-center space-y-3">
         <CoachAvatar size={64} />
         <div className="text-base font-semibold">{t(lang, "coach_empty_title")}</div>
-        <p className="text-[13px] text-ink/55 leading-snug max-w-xs">
+        <p className="text-[13px] text-ink/75 leading-snug max-w-xs">
           {t(lang, "coach_empty_desc")}
         </p>
       </div>
@@ -383,7 +383,7 @@ function EmptyState({ lang, onPick }: { lang: Lang; onPick: (q: string) => void 
             <button
               key={k}
               onClick={() => onPick(q)}
-              className={`w-full text-[13px] text-ink/80 bg-bg-elev border border-border rounded-xl px-3 py-2.5 hover:border-ink/30 transition-colors ${
+              className={`w-full text-[13px] text-ink/90 bg-bg-elev border border-border rounded-xl px-3 py-2.5 hover:border-ink/30 transition-colors ${
                 rtl ? "text-right" : "text-left"
               }`}
             >

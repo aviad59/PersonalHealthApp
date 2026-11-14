@@ -142,22 +142,22 @@ export default function MeasurementsSection() {
   return (
     <section className="card p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
           {t(lang, "measure_title")}
         </h2>
         {log.length > 0 && (
-          <span className="text-[11px] text-ink/40">
+          <span className="text-[11px] text-ink/65">
             {log.length} {t(lang, "measure_entries")}
           </span>
         )}
       </div>
-      <p className="text-xs text-ink/55 leading-snug">{t(lang, "measure_hint")}</p>
+      <p className="text-xs text-ink/75 leading-snug">{t(lang, "measure_hint")}</p>
 
       {/* Entry grid */}
       <div className="grid grid-cols-3 gap-2">
         {FIELDS.map((f) => (
           <label key={f.key} className="block">
-            <span className="block text-[10px] uppercase tracking-wide text-ink/40 mb-1">
+            <span className="block text-[10px] uppercase tracking-wide text-ink/65 mb-1">
               {t(lang, f.labelKey as TKey)}
             </span>
             <input
@@ -182,7 +182,7 @@ export default function MeasurementsSection() {
       {editDate && (
         <div className="flex items-center justify-between rounded-lg bg-accent-brand/10 border border-accent-brand/30 px-3 py-2 text-xs">
           <span className="text-accent-brand">{t(lang, "measure_editing")} {editDate}</span>
-          <button onClick={cancelEdit} className="text-ink/50 hover:text-ink/80">
+          <button onClick={cancelEdit} className="text-ink/70 hover:text-ink/90">
             {t(lang, "measure_cancel")}
           </button>
         </div>
@@ -198,31 +198,31 @@ export default function MeasurementsSection() {
 
       {/* History */}
       {loading ? null : log.length === 0 ? (
-        <div className="text-[11px] text-ink/40">{t(lang, "measure_empty")}</div>
+        <div className="text-[11px] text-ink/65">{t(lang, "measure_empty")}</div>
       ) : (
         <div className="divide-y divide-border">
           {[...log].reverse().map((e) => (
             <div key={e.date} className="flex items-start justify-between py-2.5 gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-medium">{e.date}</div>
-                <div className="text-[11px] text-ink/55 mt-0.5">
+                <div className="text-[11px] text-ink/75 mt-0.5">
                   {FIELDS.filter((f) => e[f.key] != null)
                     .map((f) => `${t(lang, f.labelKey as TKey)} ${e[f.key]}`)
                     .join(" · ")}
                 </div>
-                {e.note && <div className="text-[11px] text-ink/40 mt-0.5 truncate">{e.note}</div>}
+                {e.note && <div className="text-[11px] text-ink/65 mt-0.5 truncate">{e.note}</div>}
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => startEdit(e)}
-                  className="text-ink/35 hover:text-accent-brand p-1"
+                  className="text-ink/65 hover:text-accent-brand p-1"
                   aria-label={t(lang, "measure_edit")}
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => remove(e.date)}
-                  className="text-ink/30 hover:text-bad text-base leading-none px-1"
+                  className="text-ink/65 hover:text-bad text-base leading-none px-1"
                   aria-label="Delete"
                 >
                   ×

@@ -1334,7 +1334,7 @@ export default function LogMealPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
-            <p className="text-sm text-ink/60 mt-1">
+            <p className="text-sm text-ink/75 mt-1">
               {isToday
                 ? t(lang, "meal_subtitle_today")
                 : `${t(lang, "meal_subtitle_past")} ${prettyDate(date, lang)}.`}
@@ -1355,7 +1355,7 @@ export default function LogMealPage() {
                 mid-month max disabled the next-month arrow and trapped users;
                 the Today chip is the way back. */}
             <label className="relative flex-1 min-w-0 h-11 rounded-xl bg-bg-elev border border-border flex items-center justify-center gap-2 cursor-pointer state-layer">
-              <CalendarIcon className="h-4 w-4 text-ink/50" aria-hidden="true" />
+              <CalendarIcon className="h-4 w-4 text-ink/70" aria-hidden="true" />
               <span className="text-sm font-semibold truncate">{prettyDate(date, lang)}</span>
               <input
                 type="date"
@@ -1430,7 +1430,7 @@ export default function LogMealPage() {
             </span>
             <span className="min-w-0">
               <span className="block text-lg font-bold text-on-brand">{t(lang, "meal_take_photo")}</span>
-              <span className="block text-[13px] text-on-brand/75 mt-0.5">{t(lang, "meal_analyze_photo")}</span>
+              <span className="block text-[13px] text-on-brand/90 mt-0.5">{t(lang, "meal_analyze_photo")}</span>
             </span>
           </button>
           <div className="grid grid-cols-2 gap-2">
@@ -1445,13 +1445,13 @@ export default function LogMealPage() {
           </div>
           <Link
             href="/meals/snap"
-            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-ink/80 flex items-center justify-center gap-2 state-layer"
+            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-ink/90 flex items-center justify-center gap-2 state-layer"
           >
             <BoltIcon className="h-5 w-5 text-accent-primary" aria-hidden="true" />
             <span className="truncate">{t(lang, "meal_snap_button")}</span>
           </Link>
 
-          <div className="flex items-center gap-3 text-[12px] text-ink/45">
+          <div className="flex items-center gap-3 text-[12px] text-ink/70">
             <span className="h-px flex-1 bg-border" />
             {t(lang, "meal_or_describe_inline")}
             <span className="h-px flex-1 bg-border" />
@@ -1504,7 +1504,7 @@ export default function LogMealPage() {
               </span>
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold truncate">{t(lang, "meal_protein_product")}</h2>
-                <div className="text-[12px] text-ink/50">{t(lang, "meal_protein_scoop")}</div>
+                <div className="text-[12px] text-ink/70">{t(lang, "meal_protein_scoop")}</div>
               </div>
             </div>
             <TextButton onClick={() => { setProteinMode(false); setErr(null); }}>
@@ -1523,7 +1523,7 @@ export default function LogMealPage() {
           />
 
           <label className="block">
-            <span className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "meal_protein_with")}</span>
+            <span className="block text-xs font-medium text-ink/75 mb-1.5">{t(lang, "meal_protein_with")}</span>
             <select
               value={proteinBase}
               onChange={(e) => setProteinBase(e.target.value)}
@@ -1572,7 +1572,7 @@ export default function LogMealPage() {
                 // Same picker the first photo came from is the default; both
                 // sources stay one tap away for the "other side of the box" shot.
                 <div className="w-28 shrink-0 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-2 p-2">
-                  <span className="text-[11px] text-ink/55 text-center leading-tight">
+                  <span className="text-[11px] text-ink/75 text-center leading-tight">
                     {t(lang, "meal_add_second_photo")}
                   </span>
                   <div className="flex gap-1.5">
@@ -1609,7 +1609,7 @@ export default function LogMealPage() {
                 </ChipButton>
               </div>
               {!photoPreview2 && (
-                <p className="text-[12px] text-ink/45">{t(lang, "meal_second_photo_hint")}</p>
+                <p className="text-[12px] text-ink/70">{t(lang, "meal_second_photo_hint")}</p>
               )}
               <DescribeField
                 lang={lang}
@@ -1691,7 +1691,7 @@ export default function LogMealPage() {
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold">
               {t(lang, "meal_batch_title")}{" "}
-              <span className="text-ink/45 nums">({batch.length})</span>
+              <span className="text-ink/70 nums">({batch.length})</span>
             </h2>
             <TextButton onClick={() => setBatch(null)} disabled={batchBusy}>
               {t(lang, "meal_cancel")}
@@ -1699,7 +1699,7 @@ export default function LogMealPage() {
           </div>
           {groupByDay(sortBatch(batch)).map(([day, items]) => (
             <div key={day} className="space-y-2">
-              <div className="text-[11px] font-medium text-ink/45 pt-1">
+              <div className="text-[11px] font-medium text-ink/70 pt-1">
                 {prettyDate(day, lang)} · {items.length}
               </div>
               {items.map((it) => (
@@ -1794,7 +1794,7 @@ export default function LogMealPage() {
             </TextButton>
           </div>
           <label className="block">
-            <span className="block text-xs font-medium text-ink/60 mb-1.5">
+            <span className="block text-xs font-medium text-ink/75 mb-1.5">
               {t(lang, "meal_manual_desc_label")}
             </span>
             <input
@@ -1833,7 +1833,7 @@ export default function LogMealPage() {
               </h2>
               <div className="flex items-center gap-1.5 shrink-0">
                 {analysis._latencyMs ? (
-                  <span className="text-[11px] nums text-ink/40" title={analysis._model ?? ""}>
+                  <span className="text-[11px] nums text-ink/65" title={analysis._model ?? ""}>
                     {(analysis._latencyMs / 1000).toFixed(1)}s
                   </span>
                 ) : null}
@@ -1842,7 +1842,7 @@ export default function LogMealPage() {
             </div>
             {analysis.items?.length > 0 && (
               <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-ink/45 mb-1.5">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-ink/70 mb-1.5">
                   {t(lang, "meal_items_found")}
                 </div>
                 <ItemPortions
@@ -1859,7 +1859,7 @@ export default function LogMealPage() {
               </div>
             )}
             {analysis.notes && (
-              <p className="text-[12px] text-ink/50 leading-relaxed">{analysis.notes}</p>
+              <p className="text-[12px] text-ink/70 leading-relaxed">{analysis.notes}</p>
             )}
           </div>
 
@@ -1929,7 +1929,7 @@ export default function LogMealPage() {
           <div className="flex items-center justify-between gap-3">
             <SectionTitle>
               {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
-              {!existingLoading && <span className="text-ink/35 nums"> · {existing.length}</span>}
+              {!existingLoading && <span className="text-ink/65 nums"> · {existing.length}</span>}
             </SectionTitle>
             {!existingLoading && existing.length > 0 && (
               <ChipButton onClick={startReview} disabled={reviewing} size="sm">
@@ -1985,7 +1985,7 @@ export default function LogMealPage() {
         <section className="space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <SectionTitle>{t(lang, "meal_log_again")}</SectionTitle>
-            <span className="text-[12px] text-ink/40">{t(lang, "meal_recurring")}</span>
+            <span className="text-[12px] text-ink/65">{t(lang, "meal_recurring")}</span>
           </div>
           {frequentLoading ? (
             <div className="space-y-2">
@@ -2016,11 +2016,11 @@ export default function LogMealPage() {
                         </div>
                         <MacroLine lang={lang} macros={m} className="mt-0.5" />
                       </div>
-                      <span className="text-[11px] nums text-ink/60 bg-bg-elev border border-border rounded-full px-2 py-0.5 shrink-0">
+                      <span className="text-[11px] nums text-ink/75 bg-bg-elev border border-border rounded-full px-2 py-0.5 shrink-0">
                         ×{m.count}
                       </span>
                       <ChevronIcon
-                        className={`h-4 w-4 text-ink/40 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : "-rotate-90"}`}
+                        className={`h-4 w-4 text-ink/65 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : "-rotate-90"}`}
                         aria-hidden="true"
                       />
                     </button>
@@ -2054,7 +2054,7 @@ export default function LogMealPage() {
                             {quickBusy ? progress || t(lang, "meal_saving_short") : t(lang, "meal_log_with_change")}
                           </button>
                         </div>
-                        <p className="text-[11px] text-ink/45">
+                        <p className="text-[11px] text-ink/70">
                           {t(lang, "meal_log_with_change_hint")}
                         </p>
                       </div>
@@ -2183,7 +2183,7 @@ function ExistingMealRow({
       <div className="flex items-center gap-3 p-3">
         {isProteinPowder ? (
           <div className={thumbBox}>
-            <ShakerIcon className="h-6 w-6 text-ink/55" aria-hidden="true" />
+            <ShakerIcon className="h-6 w-6 text-ink/75" aria-hidden="true" />
           </div>
         ) : meal.photo_thumb ? (
           <button
@@ -2231,7 +2231,7 @@ function ExistingMealRow({
           </div>
           <MacroLine lang={lang} macros={meal} className="mt-0.5" />
         </div>
-        {time && <span className="text-[11px] nums text-ink/40 shrink-0">{time}</span>}
+        {time && <span className="text-[11px] nums text-ink/65 shrink-0">{time}</span>}
         <IconButton
           label={isEditing ? t(lang, "meal_cancel") : t(lang, "meal_edit")}
           onClick={onEditToggle}
@@ -2245,7 +2245,7 @@ function ExistingMealRow({
       {isEditing && (
         <div className="border-t border-border p-3 space-y-3">
           <label className="block">
-            <span className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "meal_description_label")}</span>
+            <span className="block text-xs font-medium text-ink/75 mb-1.5">{t(lang, "meal_description_label")}</span>
             <input
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -2261,7 +2261,7 @@ function ExistingMealRow({
           />
           {rowItems && rowItems.items.length > 0 && (
             <div>
-              <div className="text-xs font-medium text-ink/60">{t(lang, "meal_items_label")}</div>
+              <div className="text-xs font-medium text-ink/75">{t(lang, "meal_items_label")}</div>
               <ItemPortions
                 items={rowItems.items}
                 fractions={rowItems.fractions}
@@ -2275,7 +2275,7 @@ function ExistingMealRow({
           )}
           {noPhoto && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-ink/60">{t(lang, "meal_pick_icon")}</div>
+              <div className="text-xs font-medium text-ink/75">{t(lang, "meal_pick_icon")}</div>
               <div className="grid grid-cols-6 gap-1.5">
                 {MEAL_ICON_IDS.map((id) => {
                   const selected = icon === id;
@@ -2289,7 +2289,7 @@ function ExistingMealRow({
                       className={`aspect-square rounded-xl flex items-center justify-center border transition-colors ${
                         selected
                           ? "bg-accent-brand/20 border-accent-brand text-accent-primary"
-                          : "bg-bg-elev border-border text-ink/60 hover:text-ink"
+                          : "bg-bg-elev border-border text-ink/75 hover:text-ink"
                       }`}
                     >
                       <MealIcon id={id} className="h-5 w-5" />
@@ -2300,8 +2300,8 @@ function ExistingMealRow({
             </div>
           )}
           <label className="flex items-center gap-2 rounded-xl bg-bg-elev border border-border px-3 h-11">
-            <CalendarIcon className="h-4 w-4 text-ink/45" aria-hidden="true" />
-            <span className="text-[13px] text-ink/60 flex-1">{t(lang, "meal_move_to_date")}</span>
+            <CalendarIcon className="h-4 w-4 text-ink/70" aria-hidden="true" />
+            <span className="text-[13px] text-ink/75 flex-1">{t(lang, "meal_move_to_date")}</span>
             <input
               type="date"
               value={moveDate}
@@ -2586,14 +2586,14 @@ function BatchMealCard({
           )}
         </div>
         <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2 text-[11px] text-ink/45">
+          <div className="flex items-center gap-2 text-[11px] text-ink/70">
             <input
               type="date"
               value={item.date}
               onChange={(e) => onDate(e.target.value)}
               disabled={disabled || item.status === "saved"}
               aria-label={t(lang, "meal_date")}
-              className="bg-transparent border-0 p-0 text-[11px] text-ink/60 focus:outline-none"
+              className="bg-transparent border-0 p-0 text-[11px] text-ink/75 focus:outline-none"
             />
             {item.photos.length > 1 && item.status !== "saved" && item.status !== "analyzing" && (
               <button
@@ -2617,7 +2617,7 @@ function BatchMealCard({
             />
           )}
           {item.status === "analyzing" && (
-            <div className="text-[13px] text-ink/60 pt-2">
+            <div className="text-[13px] text-ink/75 pt-2">
               <AiThinkingPill label={stageLabel} />
             </div>
           )}
@@ -2649,7 +2649,7 @@ function BatchMealCard({
                 />
               )}
               {item.hint && (
-                <div className="text-[11px] text-ink/40 truncate">“{item.hint}”</div>
+                <div className="text-[11px] text-ink/65 truncate">“{item.hint}”</div>
               )}
             </>
           )}
@@ -2892,7 +2892,7 @@ function CoachReviewModal({
       {/* Header */}
       <div className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-border shrink-0">
         <div>
-          <div className="text-[11px] text-ink/45 uppercase tracking-wider">{t(lang, "review_ai_coach")}</div>
+          <div className="text-[11px] text-ink/70 uppercase tracking-wider">{t(lang, "review_ai_coach")}</div>
           <h2 className="text-xl font-bold mt-0.5">{t(lang, "review_title")}</h2>
         </div>
         <IconButton label={t(lang, "meal_close")} onClick={onClose} tone="tonal">
@@ -2905,7 +2905,7 @@ function CoachReviewModal({
         {reviewing ? (
           /* Loading skeletons */
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-ink/40 text-center animate-pulse">
+            <p className="text-sm text-ink/65 text-center animate-pulse">
               {t(lang, "review_loading")}
             </p>
             {[0, 1, 2].map((i) => (
@@ -2933,7 +2933,7 @@ function CoachReviewModal({
               <div className="text-[10px] font-semibold uppercase tracking-wider text-accent-brand mb-1.5">
                 {t(lang, "review_summary")}
               </div>
-              <p className="text-sm text-ink/80 leading-snug">{reviewData.summary}</p>
+              <p className="text-sm text-ink/90 leading-snug">{reviewData.summary}</p>
             </div>
 
             {/* Per-meal cards */}
@@ -2966,7 +2966,7 @@ function CoachReviewModal({
                             ? "text-ok/70"
                             : r.confidence === "medium"
                               ? "text-warn/70"
-                              : "text-ink/40"
+                              : "text-ink/65"
                         }`}
                       >
                         {t(lang, r.confidence === "high" ? "meal_conf_high" : r.confidence === "medium" ? "meal_conf_medium" : "meal_conf_low")}
@@ -2996,10 +2996,10 @@ function CoachReviewModal({
                           key={label}
                           className="rounded-lg bg-bg-elev border border-border px-1.5 py-2 text-center"
                         >
-                          <div className="text-[10px] text-ink/45 mb-1 truncate">{label}</div>
+                          <div className="text-[10px] text-ink/70 mb-1 truncate">{label}</div>
                           {significant ? (
                             <>
-                              <div className="text-[10px] text-ink/25 line-through leading-tight">
+                              <div className="text-[10px] text-ink/65 line-through leading-tight">
                                 {Math.round(cur)}
                               </div>
                               <div
@@ -3019,7 +3019,7 @@ function CoachReviewModal({
                               </div>
                             </>
                           ) : (
-                            <div className="text-[13px] font-semibold text-ink/70">
+                            <div className="text-[13px] font-semibold text-ink/80">
                               {Math.round(cur)}
                             </div>
                           )}
@@ -3029,7 +3029,7 @@ function CoachReviewModal({
                   </div>
 
                   {/* Explanation */}
-                  <p className="text-[13px] text-ink/65 leading-snug">{r.explanation}</p>
+                  <p className="text-[13px] text-ink/80 leading-snug">{r.explanation}</p>
 
                   {/* Actions */}
                   {!isAccepted && (
@@ -3039,7 +3039,7 @@ function CoachReviewModal({
                           setAskingId(askingId === r.meal_id ? null : r.meal_id);
                           setAskText("");
                         }}
-                        className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-ink/60"
+                        className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-ink/75"
                       >
                         {t(lang, "review_ask")}
                       </button>
@@ -3151,7 +3151,7 @@ function MacroTiles({
               compact ? "px-1.5 pt-1.5 pb-1" : "px-2 pt-2.5 pb-2"
             }`}
           >
-            <span className="flex items-center gap-1 text-[11px] text-ink/55 max-w-full">
+            <span className="flex items-center gap-1 text-[11px] text-ink/75 max-w-full">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
               <span className="truncate">{t(lang, f.label)}</span>
             </span>
@@ -3160,11 +3160,11 @@ function MacroTiles({
               value={value[f.key] || ""}
               placeholder="0"
               onChange={(e) => onChange(f.key, Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
-              className={`w-full bg-transparent text-center font-semibold nums focus:outline-none placeholder:text-ink/25 ${
+              className={`w-full bg-transparent text-center font-semibold nums focus:outline-none placeholder:text-ink/55 ${
                 compact ? "text-base py-0.5" : "text-xl py-1"
               }`}
             />
-            <span className="text-[10px] text-ink/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+            <span className="text-[10px] text-ink/65">{f.unit ? t(lang, f.unit) : "g"}</span>
           </label>
         ))}
       </div>
@@ -3178,12 +3178,12 @@ function MacroSummary({ lang, macros }: { lang: Lang; macros: Macros }) {
     <div className="grid grid-cols-4 gap-2">
       {MACRO_FIELDS.map((f) => (
         <div key={f.key} className="min-w-0 rounded-xl bg-bg-elev border border-border px-2 py-2.5 flex flex-col items-center">
-          <span className="flex items-center gap-1 text-[11px] text-ink/55 max-w-full">
+          <span className="flex items-center gap-1 text-[11px] text-ink/75 max-w-full">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
             <span className="truncate">{t(lang, f.label)}</span>
           </span>
           <span className="text-lg font-semibold nums mt-0.5">{macros[f.key]}</span>
-          <span className="text-[10px] text-ink/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+          <span className="text-[10px] text-ink/65">{f.unit ? t(lang, f.unit) : "g"}</span>
         </div>
       ))}
     </div>
@@ -3206,8 +3206,8 @@ function MacroLine({
     { key: "macro_c_short", v: macros.carbs_g, color: "text-accent-carbs" },
   ];
   return (
-    <div className={`text-[12px] text-ink/55 nums flex flex-wrap items-center gap-x-2 ${className}`}>
-      <span className="text-ink/80 font-medium">
+    <div className={`text-[12px] text-ink/75 nums flex flex-wrap items-center gap-x-2 ${className}`}>
+      <span className="text-ink/90 font-medium">
         {Math.round(macros.calories ?? 0)} {t(lang, "macro_kcal")}
       </span>
       {parts.map((p) => (
@@ -3238,10 +3238,10 @@ function DayMeter({
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2 text-[12px]">
-        <span className="text-ink/55 truncate">{label}</span>
-        <span className={`nums ${over ? "text-warn" : "text-ink/80"}`}>
+        <span className="text-ink/75 truncate">{label}</span>
+        <span className={`nums ${over ? "text-warn" : "text-ink/90"}`}>
           <span className="font-semibold">{Math.round(value).toLocaleString()}</span>
-          <span className="text-ink/40"> / {Math.round(target).toLocaleString()} {unit}</span>
+          <span className="text-ink/65"> / {Math.round(target).toLocaleString()} {unit}</span>
         </span>
       </div>
       <div
@@ -3264,7 +3264,7 @@ function ConfidenceChip({ lang, confidence }: { lang: Lang; confidence: "low" | 
       ? "text-ok bg-ok/10 border-ok/25"
       : confidence === "medium"
         ? "text-warn bg-warn/10 border-warn/25"
-        : "text-ink/60 bg-bg-elev border-border";
+        : "text-ink/75 bg-bg-elev border-border";
   const key: TKey =
     confidence === "high" ? "meal_conf_high" : confidence === "medium" ? "meal_conf_medium" : "meal_conf_low";
   return (
@@ -3305,7 +3305,7 @@ function ClarifyCard({
           {t(lang, "meal_clarify_skip")}
         </TextButton>
       </div>
-      <p className="text-[14px] text-ink/85 leading-snug" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
+      <p className="text-[14px] text-ink/90 leading-snug" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
         {question}
       </p>
       <div className="flex gap-2">
@@ -3351,7 +3351,7 @@ function DescribeField({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-ink/60 mb-1.5">{label}</span>
+      <span className="block text-xs font-medium text-ink/75 mb-1.5">{label}</span>
       <textarea
         value={value}
         dir={value ? (/[֐-׿]/.test(value) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
@@ -3416,7 +3416,7 @@ function ChipButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`shrink-0 rounded-full border border-border bg-bg-elev text-ink/85 inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-50 state-layer ${
+      className={`shrink-0 rounded-full border border-border bg-bg-elev text-ink/90 inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-50 state-layer ${
         size === "sm" ? "h-9 px-3 text-[12px]" : "h-11 px-4 text-[13px]"
       }`}
     >
@@ -3475,7 +3475,7 @@ function IconButton({
         size === "lg" ? "w-12 h-12" : "w-11 h-11",
         tone === "tonal"
           ? "bg-accent-sec-container text-accent-on-sec-container"
-          : "text-ink/70 hover:text-ink",
+          : "text-ink/80 hover:text-ink",
       )}
     >
       {children}
@@ -3495,7 +3495,7 @@ function StickyActions({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink/55">{children}</h2>
+    <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink/75">{children}</h2>
   );
 }
 

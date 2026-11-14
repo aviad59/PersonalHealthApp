@@ -119,7 +119,7 @@ export default function OnboardingPage() {
     <div className="px-5 pt-6 pb-40">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Let&apos;s get set up</h1>
-        <span className="text-xs text-ink/50">
+        <span className="text-xs text-ink/70">
           Step {step + 1}/{steps.length}
         </span>
       </div>
@@ -168,7 +168,7 @@ export default function OnboardingPage() {
       {step === 1 && (
         <Card>
           <H>Tape measurements</H>
-          <p className="text-sm text-ink/60 mb-4">
+          <p className="text-sm text-ink/75 mb-4">
             We use the U.S. Navy formula to estimate body fat. Measure at the narrowest point for each.
           </p>
           <Field label="Neck (cm)">
@@ -188,7 +188,7 @@ export default function OnboardingPage() {
       {step === 2 && (
         <Card>
           <H>Activity level</H>
-          <p className="text-xs text-ink/50 -mt-2">{ACTIVITY_HINT}</p>
+          <p className="text-xs text-ink/70 -mt-2">{ACTIVITY_HINT}</p>
           <div className="space-y-2">
             {(Object.keys(ACTIVITY_LABELS) as (keyof typeof ACTIVITY_LABELS)[]).map((key) => (
               <button
@@ -227,12 +227,12 @@ export default function OnboardingPage() {
                 }`}
               >
                 <div className="text-sm font-semibold">{label}</div>
-                <div className="text-[11px] text-ink/50">{sub}</div>
+                <div className="text-[11px] text-ink/70">{sub}</div>
               </button>
             ))}
           </div>
           <div className="pt-3">
-            <label className="block text-xs font-medium text-ink/60 mb-1.5">
+            <label className="block text-xs font-medium text-ink/75 mb-1.5">
               Workouts per week
             </label>
             <div className="grid grid-cols-7 gap-1.5">
@@ -243,14 +243,14 @@ export default function OnboardingPage() {
                   className={`rounded-lg py-2 text-sm font-medium ${
                     form.weekly_workout_target === n
                       ? "bg-accent-brand text-on-brand"
-                      : "bg-bg-elev border border-border text-ink/70"
+                      : "bg-bg-elev border border-border text-ink/80"
                   }`}
                 >
                   {n}
                 </button>
               ))}
             </div>
-            <div className="text-[11px] text-ink/40 mt-1.5">
+            <div className="text-[11px] text-ink/65 mt-1.5">
               Be honest — recovery and weekly insights are tuned to this number.
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function OnboardingPage() {
       {step === 4 && (
         <Card>
           <H>Review</H>
-          <p className="text-sm text-ink/60 mb-3">We&apos;ll calculate personalized goals based on your inputs.</p>
+          <p className="text-sm text-ink/75 mb-3">We&apos;ll calculate personalized goals based on your inputs.</p>
           <button
             onClick={loadPreview}
             className="w-full rounded-full bg-accent-brand/15 border border-accent-brand/40 text-accent-brand py-3 text-sm font-semibold mb-4"
@@ -283,7 +283,7 @@ export default function OnboardingPage() {
               <Row k="Carbs" v={`${preview.goal_carbs_g} g`} emphasize />
               <div className="h-px bg-border my-2" />
               <Row k="Weekly workouts" v={`${preview.weekly_workout_target} sessions`} />
-              <div className="text-xs text-ink/50 mt-1">{preview.weekly_volume_note}</div>
+              <div className="text-xs text-ink/70 mt-1">{preview.weekly_volume_note}</div>
             </div>
           )}
         </Card>
@@ -331,7 +331,7 @@ function H({ children }: { children: React.ReactNode }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-ink/60 mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-ink/75 mb-1.5">{label}</label>
       {children}
     </div>
   );
@@ -370,7 +370,7 @@ function Toggle({
       className={`rounded-xl py-3 text-sm font-medium transition-colors ${
         active
           ? "bg-accent-brand text-on-brand"
-          : "bg-bg-elev border border-border text-ink/70"
+          : "bg-bg-elev border border-border text-ink/80"
       }`}
     >
       {children}
@@ -380,7 +380,7 @@ function Toggle({
 function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean }) {
   return (
     <div className="flex justify-between items-center">
-      <span className="text-sm text-ink/60">{k}</span>
+      <span className="text-sm text-ink/75">{k}</span>
       <span className={emphasize ? "text-base font-semibold" : "text-sm"}>{v}</span>
     </div>
   );

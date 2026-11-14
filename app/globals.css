@@ -9,6 +9,10 @@
  * The system setting picks one; Profile can pin either (sets
  * <html data-theme>, see lib/theme.ts). Colors are "R G B" channel triples
  * so Tailwind can apply opacity (tailwind.config.ts wraps them in rgb()).
+ *
+ * Contrast: every light-theme text color here, and text-ink at /65 and up
+ * (the lowest tier the app uses), clears 4.5:1 on cards and inputs. Keep it
+ * that way when adjusting values — light surfaces leave little headroom.
  */
 :root {
   --c-bg: 246 247 244;
@@ -16,28 +20,28 @@
   --c-elev: 238 241 236;
   --c-highest: 226 232 224;
   --c-ink: 20 32 27;
-  --c-muted: 93 107 100;
+  --c-muted: 74 86 80;
 
-  --c-brand: 13 127 87;
-  --c-grad-a: 24 156 108;
+  --c-brand: 11 112 77;
+  --c-grad-a: 14 120 82;
   --c-grad-b: 10 92 64;
   --c-on-brand: 255 255 255;
-  --c-primary: 13 127 87;
+  --c-primary: 11 112 77;
   --c-sec: 222 242 232;
   --c-on-sec: 11 92 64;
 
-  --c-cal: 15 138 95;
-  --c-protein: 229 72 77;
-  --c-fat: 62 123 250;
-  --c-carbs: 214 136 20;
+  --c-cal: 12 118 82;
+  --c-protein: 201 42 50;
+  --c-fat: 37 99 235;
+  --c-carbs: 156 92 0;
 
-  --c-ok: 22 128 74;
-  --c-warn: 180 100 0;
+  --c-ok: 18 116 66;
+  --c-warn: 163 90 0;
   --c-bad: 200 40 45;
 
   --shadow-card: 0 1px 2px rgb(20 32 27 / 0.05), 0 4px 14px -6px rgb(20 32 27 / 0.08);
   --shadow-elev: 0 6px 20px -8px rgb(20 32 27 / 0.18);
-  --glow-brand: 0 10px 24px -14px rgb(13 127 87 / 0.55);
+  --glow-brand: 0 10px 24px -14px rgb(11 112 77 / 0.55);
   --body-glow: rgb(52 195 143 / 0.10);
   --font-app: var(--font-heebo);
   color-scheme: light;

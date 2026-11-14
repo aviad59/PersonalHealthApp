@@ -292,7 +292,7 @@ export default function ProfilePage() {
     return (
       <div className="px-5 pt-10 md:max-w-3xl md:mx-auto">
         <h1 className="text-2xl font-bold mb-2">{t(lang, "profile_title")}</h1>
-        <p className="text-sm text-ink/60 mb-6">{t(lang, "profile_no_profile")}</p>
+        <p className="text-sm text-ink/75 mb-6">{t(lang, "profile_no_profile")}</p>
         <Link href="/onboarding" className="inline-block rounded-full bg-accent-brand px-4 py-2 text-sm font-semibold text-on-brand">
           {t(lang, "profile_run_onboarding")}
         </Link>
@@ -319,7 +319,7 @@ export default function ProfilePage() {
             key={tb}
             onClick={() => setTab(tb)}
             className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
-              tab === tb ? "bg-accent-brand text-on-brand" : "text-ink/60"
+              tab === tb ? "bg-accent-brand text-on-brand" : "text-ink/75"
             }`}
           >
             {t(lang, tb === "settings" ? "profile_tab_settings" : "profile_tab_logging")}
@@ -344,13 +344,13 @@ export default function ProfilePage() {
         <>
       {/* Language toggle */}
       <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "profile_language")}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{t(lang, "profile_language")}</h2>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setLanguage("en")}
             disabled={langSaving}
             className={`rounded-xl py-3 text-sm font-medium disabled:opacity-40 ${
-              lang === "en" ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/70"
+              lang === "en" ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/80"
             }`}
           >
             English
@@ -359,13 +359,13 @@ export default function ProfilePage() {
             onClick={() => setLanguage("he")}
             disabled={langSaving}
             className={`rounded-xl py-3 text-sm font-medium disabled:opacity-40 ${
-              lang === "he" ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/70"
+              lang === "he" ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/80"
             }`}
           >
             עברית
           </button>
         </div>
-        {langSaving && <p className="text-xs text-ink/40">{t(lang, "profile_lang_saving")}</p>}
+        {langSaving && <p className="text-xs text-ink/65">{t(lang, "profile_lang_saving")}</p>}
       </section>
 
       {/* Free-text notes fed to the coach + insights */}
@@ -376,7 +376,7 @@ export default function ProfilePage() {
 
       {/* Theme picker: follow the system, or pin light (Fresh) / dark (Sunset) */}
       <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "profile_theme")}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{t(lang, "profile_theme")}</h2>
         <div className="grid grid-cols-3 gap-2">
           {(["system", "light", "dark"] as const).map((pref) => (
             <button
@@ -384,7 +384,7 @@ export default function ProfilePage() {
               onClick={() => changeTheme(pref)}
               aria-pressed={theme === pref}
               className={`rounded-xl py-3 text-sm font-medium transition-colors ${
-                theme === pref ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/70"
+                theme === pref ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/80"
               }`}
             >
               {t(lang, `profile_theme_${pref}` as TKey)}
@@ -395,14 +395,14 @@ export default function ProfilePage() {
 
       {/* Text size picker */}
       <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "profile_text_size")}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{t(lang, "profile_text_size")}</h2>
         <div className="grid grid-cols-3 gap-2">
           {(["sm", "md", "lg"] as const).map((size) => (
             <button
               key={size}
               onClick={() => changeTextSize(size)}
               className={`rounded-xl py-3 font-medium transition-colors ${
-                textSize === size ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/70"
+                textSize === size ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/80"
               } ${size === "sm" ? "text-sm" : size === "lg" ? "text-lg" : "text-base"}`}
             >
               {t(lang, `profile_text_${size}` as TKey)}
@@ -412,10 +412,10 @@ export default function ProfilePage() {
       </section>
 
       <section className="card p-5 space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "profile_body_metrics")}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{t(lang, "profile_body_metrics")}</h2>
         <NumField label="Age" value={profile.age} onChange={(v) => update("age", v)} />
         <div>
-          <label className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "profile_sex")}</label>
+          <label className="block text-xs font-medium text-ink/75 mb-1.5">{t(lang, "profile_sex")}</label>
           <div className="grid grid-cols-2 gap-2">
             <SexBtn active={profile.sex === "male"} onClick={() => update("sex", "male")}>{t(lang, "profile_male")}</SexBtn>
             <SexBtn active={profile.sex === "female"} onClick={() => update("sex", "female")}>{t(lang, "profile_female")}</SexBtn>
@@ -429,7 +429,7 @@ export default function ProfilePage() {
           <NumField label={t(lang, "profile_hips")} value={profile.hips_cm ?? ""} onChange={(v) => update("hips_cm", v)} />
         )}
         <div>
-          <label className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "profile_activity")}</label>
+          <label className="block text-xs font-medium text-ink/75 mb-1.5">{t(lang, "profile_activity")}</label>
           <select
             value={profile.activity_level}
             onChange={(e) => update("activity_level", e.target.value as ActivityKey)}
@@ -441,7 +441,7 @@ export default function ProfilePage() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "profile_goal_mode")}</label>
+          <label className="block text-xs font-medium text-ink/75 mb-1.5">{t(lang, "profile_goal_mode")}</label>
           <select
             value={profile.goal_mode ?? "recomp"}
             onChange={(e) => update("goal_mode", e.target.value)}
@@ -454,7 +454,7 @@ export default function ProfilePage() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-ink/60 mb-1.5">
+          <label className="block text-xs font-medium text-ink/75 mb-1.5">
             {t(lang, "profile_workouts_per_week")}
           </label>
           <div className="grid grid-cols-7 gap-1.5">
@@ -465,19 +465,19 @@ export default function ProfilePage() {
                 className={`rounded-lg py-2 text-sm font-medium ${
                   Number(profile.weekly_workout_target) === n
                     ? "bg-accent-brand text-on-brand"
-                    : "bg-bg-elev border border-border text-ink/70"
+                    : "bg-bg-elev border border-border text-ink/80"
                 }`}
               >
                 {n}
               </button>
             ))}
           </div>
-          <div className="text-[11px] text-ink/40 mt-1.5">
+          <div className="text-[11px] text-ink/65 mt-1.5">
             {t(lang, "profile_workouts_note")}
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-ink/60 mb-1.5">
+          <label className="block text-xs font-medium text-ink/75 mb-1.5">
             {t(lang, "profile_training_focus")}
           </label>
           <div className="grid grid-cols-3 gap-1.5">
@@ -488,21 +488,21 @@ export default function ProfilePage() {
                 className={`rounded-lg py-2 text-xs font-medium ${
                   (profile.training_focus ?? "upper") === f
                     ? "bg-accent-brand text-on-brand"
-                    : "bg-bg-elev border border-border text-ink/70"
+                    : "bg-bg-elev border border-border text-ink/80"
                 }`}
               >
                 {t(lang, `focus_${f}` as any)}
               </button>
             ))}
           </div>
-          <div className="text-[11px] text-ink/40 mt-1.5">
+          <div className="text-[11px] text-ink/65 mt-1.5">
             {t(lang, "profile_training_focus_note")}
           </div>
         </div>
       </section>
 
       <section className="card p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "profile_current_goals")}</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{t(lang, "profile_current_goals")}</h2>
         <Row k={t(lang, "profile_body_fat")} v={profile.body_fat_pct ? `${profile.body_fat_pct}%` : "—"} />
         <Row k={t(lang, "profile_lean_mass")} v={profile.lean_mass_kg ? `${profile.lean_mass_kg} kg` : "—"} />
         <Row k="BMR" v={profile.bmr ? `${profile.bmr} kcal` : "—"} />
@@ -541,7 +541,7 @@ export default function ProfilePage() {
       {savedMsg && (
         <div className="rounded-xl border border-accent-cal/40 bg-accent-cal/10 px-4 py-3 flex items-center gap-2 text-sm">
           <span className="text-accent-cal">✓</span>
-          <span className="text-ink/80">
+          <span className="text-ink/90">
             {t(lang, "profile_saved")} <span className="nums font-medium">{savedMsg}</span>
           </span>
         </div>
@@ -572,13 +572,13 @@ export default function ProfilePage() {
           aria-expanded={extraOpen}
         >
           <div className="text-start">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
               {t(lang, "profile_extra_title")}
             </h2>
-            <p className="text-xs text-ink/45 mt-1">{t(lang, "profile_extra_desc")}</p>
+            <p className="text-xs text-ink/70 mt-1">{t(lang, "profile_extra_desc")}</p>
           </div>
           <ChevronIcon
-            className={`h-5 w-5 text-ink/40 shrink-0 transition-transform ${extraOpen ? "rotate-180" : ""}`}
+            className={`h-5 w-5 text-ink/65 shrink-0 transition-transform ${extraOpen ? "rotate-180" : ""}`}
           />
         </button>
 
@@ -586,11 +586,11 @@ export default function ProfilePage() {
         <div className="space-y-5 pt-1">
           {/* Export */}
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/40">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/65">
               {t(lang, "profile_export_title")}
             </h3>
             <div>
-              <div className="text-[11px] text-ink/50 mb-1.5">{t(lang, "profile_export_meals")}</div>
+              <div className="text-[11px] text-ink/70 mb-1.5">{t(lang, "profile_export_meals")}</div>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { label: "7d", days: 7 },
@@ -602,7 +602,7 @@ export default function ProfilePage() {
                     key={r.label}
                     href={`/api/export?type=meals${r.days ? `&days=${r.days}` : ""}`}
                     download
-                    className="rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-ink/80 hover:text-ink hover:border-accent-brand/40 transition-colors"
+                    className="rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-ink/90 hover:text-ink hover:border-accent-brand/40 transition-colors"
                   >
                     {r.label}
                   </a>
@@ -612,7 +612,7 @@ export default function ProfilePage() {
             <a
               href="/api/export?type=weight"
               download
-              className="block rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-ink/80 hover:text-ink hover:border-accent-brand/40 transition-colors"
+              className="block rounded-xl bg-bg-elev border border-border py-2.5 text-center text-[13px] font-medium text-ink/90 hover:text-ink hover:border-accent-brand/40 transition-colors"
             >
               {t(lang, "profile_export_weight")}
             </a>
@@ -623,8 +623,8 @@ export default function ProfilePage() {
           {/* Import / backfill */}
           <div className="space-y-4">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/40">Backfill nutrition from CSV</h3>
-          <p className="text-xs text-ink/50 mt-1.5 leading-relaxed">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/65">Backfill nutrition from CSV</h3>
+          <p className="text-xs text-ink/70 mt-1.5 leading-relaxed">
             Upload a CSV with columns <span className="font-mono">date, calories, protein, carbs, fat, description</span>.
             Daily summary rows (סה״כ / סיכום) are skipped. Missing carbs are derived from the kcal balance when possible;
             anything still missing is filled in by Claude from the description if AI fill is enabled.
@@ -636,10 +636,10 @@ export default function ProfilePage() {
           ref={fileRef}
           type="file"
           accept=".csv,text/csv"
-          className="block w-full text-xs text-ink/70 file:mr-3 file:rounded-lg file:border-0 file:bg-bg-elev file:px-3 file:py-2 file:text-xs file:text-ink/80 file:font-medium"
+          className="block w-full text-xs text-ink/80 file:mr-3 file:rounded-lg file:border-0 file:bg-bg-elev file:px-3 file:py-2 file:text-xs file:text-ink/90 file:font-medium"
         />
 
-        <label className="flex items-center gap-2 text-xs text-ink/70">
+        <label className="flex items-center gap-2 text-xs text-ink/80">
           <input
             type="checkbox"
             checked={useAi}
@@ -694,9 +694,9 @@ export default function ProfilePage() {
               <div className="text-[11px] font-semibold uppercase tracking-wide text-warn">
                 {conflicts.length} date{conflicts.length === 1 ? "" : "s"} already have meals
               </div>
-              <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+              <p className="text-[11px] text-ink/75 mt-1 leading-relaxed">
                 Decide what to do per date, or pick one option for all of them.
-                <span className="block mt-1 text-ink/40">
+                <span className="block mt-1 text-ink/65">
                   <b>Keep</b>: leave the existing meals alone, skip the CSV rows for that day.
                   <b> Replace</b>: delete the existing meals and insert the CSV rows.
                   <b> Merge</b>: add the CSV rows on top of the existing meals.
@@ -705,7 +705,7 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <div className="text-[11px] text-ink/50 mb-1.5">Apply to all conflicts:</div>
+              <div className="text-[11px] text-ink/70 mb-1.5">Apply to all conflicts:</div>
               <div className="grid grid-cols-3 gap-2">
                 <PolicyBtn active={applyToAll === "keep"} onClick={() => setAll("keep")}>
                   Keep existing
@@ -723,7 +723,7 @@ export default function ProfilePage() {
                     setApplyToAll(null);
                     setResolutions({});
                   }}
-                  className="mt-2 text-[10px] text-ink/40 underline"
+                  className="mt-2 text-[10px] text-ink/65 underline"
                 >
                   Clear &amp; decide per date instead
                 </button>
@@ -738,21 +738,21 @@ export default function ProfilePage() {
                     className="rounded-lg bg-bg-card border border-border p-3 space-y-2"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-ink/80">{c.date}</span>
-                      <span className="text-[10px] text-ink/40">
+                      <span className="text-xs font-semibold text-ink/90">{c.date}</span>
+                      <span className="text-[10px] text-ink/65">
                         {c.existingCount} existing → {c.incomingCount} incoming
                       </span>
                     </div>
-                    <div className="text-[10px] text-ink/50 grid grid-cols-2 gap-2">
+                    <div className="text-[10px] text-ink/70 grid grid-cols-2 gap-2">
                       <div className="rounded-md bg-bg-elev p-1.5">
-                        <div className="text-ink/40">On file</div>
-                        <div className="text-ink/80">
+                        <div className="text-ink/65">On file</div>
+                        <div className="text-ink/90">
                           {c.existingTotal.calories} kcal · {c.existingTotal.protein_g}P
                         </div>
                       </div>
                       <div className="rounded-md bg-bg-elev p-1.5">
-                        <div className="text-ink/40">Incoming</div>
-                        <div className="text-ink/80">
+                        <div className="text-ink/65">Incoming</div>
+                        <div className="text-ink/90">
                           {c.incomingTotal.calories} kcal · {c.incomingTotal.protein_g}P
                         </div>
                       </div>
@@ -863,7 +863,7 @@ function NumField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-ink/60 mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-ink/75 mb-1.5">{label}</label>
       <input
         inputMode="decimal"
         value={String(value ?? "")}
@@ -886,7 +886,7 @@ function SexBtn({
     <button
       onClick={onClick}
       className={`rounded-xl py-3 text-sm font-medium ${
-        active ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/70"
+        active ? "bg-accent-brand text-on-brand" : "bg-bg-elev border border-border text-ink/80"
       }`}
     >
       {children}
@@ -910,7 +910,7 @@ function PolicyBtn({
       className={`rounded-lg ${small ? "py-1.5 text-[11px]" : "py-2 text-xs"} font-medium ${
         active
           ? "bg-accent-brand text-on-brand"
-          : "bg-bg-elev border border-border text-ink/70"
+          : "bg-bg-elev border border-border text-ink/80"
       }`}
     >
       {children}
@@ -920,7 +920,7 @@ function PolicyBtn({
 function Row({ k, v, emphasize }: { k: string; v: string; emphasize?: boolean }) {
   return (
     <div className="flex justify-between items-center">
-      <span className="text-sm text-ink/60">{k}</span>
+      <span className="text-sm text-ink/75">{k}</span>
       <span className={emphasize ? "text-base font-semibold" : "text-sm"}>{v}</span>
     </div>
   );
@@ -948,8 +948,8 @@ function CalcBreakdown({
   const [open, setOpen] = useState(false);
   const line = (label: string, value: string) => (
     <div className="flex justify-between text-[12px]">
-      <span className="text-ink/50">{label}</span>
-      <span className="text-ink/80 nums">{value}</span>
+      <span className="text-ink/70">{label}</span>
+      <span className="text-ink/90 nums">{value}</span>
     </div>
   );
   const deltaStr = `${b.goal_delta_kcal > 0 ? "+" : ""}${b.goal_delta_kcal}`;
@@ -1037,7 +1037,7 @@ function CurrentUserCard() {
           {name ? name[0].toUpperCase() : "?"}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-ink/40">
+          <div className="text-[10px] uppercase tracking-wider text-ink/65">
             {t(lang, "profile_signed_in")}
           </div>
           <div className="text-sm font-semibold truncate">{name || "—"}</div>
@@ -1050,7 +1050,7 @@ function CurrentUserCard() {
             await clearCachedAppData();
             signOut({ callbackUrl: "/signin" });
           }}
-          className="text-xs font-medium text-ink/50 hover:text-ink/80 transition-colors"
+          className="text-xs font-medium text-ink/70 hover:text-ink/90 transition-colors"
         >
           {t(lang, "profile_sign_out")}
         </button>
@@ -1097,10 +1097,10 @@ function CoachNotes({ lang, initial }: { lang: ReturnType<typeof useLang>; initi
   return (
     <section className="card p-5 space-y-3">
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
           {t(lang, "profile_notes_title")}
         </h2>
-        <p className="text-xs text-ink/55 mt-1.5 leading-snug">{t(lang, "profile_notes_desc")}</p>
+        <p className="text-xs text-ink/75 mt-1.5 leading-snug">{t(lang, "profile_notes_desc")}</p>
       </div>
       <textarea
         value={value}
@@ -1267,10 +1267,10 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
   if (!supported) {
     return (
       <section className="card p-5 space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
           {t(lang, "profile_push_title")}
         </h2>
-        <p className="text-xs text-ink/50">{t(lang, "profile_push_not_supported")}</p>
+        <p className="text-xs text-ink/70">{t(lang, "profile_push_not_supported")}</p>
       </section>
     );
   }
@@ -1279,10 +1279,10 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
     <section className="card p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
             {t(lang, "profile_push_title")}
           </h2>
-          <p className="text-xs text-ink/55 mt-1.5 leading-snug">
+          <p className="text-xs text-ink/75 mt-1.5 leading-snug">
             {t(lang, "profile_push_desc")}
           </p>
         </div>
@@ -1292,7 +1292,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
           disabled={busy || permission === "denied"}
           className={`shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
             subscribed
-              ? "bg-bg-elev border border-border text-ink/70 hover:text-ink"
+              ? "bg-bg-elev border border-border text-ink/80 hover:text-ink"
               : "bg-accent-brand text-on-brand"
           }`}
         >
@@ -1312,17 +1312,17 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
             subscribed ? "bg-accent-cal" : "bg-ink/25"
           }`}
         />
-        <span className="text-ink/60">
+        <span className="text-ink/75">
           {subscribed ? t(lang, "profile_push_this_on") : t(lang, "profile_push_this_off")}
           {deviceCount !== null && (
-            <span className="text-ink/40">
+            <span className="text-ink/65">
               {" · "}
               {deviceCount} {t(lang, "profile_push_devices")}
             </span>
           )}
         </span>
       </div>
-      <p className="text-[11px] text-ink/40 leading-snug">{t(lang, "profile_push_per_device")}</p>
+      <p className="text-[11px] text-ink/65 leading-snug">{t(lang, "profile_push_per_device")}</p>
       {permission === "denied" && (
         <p className="text-[11px] text-warn">{t(lang, "profile_push_denied")}</p>
       )}
@@ -1333,7 +1333,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
             type="button"
             onClick={sendTest}
             disabled={busy}
-            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-ink/70 hover:text-ink disabled:opacity-50"
+            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-ink/80 hover:text-ink disabled:opacity-50"
           >
             {t(lang, "profile_push_test")}
           </button>
@@ -1341,7 +1341,7 @@ function PushToggle({ lang }: { lang: ReturnType<typeof useLang> }) {
             type="button"
             onClick={fireMorning}
             disabled={busy}
-            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-ink/70 hover:text-ink disabled:opacity-50"
+            className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-1.5 text-[11px] font-medium text-ink/80 hover:text-ink disabled:opacity-50"
           >
             {t(lang, "profile_push_morning_now")}
           </button>

@@ -60,14 +60,14 @@ export default function ItemPortions({
   }
 
   return (
-    <ul className={`${text} text-ink/70 space-y-2 mt-2`}>
+    <ul className={`${text} text-ink/80 space-y-2 mt-2`}>
       {items.map((it, i) => {
         const f = fractions[i] ?? 1;
         return (
           <li key={i} className={f === 0 ? "opacity-50" : ""}>
             <div className="flex justify-between gap-2">
               <span className="min-w-0" dir={/[֐-׿]/.test(it.name) ? "rtl" : "ltr"}>
-                {it.name} <span className="text-ink/40">({it.portion})</span>
+                {it.name} <span className="text-ink/65">({it.portion})</span>
               </span>
               <span className="shrink-0 flex items-center gap-2">
                 <span className="nums">{Math.round(it.calories * f)} {t(lang, "macro_kcal")}</span>
@@ -95,7 +95,7 @@ export default function ItemPortions({
                   className={`h-8 min-w-[2.5rem] rounded-full border px-2.5 text-[12px] disabled:opacity-40 transition-colors ${
                     f === step
                       ? "border-accent-brand bg-accent-brand/20 text-ink font-semibold"
-                      : "border-border bg-bg-elev text-ink/55"
+                      : "border-border bg-bg-elev text-ink/75"
                   }`}
                 >
                   {step === 1 ? t(lang, "meal_portion_all") : STEP_LABEL[step]}

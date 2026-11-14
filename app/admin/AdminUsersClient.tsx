@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<AdminUser["status"], string> = {
 const STATUS_CLASS: Record<AdminUser["status"], string> = {
   pending: "bg-warn/15 text-warn",
   active: "bg-ok/15 text-ok",
-  disabled: "bg-ink/10 text-ink/50",
+  disabled: "bg-ink/10 text-ink/70",
 };
 
 export default function AdminUsersClient() {
@@ -74,7 +74,7 @@ export default function AdminUsersClient() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
-          <p className="text-sm text-ink/60 mt-1">Approve new sign-ins and manage access.</p>
+          <p className="text-sm text-ink/75 mt-1">Approve new sign-ins and manage access.</p>
         </div>
         <div className="flex items-center gap-4">
           <Link href="/admin/analyzer" className="text-[13px] text-accent-brand">
@@ -93,7 +93,7 @@ export default function AdminUsersClient() {
       )}
 
       {users === null && !err && (
-        <div className="text-sm text-ink/40">Loading…</div>
+        <div className="text-sm text-ink/65">Loading…</div>
       )}
 
       {pending.length > 0 && (
@@ -109,7 +109,7 @@ export default function AdminUsersClient() {
 
       {others.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/70">
             Members ({others.length})
           </h2>
           {others.map((u) => (
@@ -165,7 +165,7 @@ function UserCard({
               </span>
             )}
           </div>
-          <div className="text-xs text-ink/50 truncate mt-0.5">{user.email || "—"}</div>
+          <div className="text-xs text-ink/70 truncate mt-0.5">{user.email || "—"}</div>
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           {user.status === "pending" ? (
@@ -180,7 +180,7 @@ function UserCard({
             <button
               onClick={() => onPatch(user.id, { status: "disabled" })}
               disabled={busy}
-              className="rounded-full border border-border px-3 py-1.5 text-xs text-ink/60 disabled:opacity-40"
+              className="rounded-full border border-border px-3 py-1.5 text-xs text-ink/75 disabled:opacity-40"
             >
               Disable
             </button>
@@ -188,14 +188,14 @@ function UserCard({
             <button
               onClick={() => onPatch(user.id, { status: "active" })}
               disabled={busy}
-              className="rounded-full border border-border px-3 py-1.5 text-xs text-ink/70 disabled:opacity-40"
+              className="rounded-full border border-border px-3 py-1.5 text-xs text-ink/80 disabled:opacity-40"
             >
               Re-enable
             </button>
           )}
           <button
             onClick={() => setOpen((v) => !v)}
-            className="text-[11px] text-ink/45"
+            className="text-[11px] text-ink/70"
           >
             {open ? "Hide settings" : "Settings"}
           </button>
@@ -293,7 +293,7 @@ function Toggle({
       className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-40 ${
         on
           ? "border-accent-brand/50 bg-accent-brand/15 text-accent-brand"
-          : "border-border text-ink/50"
+          : "border-border text-ink/70"
       }`}
     >
       {label}: {on ? "On" : "Off"}
@@ -304,7 +304,7 @@ function Toggle({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[11px] text-ink/50 mb-1">{label}</span>
+      <span className="block text-[11px] text-ink/70 mb-1">{label}</span>
       {children}
     </label>
   );

@@ -20,7 +20,7 @@ function SignIn() {
     <div className="px-5 pt-20 pb-10 space-y-8">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">Health</h1>
-        <p className="text-sm text-ink/60">Sign in with your Google account to continue.</p>
+        <p className="text-sm text-ink/75">Sign in with your Google account to continue.</p>
       </div>
 
       {denied && (

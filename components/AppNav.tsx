@@ -92,7 +92,7 @@ export default function AppNav() {
               className={`state-layer flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? "text-accent-on-sec-container bg-accent-sec-container"
-                  : "text-ink/55 hover:text-ink/85"
+                  : "text-ink/75 hover:text-ink/90"
               }`}
             >
               <it.icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-on-sec-container" : ""}`} />
@@ -135,13 +135,13 @@ export default function AppNav() {
                   )}
                   <it.icon
                     className={`relative h-[21px] w-[21px] shrink-0 transition-colors ${
-                      active ? "text-on-brand" : "text-on-brand/65"
+                      active ? "text-on-brand" : "text-on-brand/85"
                     }`}
                   />
                 </span>
                 <span
                   className={`max-w-full truncate px-0.5 text-[10px] leading-tight transition-colors ${
-                    active ? "text-on-brand font-semibold" : "text-on-brand/70 font-medium"
+                    active ? "text-on-brand font-semibold" : "text-on-brand/90 font-medium"
                   }`}
                 >
                   {t(lang, it.labelKey)}

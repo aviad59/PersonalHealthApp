@@ -249,7 +249,7 @@ export default function MealInbox({
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">
           {t(lang, "meal_inbox_title")} ({drafts.length})
         </h2>
         {readyCount > 1 && (
@@ -296,15 +296,15 @@ export default function MealInbox({
                   value={d.date}
                   onChange={(e) => changeDate(d, e.target.value)}
                   disabled={working}
-                  className="bg-transparent border-0 p-0 text-[11px] text-ink/60 focus:outline-none"
+                  className="bg-transparent border-0 p-0 text-[11px] text-ink/75 focus:outline-none"
                 />
                 {d.note && (
-                  <div className="text-[12px] text-ink/55" dir={/[֐-׿]/.test(d.note) ? "rtl" : "ltr"}>
+                  <div className="text-[12px] text-ink/75" dir={/[֐-׿]/.test(d.note) ? "rtl" : "ltr"}>
                     “{d.note}”
                   </div>
                 )}
                 {(d.status === "pending" || d.status === "analyzing") && (
-                  <div className="text-[12px] text-ink/45 animate-pulse">{t(lang, "meal_inbox_pending")}</div>
+                  <div className="text-[12px] text-ink/70 animate-pulse">{t(lang, "meal_inbox_pending")}</div>
                 )}
                 {d.status === "error" && (
                   <div className="text-[12px] text-bad">
@@ -346,7 +346,7 @@ export default function MealInbox({
                     ] as const
                   ).map(([k, label]) => (
                     <label key={k} className="block">
-                      <span className="block text-[9px] uppercase tracking-wide text-ink/40 mb-0.5">{label}</span>
+                      <span className="block text-[9px] uppercase tracking-wide text-ink/65 mb-0.5">{label}</span>
                       <input
                         type="number"
                         value={Math.round(l.editing[k])}
@@ -363,7 +363,7 @@ export default function MealInbox({
                 {question && (
                   <div className="rounded-xl border border-warn/30 bg-warn/5 p-2.5 space-y-1.5">
                     <div className="text-[11px] font-medium text-warn">{t(lang, "meal_clarify_label")}</div>
-                    <div className="text-[12px] text-ink/80" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
+                    <div className="text-[12px] text-ink/90" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
                       {question}
                     </div>
                     <div className="flex gap-1.5">
@@ -386,7 +386,7 @@ export default function MealInbox({
                       <button
                         onClick={() => patchLocal(d.id, { clarifySkipped: true })}
                         disabled={working}
-                        className="rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-ink/60 disabled:opacity-40"
+                        className="rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-ink/75 disabled:opacity-40"
                       >
                         {t(lang, "meal_clarify_skip")}
                       </button>
@@ -400,7 +400,7 @@ export default function MealInbox({
               <button
                 onClick={() => discard(d)}
                 disabled={working}
-                className="rounded-full border border-border bg-bg-elev px-4 py-2 text-[12px] text-ink/60 disabled:opacity-40"
+                className="rounded-full border border-border bg-bg-elev px-4 py-2 text-[12px] text-ink/75 disabled:opacity-40"
               >
                 {t(lang, "meal_inbox_discard")}
               </button>

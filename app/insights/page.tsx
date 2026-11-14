@@ -94,7 +94,7 @@ export default function InsightsPage() {
             className={`px-3 py-1.5 rounded-full border transition-colors ${
               filter === k
                 ? "bg-accent-brand border-accent-brand text-on-brand"
-                : "bg-bg-elev border-border text-ink/60"
+                : "bg-bg-elev border-border text-ink/75"
             }`}
           >
             {t(lang, `insights_${k}` as TKey)}
@@ -105,9 +105,9 @@ export default function InsightsPage() {
       {err && <div className="text-sm text-bad">{err}</div>}
 
       {loading ? (
-        <div className="text-ink/50 text-sm">{t(lang, "insights_loading")}</div>
+        <div className="text-ink/70 text-sm">{t(lang, "insights_loading")}</div>
       ) : items.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-ink/60">
+        <div className="card p-6 text-center text-sm text-ink/75">
           {t(lang, "insights_empty")}
         </div>
       ) : (

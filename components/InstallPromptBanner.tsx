@@ -77,13 +77,13 @@ export default function InstallPromptBanner() {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold leading-tight">Install Health</div>
-        <div className="text-[11px] text-ink/50 leading-tight mt-0.5">
+        <div className="text-[11px] text-ink/70 leading-tight mt-0.5">
           One-tap launch, fullscreen, works offline.
         </div>
       </div>
       <button
         onClick={snooze}
-        className="text-[11px] text-ink/50 px-2 py-1.5"
+        className="text-[11px] text-ink/70 px-2 py-1.5"
       >
         Later
       </button>

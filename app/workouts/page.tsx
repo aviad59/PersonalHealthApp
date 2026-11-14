@@ -94,14 +94,14 @@ export default function WorkoutsPage() {
     load();
   }, []);
 
-  if (loading && !data) return <div className="p-6 text-ink/60">Loading…</div>;
-  if (!data) return <div className="p-6 text-ink/60">No data</div>;
+  if (loading && !data) return <div className="p-6 text-ink/75">Loading…</div>;
+  if (!data) return <div className="p-6 text-ink/75">No data</div>;
 
   if (!data.haveKey && !data.fromCache) {
     return (
       <div className="px-5 pt-6 space-y-3 md:max-w-3xl md:mx-auto">
         <h1 className="text-2xl font-bold">Workouts</h1>
-        <div className="card p-5 text-sm text-ink/70">
+        <div className="card p-5 text-sm text-ink/80">
           Set <code className="text-accent-brand">HEVY_API_KEY</code> in your <code>.env.local</code> and restart to
           pull workouts from Hevy.
         </div>
@@ -118,7 +118,7 @@ export default function WorkoutsPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold">Workouts</h1>
-          <p className="text-[11px] text-ink/40 mt-0.5">
+          <p className="text-[11px] text-ink/65 mt-0.5">
             {data.fromCache ? "from cache" : "live from Hevy"}
             {data.lastSyncedAt
               ? ` · synced ${new Date(data.lastSyncedAt + "Z").toLocaleString()}`
@@ -139,7 +139,7 @@ export default function WorkoutsPage() {
           <button
             onClick={backfillHistory}
             disabled={backfilling}
-            className="text-[11px] text-ink/40 hover:text-ink/70 transition-colors disabled:opacity-40"
+            className="text-[11px] text-ink/65 hover:text-ink/80 transition-colors disabled:opacity-40"
           >
             {backfilling ? "Backfilling…" : "Backfill full history"}
           </button>
@@ -147,7 +147,7 @@ export default function WorkoutsPage() {
       </div>
 
       {backfillMsg && (
-        <div className="text-xs text-ink/60">{backfillMsg}</div>
+        <div className="text-xs text-ink/75">{backfillMsg}</div>
       )}
 
       {data.error && (
@@ -156,7 +156,7 @@ export default function WorkoutsPage() {
 
       {data.summary && (
         <section className="card p-5 space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Last 7 days</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">Last 7 days</h2>
           <div className={`grid gap-3 ${data.summary.avgRpe !== null ? "grid-cols-4" : "grid-cols-3"}`}>
             <Stat label="Sessions" value={data.summary.sessions.toString()} />
             <Stat label="Volume" value={Math.round(data.summary.totalVolumeKg).toLocaleString()} unit="kg" />
@@ -167,7 +167,7 @@ export default function WorkoutsPage() {
           </div>
           {Object.keys(data.summary.byMuscle).length > 0 && (
             <div className="pt-2">
-              <div className="text-xs text-ink/50 mb-2">Sets by muscle group</div>
+              <div className="text-xs text-ink/70 mb-2">Sets by muscle group</div>
               <div className="space-y-1.5">
                 {Object.entries(data.summary.byMuscle)
                   .sort(([, a], [, b]) => b.sets - a.sets)
@@ -181,16 +181,16 @@ export default function WorkoutsPage() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Recent sessions</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">Recent sessions</h2>
         {data.workouts.length === 0 && (
-          <div className="card p-5 text-sm text-ink/60">No workouts yet.</div>
+          <div className="card p-5 text-sm text-ink/75">No workouts yet.</div>
         )}
         {data.workouts.map((w) => (
           <div key={w.id} className="card p-4">
             <div className="flex justify-between items-start">
               <div>
                 <div className="font-semibold">{w.title}</div>
-                <div className="text-xs text-ink/50">
+                <div className="text-xs text-ink/70">
                   {new Date(w.start_time).toLocaleString()} · {w.exercise_count} exercises
                 </div>
               </div>
@@ -199,16 +199,16 @@ export default function WorkoutsPage() {
                   {Math.round(w.volume_kg).toLocaleString()} kg
                 </div>
                 {w.avg_rpe !== null && (
-                  <div className="text-[11px] text-ink/40">RPE {w.avg_rpe}</div>
+                  <div className="text-[11px] text-ink/65">RPE {w.avg_rpe}</div>
                 )}
               </div>
             </div>
-            <ul className="mt-3 space-y-1 text-[13px] text-ink/70">
+            <ul className="mt-3 space-y-1 text-[13px] text-ink/80">
               {w.exercises.slice(0, 6).map((ex, i) => (
                 <li key={i} className="flex justify-between">
-                  <span>{ex.title} <span className="text-ink/40">×{ex.sets}</span></span>
+                  <span>{ex.title} <span className="text-ink/65">×{ex.sets}</span></span>
                   {ex.top_set && (
-                    <span className="text-ink/60">
+                    <span className="text-ink/75">
                       {ex.top_set.weight_kg ?? 0}kg × {ex.top_set.reps ?? 0}
                       {ex.top_set.rpe !== null ? ` @${ex.top_set.rpe}` : ""}
                     </span>
@@ -216,7 +216,7 @@ export default function WorkoutsPage() {
                 </li>
               ))}
               {w.exercises.length > 6 && (
-                <li className="text-ink/40 text-xs">+ {w.exercises.length - 6} more</li>
+                <li className="text-ink/65 text-xs">+ {w.exercises.length - 6} more</li>
               )}
             </ul>
           </div>
@@ -234,9 +234,9 @@ function Stat({ label, value, unit }: { label: string; value: string; unit?: str
           to its own line when the cell runs out of width. */}
       <div className="flex items-baseline justify-center gap-0.5 whitespace-nowrap leading-none">
         <span className="text-[15px] sm:text-lg font-semibold tabular-nums">{value}</span>
-        {unit && <span className="text-[10px] font-medium text-ink/45">{unit}</span>}
+        {unit && <span className="text-[10px] font-medium text-ink/70">{unit}</span>}
       </div>
-      <div className="mt-1 text-[10px] uppercase tracking-wide text-ink/50">{label}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-wide text-ink/70">{label}</div>
     </div>
   );
 }
@@ -245,11 +245,11 @@ function MuscleBar({ muscle, sets, max }: { muscle: string; sets: number; max: n
   const pct = max > 0 ? (sets / max) * 100 : 0;
   return (
     <div className="flex items-center gap-3 text-xs">
-      <div className="w-20 text-ink/60 capitalize">{muscle}</div>
+      <div className="w-20 text-ink/75 capitalize">{muscle}</div>
       <div className="flex-1 h-2 rounded-full bg-bg-elev overflow-hidden">
         <div className="h-full bg-accent-brand" style={{ width: `${pct}%` }} />
       </div>
-      <div className="w-8 text-right text-ink/80">{sets}</div>
+      <div className="w-8 text-right text-ink/90">{sets}</div>
     </div>
   );
 }
