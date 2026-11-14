@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
+import clsx from "clsx";
 import Link from "next/link";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import { useLang } from "@/components/LangProvider";
 import { useBackgroundTasks } from "@/components/BackgroundTasks";
 import { MealIcon, MEAL_ICON_IDS } from "@/components/MealIcon";
-import { t, Lang } from "@/lib/i18n";
+import { t, type Lang, type TKey } from "@/lib/i18n";
 import ItemPortions from "@/components/ItemPortions";
 import MealInbox from "@/components/MealInbox";
 import { applyPortions, itemsWithPortions, fullPortions } from "@/lib/portions";
@@ -579,7 +580,7 @@ export default function LogMealPage() {
     try {
       await loadPhotoIntoSlot1(f);
     } catch (err: any) {
-      setErr(err?.message || "Could not read that photo");
+      setErr(err?.message || t(lang, "meal_err_read_photo"));
     } finally {
       setProgress(null);
     }
@@ -604,7 +605,7 @@ export default function LogMealPage() {
         f2 ? loadPhotoIntoSlot2(f2) : Promise.resolve(),
       ]);
     } catch (err: any) {
-      setErr(err?.message || "Could not read that photo");
+      setErr(err?.message || t(lang, "meal_err_read_photo"));
     } finally {
       setProgress(null);
     }
@@ -618,7 +619,7 @@ export default function LogMealPage() {
     try {
       await loadPhotoIntoSlot2(f);
     } catch (err: any) {
-      setErr(err?.message || "Could not read that photo");
+      setErr(err?.message || t(lang, "meal_err_read_photo"));
     } finally {
       setProgress(null);
     }
@@ -635,7 +636,7 @@ export default function LogMealPage() {
     try {
       await loadPhotoIntoSlot2(f);
     } catch (err: any) {
-      setErr(err?.message || "Could not read that photo");
+      setErr(err?.message || t(lang, "meal_err_read_photo"));
     } finally {
       setProgress(null);
     }
@@ -710,7 +711,7 @@ export default function LogMealPage() {
       const items = groupBatchPhotos(photos, date);
       setBatch((prev) => [...(prev ?? []), ...items]);
     } catch (err: any) {
-      setErr(err?.message || "Could not read those photos");
+      setErr(err?.message || t(lang, "meal_err_read_photos"));
     } finally {
       setProgress(null);
       if (batchRef.current) batchRef.current.value = "";
@@ -731,7 +732,7 @@ export default function LogMealPage() {
         const files = await takeSharedPhotos();
         if (files.length) addBatchFiles(files);
       } catch {
-        setErr("Could not read the shared photos");
+        setErr(t(lang, "meal_err_shared_photos"));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -891,7 +892,7 @@ export default function LogMealPage() {
     const hasPhoto = !!f;
     const hasText = !!text.trim();
     if (!hasPhoto && !hasText) {
-      setErr("Add a photo or a description");
+      setErr(t(lang, "meal_err_need_input"));
       return;
     }
     setErr(null);
@@ -1080,7 +1081,7 @@ export default function LogMealPage() {
     }
     setManualSaving(true);
     setErr(null);
-    setProgress("Saving meal…");
+    setProgress(t(lang, "meal_saving"));
     try {
       const j = await safeFetchJson<{ ok: true; id: number }>(
         "/api/meals",
@@ -1264,43 +1265,96 @@ export default function LogMealPage() {
     });
   }
 
-  return (
-    <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
-        <p className="text-sm text-white/60 mt-1">
-          {isToday
-            ? t(lang, "meal_subtitle_today")
-            : `${t(lang, "meal_subtitle_past")} ${prettyDate(date, lang)}.`}
-        </p>
-      </div>
+  // Running total for the selected day — the header shows it against the
+  // profile targets so you can see what a meal will do before logging it.
+  const dayTotals = existing.reduce(
+    (acc, m) => {
+      acc.calories += m.calories ?? 0;
+      acc.protein_g += m.protein_g ?? 0;
+      return acc;
+    },
+    { calories: 0, protein_g: 0 },
+  );
+  const idle = !photoPreview && !analysis && !manualMode && !proteinMode && !batch;
+  const saveLabel = isToday
+    ? t(lang, "meal_confirm_save")
+    : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`;
 
-      {/* --- DATE PICKER --- */}
-      <div className="card p-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-white/50">{t(lang, "meal_date")}</div>
-          <div className="text-sm font-medium mt-0.5">{prettyDate(date, lang)}</div>
+  return (
+    <div className="px-5 pt-6 pb-10 space-y-6 md:max-w-3xl md:mx-auto">
+      {/* --- HEADER: title, day stepper, day-so-far --- */}
+      <header className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
+            <p className="text-sm text-white/60 mt-1">
+              {isToday
+                ? t(lang, "meal_subtitle_today")
+                : `${t(lang, "meal_subtitle_past")} ${prettyDate(date, lang)}.`}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!isToday && (
-            <button
-              onClick={() => setDate(todayStr())}
-              className="text-[11px] text-accent-brand"
+
+        <div className="card p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <IconButton
+              label={t(lang, "meal_prev_day")}
+              onClick={() => setDate(shiftDate(date, -1))}
             >
-              {t(lang, "meal_today_btn")}
-            </button>
+              <ChevronIcon className="h-5 w-5 rtl:rotate-180" />
+            </IconButton>
+            {/* The native picker sits invisibly over the label, so tapping the
+                date opens the platform calendar. No `max`: on Android Chrome a
+                mid-month max disabled the next-month arrow and trapped users;
+                the Today chip is the way back. */}
+            <label className="relative flex-1 min-w-0 h-11 rounded-xl bg-bg-elev border border-border flex items-center justify-center gap-2 cursor-pointer state-layer">
+              <CalendarIcon className="h-4 w-4 text-white/50" aria-hidden="true" />
+              <span className="text-sm font-semibold truncate">{prettyDate(date, lang)}</span>
+              <input
+                type="date"
+                value={date}
+                aria-label={t(lang, "meal_pick_date")}
+                onChange={(e) => setDate(e.target.value || todayStr())}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+            </label>
+            <IconButton
+              label={t(lang, "meal_next_day")}
+              onClick={() => setDate(shiftDate(date, 1))}
+              disabled={isToday}
+            >
+              <ChevronIcon className="h-5 w-5 rotate-180 rtl:rotate-0" />
+            </IconButton>
+            {!isToday && (
+              <button
+                onClick={() => setDate(todayStr())}
+                className="h-11 rounded-xl px-3 text-[13px] font-semibold text-accent-primary bg-accent-sec-container/60 state-layer"
+              >
+                {t(lang, "meal_today_btn")}
+              </button>
+            )}
+          </div>
+
+          {goals && (
+            <div className="grid grid-cols-2 gap-3">
+              <DayMeter
+                label={t(lang, "macro_calories")}
+                value={dayTotals.calories}
+                target={goals.calories}
+                unit={t(lang, "macro_kcal")}
+                barClass="bg-accent-cal"
+              />
+              <DayMeter
+                label={t(lang, "macro_protein")}
+                value={dayTotals.protein_g}
+                target={goals.protein_g}
+                unit="g"
+                barClass="bg-accent-protein"
+              />
+            </div>
           )}
-          <input
-            type="date"
-            value={date}
-            // Note: no `max` cap. On Android Chrome, capping `max` mid-month
-            // disables the "next month" arrow, which trapped users in the
-            // wrong month. The "Today" button above is the safety net.
-            onChange={(e) => setDate(e.target.value || todayStr())}
-            className="rounded-lg bg-bg-elev border border-border px-2 py-1.5 text-[13px]"
-          />
         </div>
-      </div>
+      </header>
 
       {/* --- QUICK-SNAP INBOX: snapped with a note, analyzed, awaiting confirm --- */}
       {!batch && (
@@ -1317,198 +1371,217 @@ export default function LogMealPage() {
         />
       )}
 
-      {/* --- PHOTO PICKER (NEW MEAL) --- */}
-      {!photoPreview && !analysis && !manualMode && !proteinMode && !batch && (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => cameraRef.current?.click()}
-              className="rounded-2xl border-2 border-dashed border-border bg-bg-elev py-6 flex flex-col items-center justify-center gap-2"
-            >
-              <div className="w-12 h-12 rounded-full bg-bg-card flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="h-6 w-6 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-              </div>
-              <div className="text-xs text-white/70">{t(lang, "meal_take_photo")}</div>
-            </button>
-            <button
-              onClick={() => galleryRef.current?.click()}
-              className="rounded-2xl border-2 border-dashed border-border bg-bg-elev py-6 flex flex-col items-center justify-center gap-2"
-            >
-              <div className="w-12 h-12 rounded-full bg-bg-card flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="h-6 w-6 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="9" cy="9" r="2" />
-                  <path d="m21 15-5-5L5 21" />
-                </svg>
-              </div>
-              <div className="text-xs text-white/70">{t(lang, "meal_from_gallery")}</div>
-            </button>
-          </div>
+      {/* --- NEW MEAL: capture (idle) --- */}
+      {idle && (
+        <section className="card p-4 space-y-4" aria-label={t(lang, "meal_new_meal")}>
           <button
-            onClick={() => batchRef.current?.click()}
-            className="w-full rounded-2xl border-2 border-dashed border-border bg-bg-elev py-3.5 flex items-center justify-center gap-2.5 text-[13px] text-white/70 font-medium hover:border-accent-brand/50 hover:text-white transition-colors"
+            onClick={() => cameraRef.current?.click()}
+            className="w-full rounded-2xl bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] shadow-brand px-5 py-5 flex items-center gap-4 text-start state-layer"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white/60" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="7" y="7" width="14" height="14" rx="2" />
-              <path d="M3 17V5a2 2 0 0 1 2-2h12" />
-              <circle cx="12" cy="12" r="1.5" />
-              <path d="m21 16-4-4-7 9" />
-            </svg>
-            {t(lang, "meal_batch_button")}
+            <span className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+              <CameraIcon className="h-7 w-7 text-white" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-lg font-bold text-white">{t(lang, "meal_take_photo")}</span>
+              <span className="block text-[13px] text-white/75 mt-0.5">{t(lang, "meal_analyze_photo")}</span>
+            </span>
           </button>
+          <div className="grid grid-cols-2 gap-2">
+            <TonalButton onClick={() => galleryRef.current?.click()}>
+              <GalleryIcon className="h-5 w-5" aria-hidden="true" />
+              {t(lang, "meal_from_gallery")}
+            </TonalButton>
+            <TonalButton onClick={() => batchRef.current?.click()}>
+              <StackIcon className="h-5 w-5" aria-hidden="true" />
+              <span className="truncate">{t(lang, "meal_batch_title")}</span>
+            </TonalButton>
+          </div>
           <Link
             href="/meals/snap"
-            className="w-full rounded-2xl border border-border bg-bg-elev py-3 flex items-center justify-center gap-2.5 text-[13px] text-white/70 font-medium hover:border-accent-brand/50 hover:text-white transition-colors"
+            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-white/80 flex items-center justify-center gap-2 state-layer"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white/60" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-            </svg>
-            {t(lang, "meal_snap_button")}
+            <BoltIcon className="h-5 w-5 text-accent-primary" aria-hidden="true" />
+            <span className="truncate">{t(lang, "meal_snap_button")}</span>
           </Link>
-          <div className="text-[11px] text-white/40 text-center">{t(lang, "meal_or_describe")}</div>
-          {/* Quick-add carousel — two fixed one-tap shortcuts: protein powder
-              (opens the base picker) and creatine (logs instantly, no params). */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
-            <button
-              type="button"
-              onClick={() => { setProteinMode(true); setErr(null); }}
-              className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors"
-            >
-              <ShakerIcon className="h-4 w-4 text-white/55" />
-              <span className="whitespace-nowrap">{t(lang, "meal_protein_powder")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={saveCreatine}
-              disabled={creatineBusy}
-              className="shrink-0 rounded-full border border-border bg-bg-elev px-3.5 py-2 flex items-center gap-2 text-[13px] text-white/80 hover:text-white hover:border-accent-brand/40 transition-colors disabled:opacity-50"
-            >
-              <CreatineIcon className="h-4 w-4 text-white/55" />
-              <span className="whitespace-nowrap">{t(lang, "meal_creatine")}</span>
-              {creatineBusy && (
-                <span className="inline-block h-3 w-3 rounded-full border-2 border-white/30 border-t-white/80 animate-spin" />
-              )}
-            </button>
+
+          <div className="flex items-center gap-3 text-[12px] text-white/45">
+            <span className="h-px flex-1 bg-border" />
+            {t(lang, "meal_or_describe_inline")}
+            <span className="h-px flex-1 bg-border" />
           </div>
-        </div>
+
+          <DescribeField
+            lang={lang}
+            label={t(lang, "meal_describe_label")}
+            placeholder={t(lang, "meal_describe_placeholder")}
+            value={text}
+            onChange={setText}
+          />
+          {text.trim() && (
+            <PrimaryButton onClick={analyze} disabled={analyzing || !!progress}>
+              {analyzing ? (
+                <AiThinkingPill label={progress || analyzeStageLabel} />
+              ) : (
+                progress || t(lang, "meal_analyze_text")
+              )}
+            </PrimaryButton>
+          )}
+        </section>
+      )}
+
+      {/* --- QUICK ADD: one-tap supplements --- */}
+      {idle && (
+        <section className="space-y-2">
+          <SectionTitle>{t(lang, "meal_quick_add")}</SectionTitle>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+            <ChipButton onClick={() => { setProteinMode(true); setErr(null); }}>
+              <ShakerIcon className="h-4 w-4 text-accent-primary" aria-hidden="true" />
+              {t(lang, "meal_protein_powder")}
+            </ChipButton>
+            <ChipButton onClick={saveCreatine} disabled={creatineBusy}>
+              <CreatineIcon className="h-4 w-4 text-accent-primary" aria-hidden="true" />
+              {t(lang, "meal_creatine")}
+              {creatineBusy && <Spinner />}
+            </ChipButton>
+          </div>
+        </section>
       )}
 
       {/* --- PROTEIN POWDER QUICK-LOG --- */}
       {proteinMode && !analysis && !batch && (
-        <div className="card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShakerIcon className="h-5 w-5 text-white/60" />
-              <h3 className="text-sm font-semibold">Allin Whey וניל — סקופ אחד (33g)</h3>
+        <section className="card p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-10 h-10 rounded-xl bg-accent-sec-container flex items-center justify-center shrink-0">
+                <ShakerIcon className="h-5 w-5 text-accent-on-sec-container" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold truncate">{t(lang, "meal_protein_product")}</h2>
+                <div className="text-[12px] text-white/50">{t(lang, "meal_protein_scoop")}</div>
+              </div>
             </div>
-            <button onClick={() => { setProteinMode(false); setErr(null); }} className="text-xs text-white/40">
+            <TextButton onClick={() => { setProteinMode(false); setErr(null); }}>
               {t(lang, "meal_cancel")}
-            </button>
+            </TextButton>
           </div>
 
-          <div className="space-y-3">
-            {/* Fixed macros display */}
-            <div className="rounded-xl bg-bg-elev border border-border px-4 py-3 grid grid-cols-4 gap-2 text-center">
-              <div>
-                <div className="text-[11px] text-accent-cal font-semibold">{ALLIN_WHEY.cal}</div>
-                <div className="text-[10px] text-white/40">קק״ל</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-accent-protein font-semibold">{ALLIN_WHEY.protein}g</div>
-                <div className="text-[10px] text-white/40">חלבון</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-accent-fat font-semibold">{ALLIN_WHEY.fat}g</div>
-                <div className="text-[10px] text-white/40">שומן</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-accent-carbs font-semibold">{ALLIN_WHEY.carbs}g</div>
-                <div className="text-[10px] text-white/40">פחמימות</div>
-              </div>
-            </div>
+          <MacroSummary
+            lang={lang}
+            macros={{
+              calories: ALLIN_WHEY.cal,
+              protein_g: ALLIN_WHEY.protein,
+              fat_g: ALLIN_WHEY.fat,
+              carbs_g: ALLIN_WHEY.carbs,
+            }}
+          />
 
-            {/* Liquid base */}
-            <div>
-              <label className="block text-xs font-medium text-white/60 mb-1.5">עם מה?</label>
-              <select
-                value={proteinBase}
-                onChange={(e) => setProteinBase(e.target.value)}
-                className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] text-white"
-              >
-                {PROTEIN_BASES.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <label className="block">
+            <span className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "meal_protein_with")}</span>
+            <select
+              value={proteinBase}
+              onChange={(e) => setProteinBase(e.target.value)}
+              dir="rtl"
+              className="w-full h-12 rounded-xl bg-bg-elev border border-border px-4 text-[15px] text-white"
+            >
+              {PROTEIN_BASES.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </label>
 
-          <button
-            onClick={saveProtein}
-            disabled={proteinSaving}
-            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {proteinSaving ? "שומר…" : isToday ? "שמור" : `שמור ל-${prettyDate(date, lang)}`}
-          </button>
-        </div>
+          <PrimaryButton onClick={saveProtein} disabled={proteinSaving}>
+            {proteinSaving
+              ? t(lang, "meal_saving_short")
+              : isToday
+                ? t(lang, "meal_save")
+                : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`}
+          </PrimaryButton>
+        </section>
       )}
 
+      {/* --- PHOTO PICKED: preview, second angle, notes --- */}
       {photoPreview && !manualMode && !proteinMode && !batch && (
-        <div className="space-y-3">
-          {/* Horizontal thumbnail track — once a photo is picked, the big
-              upload buttons collapse into compact previews so the user can
-              see, swap, and add a second angle without losing screen space. */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-            <PhotoThumb
+        <section className="card p-4 space-y-4">
+          <div className="flex gap-3">
+            <PhotoPreview
               src={photoPreview}
-              alt="meal"
+              lang={lang}
               analyzing={analyzing}
               onZoom={() => setLightboxSrc(photoPreview)}
-              onRemove={clearPhoto}
+              onRemove={analysis ? undefined : clearPhoto}
+              className="flex-1 aspect-[4/3]"
             />
             {photoPreview2 ? (
-              <PhotoThumb
+              <PhotoPreview
                 src={photoPreview2}
-                alt="meal, second angle"
+                lang={lang}
                 analyzing={analyzing}
                 onZoom={() => setLightboxSrc(photoPreview2)}
-                onRemove={clearPhoto2}
+                onRemove={analysis ? undefined : clearPhoto2}
+                className="w-28 shrink-0"
               />
             ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  (photoSource === "gallery" ? gallery2Ref : camera2Ref).current?.click()
-                }
-                className="shrink-0 w-28 h-28 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white/80 hover:border-accent-brand/50 transition-colors"
-                aria-label={t(lang, "meal_add_second_photo")}
-              >
-                <span className="text-2xl leading-none">+</span>
-                <span className="text-[10px] text-center px-1 leading-tight">
-                  {t(lang, "meal_add_second_photo")}
-                </span>
-              </button>
+              !analysis && (
+                // Same picker the first photo came from is the default; both
+                // sources stay one tap away for the "other side of the box" shot.
+                <div className="w-28 shrink-0 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-2 p-2">
+                  <span className="text-[11px] text-white/55 text-center leading-tight">
+                    {t(lang, "meal_add_second_photo")}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <IconButton
+                      label={`${t(lang, "meal_second_photo")}: ${t(lang, "meal_take_photo")}`}
+                      onClick={() => camera2Ref.current?.click()}
+                      tone={photoSource === "gallery" ? "plain" : "tonal"}
+                    >
+                      <CameraIcon className="h-5 w-5" />
+                    </IconButton>
+                    <IconButton
+                      label={`${t(lang, "meal_second_photo")}: ${t(lang, "meal_from_gallery")}`}
+                      onClick={() => gallery2Ref.current?.click()}
+                      tone={photoSource === "gallery" ? "tonal" : "plain"}
+                    >
+                      <GalleryIcon className="h-5 w-5" />
+                    </IconButton>
+                  </div>
+                </div>
+              )
             )}
           </div>
-          <div className="flex gap-4 text-sm flex-wrap">
-            <button onClick={() => cameraRef.current?.click()} className="text-accent-brand">
-              {t(lang, "meal_retake")}
-            </button>
-            <button onClick={() => galleryRef.current?.click()} className="text-accent-brand">
-              {t(lang, "meal_pick_gallery")}
-            </button>
-            {!photoPreview2 && (
-              <button onClick={() => gallery2Ref.current?.click()} className="text-accent-brand">
-                {t(lang, "meal_pick_gallery")} #2
-              </button>
-            )}
-          </div>
-          {!photoPreview2 && (
-            <p className="text-[11px] text-white/40">{t(lang, "meal_second_photo_hint")}</p>
+
+          {!analysis && (
+            <>
+              <div className="flex gap-2">
+                <ChipButton onClick={() => cameraRef.current?.click()}>
+                  <CameraIcon className="h-4 w-4" aria-hidden="true" />
+                  {t(lang, "meal_retake")}
+                </ChipButton>
+                <ChipButton onClick={() => galleryRef.current?.click()}>
+                  <GalleryIcon className="h-4 w-4" aria-hidden="true" />
+                  {t(lang, "meal_pick_gallery")}
+                </ChipButton>
+              </div>
+              {!photoPreview2 && (
+                <p className="text-[12px] text-white/45">{t(lang, "meal_second_photo_hint")}</p>
+              )}
+              <DescribeField
+                lang={lang}
+                label={t(lang, "meal_notes_hint")}
+                placeholder={t(lang, "meal_notes_placeholder")}
+                value={text}
+                onChange={setText}
+                rows={2}
+              />
+              <PrimaryButton onClick={analyze} disabled={analyzing || !!progress}>
+                {analyzing ? (
+                  <AiThinkingPill label={progress || analyzeStageLabel} />
+                ) : (
+                  progress || t(lang, "meal_analyze_photo")
+                )}
+              </PrimaryButton>
+            </>
           )}
-        </div>
+        </section>
       )}
 
       {/* File inputs use sr-only (not `hidden`/display:none): some mobile
@@ -1522,6 +1595,8 @@ export default function LogMealPage() {
         capture="environment"
         onChange={onPickCamera}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <input
         ref={galleryRef}
@@ -1530,6 +1605,8 @@ export default function LogMealPage() {
         multiple
         onChange={onPick}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <input
         ref={camera2Ref}
@@ -1538,6 +1615,8 @@ export default function LogMealPage() {
         capture="environment"
         onChange={onPickCamera2}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <input
         ref={gallery2Ref}
@@ -1545,6 +1624,8 @@ export default function LogMealPage() {
         accept="image/*"
         onChange={onPick2}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <input
         ref={batchRef}
@@ -1553,22 +1634,21 @@ export default function LogMealPage() {
         multiple
         onChange={onPickBatch}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
 
       {/* --- BATCH MODE: each photo is its own meal --- */}
       {batch && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-              {t(lang, "meal_batch_title")} ({batch.length})
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">
+              {t(lang, "meal_batch_title")}{" "}
+              <span className="text-white/45 nums">({batch.length})</span>
             </h2>
-            <button
-              onClick={() => setBatch(null)}
-              disabled={batchBusy}
-              className="text-xs text-white/40 disabled:opacity-40"
-            >
+            <TextButton onClick={() => setBatch(null)} disabled={batchBusy}>
               {t(lang, "meal_cancel")}
-            </button>
+            </TextButton>
           </div>
           {groupByDay(sortBatch(batch)).map(([day, items]) => (
             <div key={day} className="space-y-2">
@@ -1618,260 +1698,154 @@ export default function LogMealPage() {
               ))}
             </div>
           ))}
-          <div className="flex gap-2">
-            <button
+          {batch.some((it) => it.status === "done" && it.analysis?.clarifying_question) && (
+            <p className="text-[12px] text-amber-300/85">
+              {t(lang, "meal_batch_clarify_hint")}
+            </p>
+          )}
+          <StickyActions>
+            <IconButton
+              label={t(lang, "meal_from_gallery")}
               onClick={() => batchRef.current?.click()}
               disabled={batchBusy}
-              className="rounded-xl border border-border bg-bg-elev px-4 py-3 text-sm text-white/70 disabled:opacity-40"
+              tone="tonal"
+              size="lg"
             >
-              +
-            </button>
+              <PlusIcon className="h-5 w-5" />
+            </IconButton>
             {batch.some((it) => it.status === "ready" || it.status === "error") ? (
-              <button
-                onClick={analyzeAllBatch}
-                disabled={batchBusy}
-                className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
-              >
+              <PrimaryButton onClick={analyzeAllBatch} disabled={batchBusy} className="flex-1">
                 {batchBusy ? (
                   <AiThinkingPill label={t(lang, "meal_analyzing")} />
                 ) : (
                   `${t(lang, "meal_batch_analyze_all")} (${batch.filter((it) => it.status === "ready" || it.status === "error").length})`
                 )}
-              </button>
+              </PrimaryButton>
             ) : (
-              <button
+              <PrimaryButton
                 onClick={saveAllBatch}
                 disabled={batchBusy || !batch.some((it) => it.status === "done")}
-                className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+                className="flex-1"
               >
                 {batchBusy
                   ? t(lang, "meal_saving_short")
                   : `${t(lang, "meal_batch_save_all")} (${batch.filter((it) => it.status === "done").length})`}
-              </button>
+              </PrimaryButton>
             )}
-          </div>
-          {batch.some((it) => it.status === "done" && it.analysis?.clarifying_question) && (
-            <p className="text-[11px] text-amber-400/80">
-              {t(lang, "meal_batch_clarify_hint")}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* --- TEXT INPUT (always visible until an analysis exists) --- */}
-      {!analysis && !manualMode && !proteinMode && !batch && (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-white/60 mb-1.5">
-              {photoPreview ? t(lang, "meal_notes_hint") : t(lang, "meal_describe_label")}
-            </label>
-            <textarea
-              value={text}
-              dir={text ? (/[֐-׿]/.test(text) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={photoPreview ? t(lang, "meal_notes_placeholder") : t(lang, "meal_describe_placeholder")}
-              rows={3}
-              className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] resize-none"
-            />
-          </div>
-          <button
-            onClick={analyze}
-            disabled={analyzing || !!progress}
-            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
-          >
-            {analyzing ? (
-              <AiThinkingPill label={progress || analyzeStageLabel} />
-            ) : progress ? (
-              progress
-            ) : photoPreview ? (
-              t(lang, "meal_analyze_photo")
-            ) : text.trim() ? (
-              t(lang, "meal_analyze_text")
-            ) : (
-              t(lang, "meal_analyze_empty")
-            )}
-          </button>
-        </div>
+          </StickyActions>
+        </section>
       )}
 
       {/* --- MANUAL ENTRY FORM --- */}
       {manualMode && !analysis && !proteinMode && !batch && (
-        <div className="card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">{t(lang, "meal_manual_title")}</h3>
-            <button
-              onClick={() => { setManualMode(false); setErr(null); }}
-              className="text-xs text-white/40"
-            >
+        <section className="card p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">{t(lang, "meal_manual_title")}</h2>
+            <TextButton onClick={() => { setManualMode(false); setErr(null); }}>
               {t(lang, "meal_cancel")}
-            </button>
+            </TextButton>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-white/60 mb-1.5">
+          <label className="block">
+            <span className="block text-xs font-medium text-white/60 mb-1.5">
               {t(lang, "meal_manual_desc_label")}
-            </label>
+            </span>
             <input
               value={manualDesc}
               onChange={(e) => setManualDesc(e.target.value)}
               placeholder={t(lang, "meal_manual_desc_placeholder")}
-              className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px]"
+              className="w-full h-12 rounded-xl bg-bg-elev border border-border px-4 text-[15px]"
             />
-          </div>
-          <div className="space-y-3">
-            <div className="text-xs font-medium text-white/60">{t(lang, "meal_macros_label")}</div>
-            <MacroEdit
-              label={t(lang, "macro_calories")}
-              unit={t(lang, "macro_kcal")}
-              value={manualMacros.calories}
-              onChange={(v) => setManualMacros({ ...manualMacros, calories: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_protein")}
-              unit="g"
-              value={manualMacros.protein_g}
-              onChange={(v) => setManualMacros({ ...manualMacros, protein_g: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_fat")}
-              unit="g"
-              value={manualMacros.fat_g}
-              onChange={(v) => setManualMacros({ ...manualMacros, fat_g: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_carbs")}
-              unit="g"
-              value={manualMacros.carbs_g}
-              onChange={(v) => setManualMacros({ ...manualMacros, carbs_g: v })}
-            />
-          </div>
-          <button
-            onClick={saveManual}
-            disabled={manualSaving}
-            className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
-          >
+          </label>
+          <MacroTiles
+            lang={lang}
+            label={t(lang, "meal_macros_label")}
+            value={manualMacros}
+            onChange={(k, v) => setManualMacros({ ...manualMacros, [k]: v })}
+          />
+          <PrimaryButton onClick={saveManual} disabled={manualSaving}>
             {manualSaving
               ? progress || t(lang, "meal_saving_short")
               : isToday
                 ? t(lang, "meal_save")
                 : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`}
-          </button>
-        </div>
+          </PrimaryButton>
+        </section>
       )}
 
       {/* --- ANALYSIS REVIEW --- */}
       {analysis && editing && !batch && (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold">{analysis.description}</h3>
+        <section className="space-y-4">
+          <div className="card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <h2
+                className="text-base font-semibold leading-snug"
+                dir={/[֐-׿]/.test(analysis.description) ? "rtl" : "ltr"}
+              >
+                {analysis.description}
+              </h2>
               <div className="flex items-center gap-1.5 shrink-0">
                 {analysis._latencyMs ? (
-                  <span
-                    className="text-[10px] tabular-nums text-white/35"
-                    title={analysis._model ?? ""}
-                  >
+                  <span className="text-[11px] nums text-white/40" title={analysis._model ?? ""}>
                     {(analysis._latencyMs / 1000).toFixed(1)}s
                   </span>
                 ) : null}
-                <span className="text-[10px] uppercase tracking-wider text-white/50 bg-bg-elev border border-border rounded-full px-2 py-0.5">
-                  {analysis.confidence} {t(lang, "meal_confidence")}
-                </span>
+                <ConfidenceChip lang={lang} confidence={analysis.confidence} />
               </div>
             </div>
-            <ItemPortions
-              items={analysis.items}
-              fractions={fractions}
-              lang={lang}
-              onChange={(next) => {
-                setFractions(next);
-                setEditing(applyPortions(analysis.total, analysis.items, next));
-              }}
-            />
+            {analysis.items?.length > 0 && (
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-white/45 mb-1.5">
+                  {t(lang, "meal_items_found")}
+                </div>
+                <ItemPortions
+                  items={analysis.items}
+                  fractions={fractions}
+                  lang={lang}
+                  onChange={(next) => {
+                    setFractions(next);
+                    setEditing(applyPortions(analysis.total, analysis.items, next));
+                  }}
+                />
+              </div>
+            )}
             {analysis.notes && (
-              <p className="text-[11px] text-white/40 mt-2 italic">{analysis.notes}</p>
+              <p className="text-[12px] text-white/50 leading-relaxed">{analysis.notes}</p>
             )}
           </div>
 
           {analysis.clarifying_question && (
-            <div className="card p-4 space-y-2 border-accent-brand/30">
-              <div className="flex items-center justify-between">
-                <div className="text-[10px] uppercase tracking-wider text-accent-brand font-semibold">
-                  {t(lang, "meal_clarify_label")}
-                </div>
-                <button onClick={skipClarifyingQuestion} className="text-[11px] text-white/40">
-                  {t(lang, "meal_clarify_skip")}
-                </button>
-              </div>
-              <p className="text-sm text-white/80">{analysis.clarifying_question}</p>
-              <div className="flex gap-2">
-                <input
-                  value={clarifyAnswer}
-                  onChange={(e) => setClarifyAnswer(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) answerClarifyingQuestion();
-                  }}
-                  placeholder={t(lang, "meal_clarify_placeholder")}
-                  className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-white/30"
-                />
-                <button
-                  onClick={answerClarifyingQuestion}
-                  disabled={clarifying || !clarifyAnswer.trim()}
-                  className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
-                >
-                  {clarifying ? "…" : t(lang, "meal_clarify_update")}
-                </button>
-              </div>
-            </div>
+            <ClarifyCard
+              lang={lang}
+              question={analysis.clarifying_question}
+              answer={clarifyAnswer}
+              onAnswer={setClarifyAnswer}
+              onSubmit={answerClarifyingQuestion}
+              onSkip={skipClarifyingQuestion}
+              busy={clarifying}
+            />
           )}
 
-          <div className="card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">{t(lang, "meal_totals")}</h3>
-            <MacroEdit
-              label={t(lang, "macro_calories")}
-              unit={t(lang, "macro_kcal")}
-              value={editing.calories}
-              onChange={(v) => setEditing({ ...editing, calories: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_protein")}
-              unit="g"
-              value={editing.protein_g}
-              onChange={(v) => setEditing({ ...editing, protein_g: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_fat")}
-              unit="g"
-              value={editing.fat_g}
-              onChange={(v) => setEditing({ ...editing, fat_g: v })}
-            />
-            <MacroEdit
-              label={t(lang, "macro_carbs")}
-              unit="g"
-              value={editing.carbs_g}
-              onChange={(v) => setEditing({ ...editing, carbs_g: v })}
+          <div className="card p-4">
+            <MacroTiles
+              lang={lang}
+              label={t(lang, "meal_totals")}
+              value={editing}
+              onChange={(k, v) => setEditing({ ...editing, [k]: v })}
             />
           </div>
 
-          <div className="flex gap-2">
+          <StickyActions>
             <button
               onClick={resetNewMealForm}
-              className="flex-1 rounded-xl border border-border bg-bg-elev py-3 text-sm font-medium"
+              className="h-12 rounded-full px-5 text-sm font-medium bg-bg-elev border border-border state-layer"
             >
               {t(lang, "meal_discard")}
             </button>
-            <button
-              onClick={save}
-              disabled={saving || clarifying}
-              className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
-            >
-              {saving
-                ? progress || t(lang, "meal_saving_short")
-                : isToday
-                  ? t(lang, "meal_confirm_save")
-                  : `${t(lang, "meal_save_to")} ${prettyDate(date, lang)}`}
-            </button>
-          </div>
-        </div>
+            <PrimaryButton onClick={save} disabled={saving || clarifying} className="flex-1">
+              {saving ? progress || t(lang, "meal_saving_short") : saveLabel}
+            </PrimaryButton>
+          </StickyActions>
+        </section>
       )}
 
       {showDaySummary && existing.length > 0 && (
@@ -1883,40 +1857,42 @@ export default function LogMealPage() {
         />
       )}
 
-      {err && <div className="text-sm text-red-400">{err}</div>}
       {notice && (
-        <div className="flex items-center gap-2 text-sm text-emerald-400">
-          <span className="flex-1">{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-white/40" aria-label="Dismiss">×</button>
+        <div role="status" className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 ps-4 pe-1.5 py-1.5 text-[13px] text-emerald-100">
+          <CheckCircleIcon className="h-5 w-5 text-emerald-300 shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">{notice}</span>
+          <IconButton label={t(lang, "meal_close")} onClick={() => setNotice(null)}>
+            <CloseIcon className="h-4 w-4" />
+          </IconButton>
+        </div>
+      )}
+      {err && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+          <AlertIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0">{err}</span>
         </div>
       )}
 
       {/* --- EXISTING MEALS FOR THIS DATE --- */}
       {(existingLoading || existing.length > 0) && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <SectionTitle>
               {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
-            </h2>
+              {!existingLoading && <span className="text-white/35 nums"> · {existing.length}</span>}
+            </SectionTitle>
             {!existingLoading && existing.length > 0 && (
-              <button
-                onClick={startReview}
-                disabled={reviewing}
-                className="text-[11px] text-accent-brand disabled:opacity-40 flex items-center gap-1"
-              >
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 12l2 2 4-4" />
-                  <circle cx="12" cy="12" r="10" />
-                </svg>
-                {reviewing ? "Checking…" : "Coach Check"}
-              </button>
+              <ChipButton onClick={startReview} disabled={reviewing} size="sm">
+                <CheckCircleIcon className="h-4 w-4 text-accent-primary" aria-hidden="true" />
+                {reviewing ? t(lang, "meal_coach_checking") : t(lang, "meal_coach_check")}
+              </ChipButton>
             )}
           </div>
           {existingLoading ? (
             <div className="space-y-2">
               {[0, 1].map((i) => (
                 <div key={i} className="card p-3 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-bg-elev animate-pulse shrink-0" />
+                  <div className="w-14 h-14 rounded-xl bg-bg-elev animate-pulse shrink-0" />
                   <div className="flex-1 space-y-2">
                     <div className="h-3 w-3/4 rounded bg-bg-elev animate-pulse" />
                     <div className="h-3 w-1/2 rounded bg-bg-elev animate-pulse" />
@@ -1956,12 +1932,10 @@ export default function LogMealPage() {
 
       {/* --- FREQUENT MEALS --- */}
       {!analysis && !batch && (frequentLoading || frequent.length > 0) && (
-        <section className="space-y-3 pt-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
-              {t(lang, "meal_log_again")}
-            </h2>
-            <span className="text-[11px] text-white/40">{t(lang, "meal_recurring")}</span>
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <SectionTitle>{t(lang, "meal_log_again")}</SectionTitle>
+            <span className="text-[12px] text-white/40">{t(lang, "meal_recurring")}</span>
           </div>
           {frequentLoading ? (
             <div className="space-y-2">
@@ -1973,70 +1947,72 @@ export default function LogMealPage() {
               ))}
             </div>
           ) : (
-          <div className="space-y-2">
-            {frequent.map((m, i) => {
-              const open = expandedIdx === i;
-              return (
-                <div key={i} className="card p-4">
-                  <button
-                    onClick={() => {
-                      setExpandedIdx(open ? null : i);
-                      setModifier("");
-                    }}
-                    className="w-full text-left"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{m.description}</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">
-                          {Math.round(m.calories)} kcal · {Math.round(m.protein_g)}P
-                          · {Math.round(m.fat_g)}F · {Math.round(m.carbs_g)}C
+            <div className="card divide-y divide-border overflow-hidden">
+              {frequent.map((m, i) => {
+                const open = expandedIdx === i;
+                return (
+                  <div key={i}>
+                    <button
+                      onClick={() => {
+                        setExpandedIdx(open ? null : i);
+                        setModifier("");
+                      }}
+                      aria-expanded={open}
+                      className="w-full text-start px-4 py-3 flex items-center gap-3 state-layer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate" dir={/[֐-׿]/.test(m.description) ? "rtl" : "ltr"}>
+                          {m.description}
                         </div>
+                        <MacroLine lang={lang} macros={m} className="mt-0.5" />
                       </div>
-                      <div className="flex flex-col items-end shrink-0">
-                        <span className="text-[11px] text-white/60 bg-bg-elev border border-border rounded-full px-2 py-0.5">
-                          ×{m.count}
-                        </span>
-                        <span className="text-[10px] text-white/30 mt-1">{m.last_date}</span>
-                      </div>
-                    </div>
-                  </button>
-
-                  {open && (
-                    <div className="mt-3 space-y-2">
-                      <input
-                        value={modifier}
-                        onChange={(e) => setModifier(e.target.value)}
-                        placeholder={t(lang, "meal_modifier_placeholder")}
-                        className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
+                      <span className="text-[11px] nums text-white/60 bg-bg-elev border border-border rounded-full px-2 py-0.5 shrink-0">
+                        ×{m.count}
+                      </span>
+                      <ChevronIcon
+                        className={`h-4 w-4 text-white/40 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : "-rotate-90"}`}
+                        aria-hidden="true"
                       />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => quickLog(m, "")}
-                          disabled={quickBusy}
-                          className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-xs font-medium disabled:opacity-40"
-                        >
-                          {quickBusy
-                            ? progress || t(lang, "meal_saving_short")
-                            : `${t(lang, "meal_log_asis")}${isToday ? "" : ` to ${date}`}`}
-                        </button>
-                        <button
-                          onClick={() => quickLog(m, modifier)}
-                          disabled={quickBusy || !modifier.trim()}
-                          className="flex-1 rounded-lg bg-accent-brand py-2 text-xs font-semibold disabled:opacity-40"
-                        >
-                          {quickBusy ? progress || t(lang, "meal_saving_short") : t(lang, "meal_log_with_change")}
-                        </button>
+                    </button>
+
+                    {open && (
+                      <div className="px-4 pb-4 space-y-2.5">
+                        <input
+                          value={modifier}
+                          onChange={(e) => setModifier(e.target.value)}
+                          dir={/[֐-׿]/.test(modifier) ? "rtl" : lang === "he" ? "rtl" : "ltr"}
+                          placeholder={t(lang, "meal_modifier_placeholder")}
+                          className="w-full h-11 rounded-xl bg-bg-elev border border-border px-3 text-[14px]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => quickLog(m, "")}
+                            disabled={quickBusy}
+                            className="flex-1 h-11 rounded-full bg-accent-sec-container text-accent-on-sec-container text-[13px] font-semibold disabled:opacity-40 state-layer"
+                          >
+                            {quickBusy
+                              ? progress || t(lang, "meal_saving_short")
+                              : isToday
+                                ? t(lang, "meal_log_asis")
+                                : `${t(lang, "meal_log_asis")} · ${prettyDate(date, lang)}`}
+                          </button>
+                          <button
+                            onClick={() => quickLog(m, modifier)}
+                            disabled={quickBusy || !modifier.trim()}
+                            className="flex-1 h-11 rounded-full bg-accent-brand text-white text-[13px] font-semibold disabled:opacity-40 state-layer"
+                          >
+                            {quickBusy ? progress || t(lang, "meal_saving_short") : t(lang, "meal_log_with_change")}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-white/45">
+                          {t(lang, "meal_log_with_change_hint")}
+                        </p>
                       </div>
-                      <p className="text-[10px] text-white/40">
-                        {t(lang, "meal_log_with_change_hint")}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
       )}
@@ -2063,10 +2039,7 @@ function ExistingMealRow({
 }) {
   const lang = useLang();
   const [desc, setDesc] = useState(meal.description ?? "");
-  const [cal, setCal] = useState<number>(Math.round(meal.calories ?? 0));
-  const [p, setP] = useState<number>(Math.round(meal.protein_g ?? 0));
-  const [f, setF] = useState<number>(Math.round(meal.fat_g ?? 0));
-  const [c, setC] = useState<number>(Math.round(meal.carbs_g ?? 0));
+  const [macros, setMacros] = useState(() => roundedMacros(meal));
   const [moveDate, setMoveDate] = useState<string>(meal.date);
   const [icon, setIcon] = useState<string | null>(meal.icon ?? null);
   const [busy, setBusy] = useState(false);
@@ -2075,12 +2048,10 @@ function ExistingMealRow({
   // Keep local state in sync if the meal changes underneath (e.g. after a save).
   useEffect(() => {
     setDesc(meal.description ?? "");
-    setCal(Math.round(meal.calories ?? 0));
-    setP(Math.round(meal.protein_g ?? 0));
-    setF(Math.round(meal.fat_g ?? 0));
-    setC(Math.round(meal.carbs_g ?? 0));
+    setMacros(roundedMacros(meal));
     setMoveDate(meal.date);
     setIcon(meal.icon ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date, meal.icon]);
 
   const isMoving = moveDate !== meal.date;
@@ -2092,16 +2063,14 @@ function ExistingMealRow({
   })();
   // Icon is only relevant when there's no image to show.
   const noPhoto = !isProteinPowder && !meal.photo_thumb && !meal.photo_path;
+  const time = loggedTime(meal, lang);
 
   async function handleSave() {
     setBusy(true);
     try {
       await onSave({
         description: desc.trim() || null,
-        calories: cal,
-        protein_g: p,
-        fat_g: f,
-        carbs_g: c,
+        ...macros,
         ...(isMoving && { date: moveDate }),
         ...(noPhoto && { icon: icon || null }),
       });
@@ -2110,91 +2079,92 @@ function ExistingMealRow({
     }
   }
 
+  const thumbBox = "w-14 h-14 rounded-xl bg-bg-elev border border-border flex items-center justify-center shrink-0 overflow-hidden";
+
   return (
-    <div className="card p-3">
-      <div className="flex items-center gap-3">
+    <div className="card">
+      <div className="flex items-center gap-3 p-3">
         {isProteinPowder ? (
-          <div className="w-12 h-12 rounded-lg bg-bg-elev border border-border flex items-center justify-center shrink-0">
-            <ShakerIcon className="h-6 w-6 text-white/50" />
+          <div className={thumbBox}>
+            <ShakerIcon className="h-6 w-6 text-white/55" aria-hidden="true" />
           </div>
         ) : meal.photo_thumb ? (
-          <div className="relative shrink-0">
+          <button
+            onClick={() => setLightboxOpen(true)}
+            aria-label={t(lang, "meal_view_photo")}
+            className="relative shrink-0 rounded-xl"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={meal.photo_thumb}
               alt=""
-              width={48}
-              height={48}
+              width={56}
+              height={56}
               decoding="async"
-              onClick={() => setLightboxOpen(true)}
-              className="w-12 h-12 rounded-lg object-cover bg-bg-elev cursor-zoom-in"
+              className="w-14 h-14 rounded-xl object-cover bg-bg-elev"
             />
             {meal.photo_thumb_2 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent-brand text-[9px] font-bold flex items-center justify-center text-white">
+              <span className="absolute -top-1 -end-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-brand text-[10px] font-bold flex items-center justify-center text-white ring-2 ring-bg-card">
                 2
               </span>
             )}
-          </div>
+          </button>
         ) : meal.photo_path ? (
           <Image
             src={meal.photo_path}
             alt=""
-            width={48}
-            height={48}
+            width={56}
+            height={56}
             quality={55}
-            sizes="48px"
+            sizes="56px"
             loading="lazy"
-            className="w-12 h-12 rounded-lg object-cover bg-bg-elev shrink-0"
+            className="w-14 h-14 rounded-xl object-cover bg-bg-elev shrink-0"
           />
-        ) : meal.icon ? (
-          <div className="w-12 h-12 rounded-lg bg-bg-elev border border-border flex items-center justify-center shrink-0">
-            <MealIcon id={meal.icon} className="h-6 w-6 text-accent-brand" />
-          </div>
         ) : (
-          <div className="w-12 h-12 rounded-lg bg-bg-elev shrink-0" />
+          <div className={thumbBox}>
+            {meal.icon && <MealIcon id={meal.icon} className="h-6 w-6 text-accent-primary" />}
+          </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">
+          <div
+            className="text-sm font-medium truncate"
+            dir={meal.description && /[֐-׿]/.test(meal.description) ? "rtl" : undefined}
+          >
             {meal.description || t(lang, "meal_unnamed")}
           </div>
-          <div className="text-[11px] text-white/50 mt-0.5">
-            {Math.round(meal.calories ?? 0)} kcal · P{Math.round(meal.protein_g ?? 0)}{" "}
-            C{Math.round(meal.carbs_g ?? 0)} F{Math.round(meal.fat_g ?? 0)}
-          </div>
+          <MacroLine lang={lang} macros={meal} className="mt-0.5" />
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={onEditToggle}
-            className="text-[11px] text-accent-brand px-2 py-1"
-          >
-            {isEditing ? t(lang, "meal_cancel") : t(lang, "meal_edit")}
-          </button>
-          <button
-            onClick={onDelete}
-            className="text-[11px] text-red-400/80 px-2 py-1"
-          >
-            {t(lang, "meal_delete")}
-          </button>
-        </div>
+        {time && <span className="text-[11px] nums text-white/40 shrink-0">{time}</span>}
+        <IconButton
+          label={isEditing ? t(lang, "meal_cancel") : t(lang, "meal_edit")}
+          onClick={onEditToggle}
+          tone={isEditing ? "tonal" : "plain"}
+          expanded={isEditing}
+        >
+          {isEditing ? <CloseIcon className="h-5 w-5" /> : <PencilIcon className="h-5 w-5" />}
+        </IconButton>
       </div>
 
       {isEditing && (
-        <div className="mt-3 space-y-2 border-t border-border pt-3">
-          <input
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder={t(lang, "meal_description_label")}
-            className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
+        <div className="border-t border-border p-3 space-y-3">
+          <label className="block">
+            <span className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "meal_description_label")}</span>
+            <input
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              dir={/[֐-׿]/.test(desc) ? "rtl" : lang === "he" ? "rtl" : "ltr"}
+              className="w-full h-11 rounded-xl bg-bg-elev border border-border px-3 text-[14px]"
+            />
+          </label>
+          <MacroTiles
+            lang={lang}
+            value={macros}
+            onChange={(k, v) => setMacros((m) => ({ ...m, [k]: v }))}
+            compact
           />
-          <div className="space-y-2">
-            <NumField label={t(lang, "macro_calories")} unit={t(lang, "macro_kcal")} value={cal} onChange={setCal} />
-            <NumField label={t(lang, "macro_protein")} unit="g" value={p} onChange={setP} />
-            <NumField label={t(lang, "macro_fat")} unit="g" value={f} onChange={setF} />
-            <NumField label={t(lang, "macro_carbs")} unit="g" value={c} onChange={setC} />
-          </div>
           {noPhoto && (
-            <div className="rounded-lg bg-bg-elev border border-border px-3 py-2.5 space-y-2">
-              <div className="text-[11px] text-white/50">{t(lang, "meal_pick_icon")}</div>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-white/60">{t(lang, "meal_pick_icon")}</div>
               <div className="grid grid-cols-6 gap-1.5">
                 {MEAL_ICON_IDS.map((id) => {
                   const selected = icon === id;
@@ -2203,10 +2173,12 @@ function ExistingMealRow({
                       key={id}
                       type="button"
                       onClick={() => setIcon(selected ? null : id)}
-                      className={`aspect-square rounded-lg flex items-center justify-center border transition-colors ${
+                      aria-pressed={selected}
+                      aria-label={id}
+                      className={`aspect-square rounded-xl flex items-center justify-center border transition-colors ${
                         selected
-                          ? "bg-accent-brand/20 border-accent-brand text-accent-brand"
-                          : "bg-bg-card border-border text-white/60 hover:text-white"
+                          ? "bg-accent-brand/20 border-accent-brand text-accent-primary"
+                          : "bg-bg-elev border-border text-white/60 hover:text-white"
                       }`}
                     >
                       <MealIcon id={id} className="h-5 w-5" />
@@ -2216,28 +2188,36 @@ function ExistingMealRow({
               </div>
             </div>
           )}
-          <div className="flex items-center gap-2 rounded-lg bg-bg-elev border border-border px-3 py-2">
-            <span className="text-[11px] text-white/50 flex-1">Move to date</span>
+          <label className="flex items-center gap-2 rounded-xl bg-bg-elev border border-border px-3 h-11">
+            <CalendarIcon className="h-4 w-4 text-white/45" aria-hidden="true" />
+            <span className="text-[13px] text-white/60 flex-1">{t(lang, "meal_move_to_date")}</span>
             <input
               type="date"
               value={moveDate}
               onChange={(e) => setMoveDate(e.target.value || meal.date)}
-              className="bg-transparent text-[12px] text-white border-none outline-none"
+              className="bg-transparent text-[13px] text-white border-none outline-none"
             />
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onDelete}
+              className="h-11 rounded-full px-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-red-300 state-layer"
+            >
+              <TrashIcon className="h-4 w-4" aria-hidden="true" />
+              {t(lang, "meal_delete")}
+            </button>
+            <PrimaryButton
+              onClick={handleSave}
+              disabled={busy}
+              className={`flex-1 h-11 ${isMoving ? "!bg-white/10 border border-white/20" : ""}`}
+            >
+              {busy
+                ? t(lang, "meal_saving_short")
+                : isMoving
+                  ? `${t(lang, "meal_move_to")} ${prettyDate(moveDate, lang)}`
+                  : t(lang, "meal_save_changes")}
+            </PrimaryButton>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={busy}
-            className={`w-full rounded-lg py-2 text-xs font-semibold disabled:opacity-40 ${
-              isMoving ? "bg-white/10 border border-white/20 text-white" : "bg-accent-brand"
-            }`}
-          >
-            {busy
-              ? t(lang, "meal_saving_short")
-              : isMoving
-                ? `Move to ${moveDate}`
-                : t(lang, "meal_save_changes")}
-          </button>
         </div>
       )}
 
@@ -2251,29 +2231,32 @@ function ExistingMealRow({
   );
 }
 
-function NumField({
-  label,
-  unit,
-  value,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="rounded-lg bg-bg-elev border border-border px-3 py-2 flex items-center gap-2">
-      <span className="text-[11px] text-white/50 flex-1">{label}</span>
-      <input
-        inputMode="numeric"
-        value={value || ""}
-        onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
-        className="w-20 bg-transparent border-0 text-right text-[13px] focus:outline-none"
-      />
-      <span className="text-[10px] text-white/40 w-6 text-right">{unit}</span>
-    </label>
-  );
+function roundedMacros(m: Pick<ExistingMeal, "calories" | "protein_g" | "fat_g" | "carbs_g">): Macros {
+  return {
+    calories: Math.round(m.calories ?? 0),
+    protein_g: Math.round(m.protein_g ?? 0),
+    fat_g: Math.round(m.fat_g ?? 0),
+    carbs_g: Math.round(m.carbs_g ?? 0),
+  };
+}
+
+/** Local clock time the meal was logged, or null when it was logged on a
+ *  different day than it's filed under (backdated or imported) — the time
+ *  would describe the logging, not the meal. `created_at` is SQLite UTC. */
+function loggedTime(meal: ExistingMeal, lang: Lang): string | null {
+  const iso = meal.created_at.replace(" ", "T");
+  const d = new Date(/Z|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
+  if (Number.isNaN(d.getTime())) return null;
+  const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  if (local !== meal.date) return null;
+  return d.toLocaleTimeString(lang === "he" ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Local YYYY-MM-DD `days` away from `s`. */
+function shiftDate(s: string, days: number): string {
+  const d = new Date(s + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function prettyDate(s: string, lang: Lang): string {
@@ -2331,39 +2314,44 @@ function AiScanOverlay() {
   );
 }
 
-/** Compact 112px thumbnail used in the horizontal photo track once at
- *  least one photo has been picked. Shows the AI scan beam while the meal
- *  is being analyzed, and a × overlay to remove the photo. */
-function PhotoThumb({
+/** Picked photo with tap-to-zoom, the AI scan beam while it's being read,
+ *  and a remove control (omitted once an analysis exists). Fills whatever box
+ *  `className` gives it. */
+function PhotoPreview({
   src,
-  alt,
+  lang,
   analyzing,
   onZoom,
   onRemove,
+  className = "",
 }: {
   src: string;
-  alt: string;
+  lang: Lang;
   analyzing: boolean;
   onZoom: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
+  className?: string;
 }) {
   return (
-    <div className="relative shrink-0 w-28 h-28 rounded-2xl overflow-hidden border border-border">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        onClick={onZoom}
-        className="w-full h-full object-cover cursor-zoom-in"
-      />
-      {analyzing && <AiScanOverlay />}
+    <div className={`relative rounded-2xl overflow-hidden border border-border bg-bg-elev ${className}`}>
       <button
-        onClick={onRemove}
-        aria-label="Remove photo"
-        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/65 text-white text-sm leading-none flex items-center justify-center hover:bg-black/85 transition-colors"
+        onClick={onZoom}
+        aria-label={t(lang, "meal_view_photo")}
+        className="absolute inset-0 w-full h-full cursor-zoom-in"
       >
-        ×
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="w-full h-full object-cover" />
       </button>
+      {analyzing && <AiScanOverlay />}
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          aria-label={t(lang, "meal_remove_photo")}
+          className="absolute top-2 end-2 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+        >
+          <CloseIcon className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }
@@ -2406,14 +2394,18 @@ function DaySummaryCard({
       : `${Math.abs(calLeft).toLocaleString()} ${t(lang, "macro_kcal")} ${t(lang, "meal_over_target")}`;
   const anythingLeft = proteinLeft > 0 || calLeft >= 0;
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border bg-bg-elev px-4 py-2 text-[12px] text-white/70">
-      <span className="nums flex-1 truncate">
+    <div
+      role="status"
+      className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 ps-4 pe-1.5 py-1.5 text-[13px] text-emerald-100"
+    >
+      <CheckCircleIcon className="h-5 w-5 text-emerald-300 shrink-0" aria-hidden="true" />
+      <span className="nums flex-1 min-w-0">
         {[proteinPart, calPart].filter(Boolean).join(" · ")}
         {anythingLeft ? ` ${t(lang, "meal_left_today")}` : ""}
       </span>
-      <button onClick={onDismiss} className="text-white/40 leading-none" aria-label="Dismiss">
-        ×
-      </button>
+      <IconButton label={t(lang, "meal_close")} onClick={onDismiss}>
+        <CloseIcon className="h-4 w-4" />
+      </IconButton>
     </div>
   );
 }
@@ -2442,7 +2434,7 @@ function BatchMealCard({
   disabled: boolean;
   onHint: (v: string) => void;
   onDate: (v: string) => void;
-  onMacro: (k: "calories" | "protein_g" | "fat_g" | "carbs_g", v: number) => void;
+  onMacro: (k: MacroKey, v: number) => void;
   onFractions: (next: number[]) => void;
   onClarifyAnswer: (v: string) => void;
   onClarifySubmit: () => void;
@@ -2459,27 +2451,25 @@ function BatchMealCard({
   const stages = useMemo(() => photoAnalyzeStages(lang), [lang]);
   const stageLabel = useStagedLabel(item.status === "analyzing", stages);
   return (
-    <div className={`card p-3 ${item.status === "saved" ? "opacity-50" : ""}`}>
+    <div className={`card p-3 space-y-3 transition-opacity ${item.status === "saved" ? "opacity-50" : ""}`}>
       <div className="flex gap-3">
         <div className="relative shrink-0 w-20 h-20">
-          <div className="w-full h-full rounded-xl overflow-hidden border border-border">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={item.photos[0].preview}
-              alt="meal"
-              onClick={onZoom}
-              className="w-full h-full object-cover cursor-zoom-in"
-            />
-            {item.status === "analyzing" && <AiScanOverlay />}
-          </div>
+          <PhotoPreview
+            src={item.photos[0].preview}
+            lang={lang}
+            analyzing={item.status === "analyzing"}
+            onZoom={onZoom}
+            className="w-full h-full"
+          />
           {item.photos[1] && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={item.photos[1].preview}
-              alt="meal, second photo"
+            <button
               onClick={onZoom}
-              className="absolute -bottom-1.5 -right-1.5 w-9 h-9 rounded-lg object-cover border-2 border-bg-card cursor-zoom-in"
-            />
+              aria-label={t(lang, "meal_second_photo")}
+              className="absolute -bottom-1.5 -end-1.5 w-9 h-9 rounded-lg overflow-hidden border-2 border-bg-card"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.photos[1].preview} alt="" className="w-full h-full object-cover" />
+            </button>
           )}
         </div>
         <div className="flex-1 min-w-0 space-y-1.5">
@@ -2496,7 +2486,7 @@ function BatchMealCard({
               <button
                 onClick={onSplit}
                 disabled={disabled}
-                className="text-accent-brand disabled:opacity-40"
+                className="h-8 rounded-full px-2.5 font-medium text-accent-primary disabled:opacity-40 state-layer"
               >
                 {t(lang, "meal_batch_split")}
               </button>
@@ -2507,33 +2497,29 @@ function BatchMealCard({
               type="text"
               value={item.hint}
               onChange={(e) => onHint(e.target.value)}
-              dir={/[֐-׿]/.test(item.hint) ? "rtl" : "ltr"}
+              dir={/[֐-׿]/.test(item.hint) ? "rtl" : lang === "he" ? "rtl" : "ltr"}
               placeholder={t(lang, "meal_batch_hint_placeholder")}
               disabled={disabled}
-              className="w-full rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px]"
+              className="w-full h-11 rounded-xl bg-bg-elev border border-border px-3 text-[13px]"
             />
           )}
           {item.status === "analyzing" && (
-            <div className="text-[13px] text-white/50 pt-1.5">
+            <div className="text-[13px] text-white/60 pt-2">
               <AiThinkingPill label={stageLabel} />
             </div>
           )}
           {item.status === "error" && (
-            <div className="space-y-1.5 pt-1">
-              <div className="text-[12px] text-red-400">{item.error}</div>
-              <button
-                onClick={onRetry}
-                disabled={disabled}
-                className="text-[12px] text-accent-brand disabled:opacity-40"
-              >
+            <div className="space-y-1 pt-1">
+              <div className="text-[12px] text-red-300">{item.error}</div>
+              <TextButton onClick={onRetry} disabled={disabled}>
                 {t(lang, "meal_batch_retry")}
-              </button>
+              </TextButton>
             </div>
           )}
-          {(item.status === "done" || item.status === "saved") && a && item.editing && (
+          {(item.status === "done" || item.status === "saved") && a && (
             <>
               <div
-                className="text-[13px] font-medium leading-snug"
+                className="text-[14px] font-medium leading-snug"
                 dir={/[֐-׿]/.test(a.description) ? "rtl" : "ltr"}
               >
                 {a.description}
@@ -2548,86 +2534,42 @@ function BatchMealCard({
                   compact
                 />
               )}
-              <div className="grid grid-cols-4 gap-1.5">
-                {(
-                  [
-                    ["calories", t(lang, "macro_kcal")],
-                    ["protein_g", "P"],
-                    ["fat_g", "F"],
-                    ["carbs_g", "C"],
-                  ] as const
-                ).map(([k, label]) => (
-                  <label key={k} className="block">
-                    <span className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">{label}</span>
-                    <input
-                      type="number"
-                      value={item.editing![k]}
-                      onChange={(e) => onMacro(k, Number(e.target.value) || 0)}
-                      disabled={disabled || item.status === "saved"}
-                      className="w-full rounded-lg bg-bg-elev border border-border px-1.5 py-1.5 text-[12px] nums text-center"
-                    />
-                  </label>
-                ))}
-              </div>
               {item.hint && (
-                <div className="text-[10px] text-white/35 truncate">“{item.hint}”</div>
+                <div className="text-[11px] text-white/40 truncate">“{item.hint}”</div>
               )}
             </>
           )}
         </div>
-        {item.status !== "saved" && (
-          <button
-            onClick={onRemove}
-            disabled={disabled}
-            aria-label="Remove"
-            className="shrink-0 self-start w-6 h-6 rounded-full bg-black/40 text-white/70 text-sm leading-none flex items-center justify-center disabled:opacity-40"
-          >
-            ×
-          </button>
-        )}
-        {item.status === "saved" && (
-          <span className="shrink-0 self-start text-emerald-400 text-sm">✓</span>
+        {item.status === "saved" ? (
+          <CheckCircleIcon className="h-6 w-6 text-emerald-400 shrink-0 m-2.5" aria-hidden="true" />
+        ) : (
+          <IconButton label={t(lang, "meal_remove_photo")} onClick={onRemove} disabled={disabled}>
+            <CloseIcon className="h-4 w-4" />
+          </IconButton>
         )}
       </div>
 
+      {(item.status === "done" || item.status === "saved") && a && item.editing && (
+        <MacroTiles
+          lang={lang}
+          value={item.editing}
+          onChange={onMacro}
+          disabled={disabled || item.status === "saved"}
+          compact
+        />
+      )}
+
       {/* Clarifying question — same flow as the single-meal analysis */}
       {item.status === "done" && a?.clarifying_question && (
-        <div className="mt-2.5 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2.5 space-y-1.5">
-          <div className="text-[11px] font-medium text-amber-300">
-            {t(lang, "meal_clarify_label")}
-          </div>
-          <div
-            className="text-[12px] text-white/80"
-            dir={/[֐-׿]/.test(a.clarifying_question) ? "rtl" : "ltr"}
-          >
-            {a.clarifying_question}
-          </div>
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              value={item.clarifyAnswer}
-              onChange={(e) => onClarifyAnswer(e.target.value)}
-              dir={/[֐-׿]/.test(item.clarifyAnswer) ? "rtl" : "ltr"}
-              placeholder={t(lang, "meal_clarify_placeholder")}
-              disabled={disabled}
-              className="flex-1 min-w-0 rounded-lg bg-bg-elev border border-border px-2.5 py-1.5 text-[12px]"
-            />
-            <button
-              onClick={onClarifySubmit}
-              disabled={disabled || !item.clarifyAnswer.trim()}
-              className="rounded-lg bg-accent-brand px-3 py-1.5 text-[12px] font-semibold disabled:opacity-40"
-            >
-              {t(lang, "meal_clarify_update")}
-            </button>
-            <button
-              onClick={onClarifySkip}
-              disabled={disabled}
-              className="rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-white/60 disabled:opacity-40"
-            >
-              {t(lang, "meal_clarify_skip")}
-            </button>
-          </div>
-        </div>
+        <ClarifyCard
+          lang={lang}
+          question={a.clarifying_question}
+          answer={item.clarifyAnswer}
+          onAnswer={onClarifyAnswer}
+          onSubmit={onClarifySubmit}
+          onSkip={onClarifySkip}
+          disabled={disabled}
+        />
       )}
     </div>
   );
@@ -2714,6 +2656,7 @@ function AiThinkingPill({ label }: { label: string }) {
 }
 
 function ImageLightbox({ src, onClose }: { src: string | string[]; onClose: () => void }) {
+  const lang = useLang();
   const srcs = Array.isArray(src) ? src : [src];
 
   // Make the hardware/browser Back button close the image instead of leaving
@@ -2746,9 +2689,10 @@ function ImageLightbox({ src, onClose }: { src: string | string[]; onClose: () =
     >
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none"
+        aria-label={t(lang, "meal_close")}
+        className="absolute top-[calc(env(safe-area-inset-top)+1rem)] end-4 w-11 h-11 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
       >
-        ×
+        <CloseIcon className="h-5 w-5" />
       </button>
       <div
         className="flex gap-3 max-w-full max-h-full overflow-x-auto snap-x snap-mandatory"
@@ -2787,6 +2731,7 @@ function CoachReviewModal({
   const [askBusy, setAskBusy] = useState(false);
   const [acceptBusy, setAcceptBusy] = useState<number | null>(null);
   const [acceptAllBusy, setAcceptAllBusy] = useState(false);
+  const lang = useLang();
 
   const changedCount =
     reviewData?.reviews.filter((r) => r.changed && !accepted.has(r.meal_id)).length ?? 0;
@@ -2833,15 +2778,12 @@ function CoachReviewModal({
       {/* Header */}
       <div className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-border shrink-0">
         <div>
-          <div className="text-[10px] text-white/40 uppercase tracking-wider">AI Coach</div>
-          <h2 className="text-xl font-bold mt-0.5">Meal Review</h2>
+          <div className="text-[11px] text-white/45 uppercase tracking-wider">{t(lang, "review_ai_coach")}</div>
+          <h2 className="text-xl font-bold mt-0.5">{t(lang, "review_title")}</h2>
         </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-bg-elev border border-border text-white/50 hover:text-white/90 text-lg leading-none"
-        >
-          ×
-        </button>
+        <IconButton label={t(lang, "meal_close")} onClick={onClose} tone="tonal">
+          <CloseIcon className="h-5 w-5" />
+        </IconButton>
       </div>
 
       {/* Scrollable content */}
@@ -2850,7 +2792,7 @@ function CoachReviewModal({
           /* Loading skeletons */
           <div className="space-y-4 pt-2">
             <p className="text-sm text-white/40 text-center animate-pulse">
-              Coach is reviewing your meals…
+              {t(lang, "review_loading")}
             </p>
             {[0, 1, 2].map((i) => (
               <div key={i} className="card p-4 space-y-3">
@@ -2875,7 +2817,7 @@ function CoachReviewModal({
             {/* Summary */}
             <div className="card p-4 border-accent-brand/25">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-accent-brand mb-1.5">
-                Summary
+                {t(lang, "review_summary")}
               </div>
               <p className="text-sm text-white/80 leading-snug">{reviewData.summary}</p>
             </div>
@@ -2902,7 +2844,7 @@ function CoachReviewModal({
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold truncate">
-                        {r.description || "(unnamed)"}
+                        {r.description || t(lang, "meal_unnamed")}
                       </div>
                       <div
                         className={`text-[11px] mt-0.5 ${
@@ -2913,8 +2855,9 @@ function CoachReviewModal({
                               : "text-white/40"
                         }`}
                       >
-                        {r.confidence} confidence ·{" "}
-                        {r.changed ? "corrections suggested" : "looks accurate"}
+                        {t(lang, r.confidence === "high" ? "meal_conf_high" : r.confidence === "medium" ? "meal_conf_medium" : "meal_conf_low")}
+                        {" · "}
+                        {r.changed ? t(lang, "review_changed") : t(lang, "review_accurate")}
                       </div>
                     </div>
                     {isAccepted && (
@@ -2926,10 +2869,10 @@ function CoachReviewModal({
                   <div className="grid grid-cols-4 gap-1.5">
                     {(
                       [
-                        { label: "Cal", cur: r.current.calories, sug: r.suggested.calories },
-                        { label: "Pro", cur: r.current.protein_g, sug: r.suggested.protein_g },
-                        { label: "Fat", cur: r.current.fat_g, sug: r.suggested.fat_g },
-                        { label: "Carbs", cur: r.current.carbs_g, sug: r.suggested.carbs_g },
+                        { label: t(lang, "macro_calories"), cur: r.current.calories, sug: r.suggested.calories },
+                        { label: t(lang, "macro_protein"), cur: r.current.protein_g, sug: r.suggested.protein_g },
+                        { label: t(lang, "macro_fat"), cur: r.current.fat_g, sug: r.suggested.fat_g },
+                        { label: t(lang, "macro_carbs"), cur: r.current.carbs_g, sug: r.suggested.carbs_g },
                       ] as const
                     ).map(({ label, cur, sug }) => {
                       const diff = sug - cur;
@@ -2939,7 +2882,7 @@ function CoachReviewModal({
                           key={label}
                           className="rounded-lg bg-bg-elev border border-border px-1.5 py-2 text-center"
                         >
-                          <div className="text-[9px] text-white/40 uppercase mb-1">{label}</div>
+                          <div className="text-[10px] text-white/45 mb-1 truncate">{label}</div>
                           {significant ? (
                             <>
                               <div className="text-[10px] text-white/25 line-through leading-tight">
@@ -2984,7 +2927,7 @@ function CoachReviewModal({
                         }}
                         className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-white/60"
                       >
-                        Ask about this
+                        {t(lang, "review_ask")}
                       </button>
                       {r.changed && (
                         <button
@@ -2992,7 +2935,7 @@ function CoachReviewModal({
                           disabled={acceptBusy === r.meal_id}
                           className="flex-1 rounded-lg bg-accent-brand py-2 text-[12px] font-semibold disabled:opacity-40"
                         >
-                          {acceptBusy === r.meal_id ? "Saving…" : "Accept"}
+                          {acceptBusy === r.meal_id ? t(lang, "meal_saving_short") : t(lang, "review_accept")}
                         </button>
                       )}
                     </div>
@@ -3007,7 +2950,7 @@ function CoachReviewModal({
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) handleAsk(r.meal_id);
                         }}
-                        placeholder="Ask about this meal…"
+                        placeholder={t(lang, "review_ask_placeholder")}
                         className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-white/30"
                         autoFocus
                       />
@@ -3016,7 +2959,7 @@ function CoachReviewModal({
                         disabled={askBusy || !askText.trim()}
                         className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
                       >
-                        {askBusy ? "…" : "Send"}
+                        {askBusy ? "…" : t(lang, "review_send")}
                       </button>
                     </div>
                   )}
@@ -3037,12 +2980,12 @@ function CoachReviewModal({
               className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
             >
               {acceptAllBusy
-                ? "Applying…"
-                : `Accept All ${changedCount} Change${changedCount !== 1 ? "s" : ""}`}
+                ? t(lang, "review_applying")
+                : `${t(lang, "review_accept_all")} (${changedCount})`}
             </button>
           ) : (
             <div className="text-center text-sm text-green-400/80 py-1">
-              All macros look accurate ✓
+              {t(lang, "review_all_accurate")} ✓
             </div>
           )}
         </div>
@@ -3051,27 +2994,462 @@ function CoachReviewModal({
   );
 }
 
-function MacroEdit({
+// ---------------------------------------------------------------------------
+// Logger building blocks. Sizes follow the touch-target floor (44px+ for
+// anything tappable); spacing and direction use logical properties
+// (start/end, ps/pe) so the Hebrew layout mirrors without per-element fixes.
+// ---------------------------------------------------------------------------
+
+type Macros = { calories: number; protein_g: number; fat_g: number; carbs_g: number };
+type MacroKey = keyof Macros;
+
+const MACRO_FIELDS: { key: MacroKey; label: TKey; unit: TKey | null; dot: string }[] = [
+  { key: "calories", label: "macro_calories", unit: "macro_kcal", dot: "bg-accent-cal" },
+  { key: "protein_g", label: "macro_protein", unit: null, dot: "bg-accent-protein" },
+  { key: "fat_g", label: "macro_fat", unit: null, dot: "bg-accent-fat" },
+  { key: "carbs_g", label: "macro_carbs", unit: null, dot: "bg-accent-carbs" },
+];
+
+/** Four editable macro tiles, color-keyed to the Home rings. */
+function MacroTiles({
+  lang,
   label,
-  unit,
   value,
   onChange,
+  disabled,
+  compact,
 }: {
-  label: string;
-  unit: string;
-  value: number;
-  onChange: (v: number) => void;
+  lang: Lang;
+  label?: string;
+  value: Macros;
+  onChange: (k: MacroKey, v: number) => void;
+  disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-white/70 w-20">{label}</span>
-      <input
-        inputMode="numeric"
-        value={value || ""}
-        onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
-        className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-right text-[15px]"
-      />
-      <span className="text-xs text-white/40 w-10">{unit}</span>
+    <fieldset disabled={disabled} className="space-y-2 min-w-0">
+      {label && <div className="text-sm font-semibold">{label}</div>}
+      <div className="grid grid-cols-4 gap-2">
+        {MACRO_FIELDS.map((f) => (
+          <label
+            key={f.key}
+            className={`min-w-0 rounded-xl bg-bg-elev border border-border flex flex-col items-center focus-within:border-accent-primary/60 transition-colors ${
+              compact ? "px-1.5 pt-1.5 pb-1" : "px-2 pt-2.5 pb-2"
+            }`}
+          >
+            <span className="flex items-center gap-1 text-[11px] text-white/55 max-w-full">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
+              <span className="truncate">{t(lang, f.label)}</span>
+            </span>
+            <input
+              inputMode="decimal"
+              value={value[f.key] || ""}
+              placeholder="0"
+              onChange={(e) => onChange(f.key, Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
+              className={`w-full bg-transparent text-center font-semibold nums focus:outline-none placeholder:text-white/25 ${
+                compact ? "text-base py-0.5" : "text-xl py-1"
+              }`}
+            />
+            <span className="text-[10px] text-white/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Read-only version of MacroTiles, for fixed-recipe items. */
+function MacroSummary({ lang, macros }: { lang: Lang; macros: Macros }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {MACRO_FIELDS.map((f) => (
+        <div key={f.key} className="min-w-0 rounded-xl bg-bg-elev border border-border px-2 py-2.5 flex flex-col items-center">
+          <span className="flex items-center gap-1 text-[11px] text-white/55 max-w-full">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
+            <span className="truncate">{t(lang, f.label)}</span>
+          </span>
+          <span className="text-lg font-semibold nums mt-0.5">{macros[f.key]}</span>
+          <span className="text-[10px] text-white/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+        </div>
+      ))}
     </div>
   );
+}
+
+/** "540 kcal · P 32 · F 18 · C 60" with the letters localized and colored. */
+function MacroLine({
+  lang,
+  macros,
+  className = "",
+}: {
+  lang: Lang;
+  macros: { calories: number | null; protein_g: number | null; fat_g: number | null; carbs_g: number | null };
+  className?: string;
+}) {
+  const parts: { key: TKey; v: number | null; color: string }[] = [
+    { key: "macro_p_short", v: macros.protein_g, color: "text-accent-protein" },
+    { key: "macro_f_short", v: macros.fat_g, color: "text-accent-fat" },
+    { key: "macro_c_short", v: macros.carbs_g, color: "text-accent-carbs" },
+  ];
+  return (
+    <div className={`text-[12px] text-white/55 nums flex flex-wrap items-center gap-x-2 ${className}`}>
+      <span className="text-white/80 font-medium">
+        {Math.round(macros.calories ?? 0)} {t(lang, "macro_kcal")}
+      </span>
+      {parts.map((p) => (
+        <span key={p.key}>
+          <span className={`font-semibold ${p.color}`}>{t(lang, p.key)}</span> {Math.round(p.v ?? 0)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Day-so-far progress against a target, for the header. */
+function DayMeter({
+  label,
+  value,
+  target,
+  unit,
+  barClass,
+}: {
+  label: string;
+  value: number;
+  target: number;
+  unit: string;
+  barClass: string;
+}) {
+  const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0;
+  const over = target > 0 && value > target;
+  return (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2 text-[12px]">
+        <span className="text-white/55 truncate">{label}</span>
+        <span className={`nums ${over ? "text-amber-300" : "text-white/80"}`}>
+          <span className="font-semibold">{Math.round(value).toLocaleString()}</span>
+          <span className="text-white/40"> / {Math.round(target).toLocaleString()} {unit}</span>
+        </span>
+      </div>
+      <div
+        className="mt-1.5 h-1.5 rounded-full bg-bg-elev overflow-hidden"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(target)}
+        aria-valuenow={Math.round(value)}
+      >
+        <div className={`h-full rounded-full transition-[width] duration-500 ${over ? "bg-amber-400" : barClass}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceChip({ lang, confidence }: { lang: Lang; confidence: "low" | "medium" | "high" }) {
+  const tone =
+    confidence === "high"
+      ? "text-emerald-300 bg-emerald-400/10 border-emerald-400/25"
+      : confidence === "medium"
+        ? "text-amber-300 bg-amber-400/10 border-amber-400/25"
+        : "text-white/60 bg-bg-elev border-border";
+  const key: TKey =
+    confidence === "high" ? "meal_conf_high" : confidence === "medium" ? "meal_conf_medium" : "meal_conf_low";
+  return (
+    <span className={`text-[11px] font-medium rounded-full border px-2.5 py-1 whitespace-nowrap ${tone}`}>
+      {t(lang, key)}
+    </span>
+  );
+}
+
+/** The analyzer's follow-up question, answered inline to re-run with context. */
+function ClarifyCard({
+  lang,
+  question,
+  answer,
+  onAnswer,
+  onSubmit,
+  onSkip,
+  busy,
+  disabled,
+}: {
+  lang: Lang;
+  question: string;
+  answer: string;
+  onAnswer: (v: string) => void;
+  onSubmit: () => void;
+  onSkip: () => void;
+  busy?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-3.5 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-300">
+          <SparkIcon className="h-4 w-4" aria-hidden="true" />
+          {t(lang, "meal_clarify_label")}
+        </div>
+        <TextButton onClick={onSkip} disabled={disabled}>
+          {t(lang, "meal_clarify_skip")}
+        </TextButton>
+      </div>
+      <p className="text-[14px] text-white/85 leading-snug" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
+        {question}
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={answer}
+          onChange={(e) => onAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) onSubmit();
+          }}
+          dir={/[֐-׿]/.test(answer) ? "rtl" : lang === "he" ? "rtl" : "ltr"}
+          placeholder={t(lang, "meal_clarify_placeholder")}
+          disabled={disabled}
+          className="flex-1 min-w-0 h-11 rounded-xl bg-bg-elev border border-border px-3 text-[14px] focus:outline-none focus:border-accent-primary/60"
+        />
+        <button
+          onClick={onSubmit}
+          disabled={disabled || busy || !answer.trim()}
+          className="h-11 rounded-xl bg-accent-brand px-4 text-[13px] font-semibold text-white disabled:opacity-40 state-layer"
+        >
+          {busy ? <Spinner /> : t(lang, "meal_clarify_update")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Free-text meal description / photo notes. Direction follows the text
+ *  itself, so Hebrew typed into the English UI (or vice versa) reads right. */
+function DescribeField({
+  lang,
+  label,
+  placeholder,
+  value,
+  onChange,
+  rows = 3,
+}: {
+  lang: Lang;
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-white/60 mb-1.5">{label}</span>
+      <textarea
+        value={value}
+        dir={value ? (/[֐-׿]/.test(value) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className="w-full rounded-xl bg-bg-elev border border-border px-4 py-3 text-[15px] resize-none focus:outline-none focus:border-accent-primary/60 transition-colors"
+      />
+    </label>
+  );
+}
+
+function PrimaryButton({
+  onClick,
+  disabled,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={clsx(
+        "h-12 rounded-full bg-accent-brand px-5 text-sm font-semibold text-white inline-flex items-center justify-center gap-2 disabled:opacity-40 state-layer",
+        className ?? "w-full",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TonalButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="h-12 min-w-0 rounded-xl bg-accent-sec-container text-accent-on-sec-container px-3 text-[13px] font-semibold inline-flex items-center justify-center gap-2 state-layer"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChipButton({
+  onClick,
+  disabled,
+  size = "md",
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  size?: "sm" | "md";
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`shrink-0 rounded-full border border-border bg-bg-elev text-white/85 inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-50 state-layer ${
+        size === "sm" ? "h-9 px-3 text-[12px]" : "h-11 px-4 text-[13px]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TextButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="h-10 rounded-full px-3 text-[13px] font-medium text-accent-primary disabled:opacity-40 state-layer"
+    >
+      {children}
+    </button>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  tone = "plain",
+  size = "md",
+  expanded,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "plain" | "tonal";
+  size?: "md" | "lg";
+  expanded?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      aria-expanded={expanded}
+      className={clsx(
+        "shrink-0 rounded-full inline-flex items-center justify-center disabled:opacity-30 state-layer",
+        size === "lg" ? "w-12 h-12" : "w-11 h-11",
+        tone === "tonal"
+          ? "bg-accent-sec-container text-accent-on-sec-container"
+          : "text-white/70 hover:text-white",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Save/discard bar that stays reachable above the bottom nav while you
+ *  scroll a long analysis or batch. */
+function StickyActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sticky z-10 bottom-[calc(var(--nav-h)+env(safe-area-inset-bottom)+0.75rem)] md:bottom-4 flex items-center gap-2 rounded-full bg-bg-card/90 backdrop-blur border border-border p-1.5 shadow-elev">
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-[13px] font-semibold uppercase tracking-wide text-white/55">{children}</h2>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white/85 animate-spin"
+      aria-hidden="true"
+    />
+  );
+}
+
+// Outline icons, 24px grid, 1.8 stroke — one style across the page.
+function Svg(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    />
+  );
+}
+/** Points toward the start edge in LTR (‹); rotate for other directions. */
+function ChevronIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="m15 18-6-6 6-6" /></Svg>;
+}
+function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></Svg>;
+}
+function CameraIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13" r="4" />
+    </Svg>
+  );
+}
+function GalleryIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></Svg>;
+}
+function StackIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><rect x="7" y="7" width="14" height="14" rx="2" /><path d="M3 17V5a2 2 0 0 1 2-2h12" /></Svg>;
+}
+function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M12 5v14M5 12h14" /></Svg>;
+}
+function PencilIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></Svg>;
+}
+function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Svg>;
+}
+function CloseIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M18 6 6 18M6 6l12 12" /></Svg>;
+}
+function CheckCircleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" /></Svg>;
+}
+function AlertIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></Svg>;
+}
+function BoltIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></Svg>;
+}
+function SparkIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></Svg>;
 }

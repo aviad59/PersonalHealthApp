@@ -35,18 +35,19 @@ export default function ItemPortions({
               <span className="min-w-0" dir={/[֐-׿]/.test(it.name) ? "rtl" : "ltr"}>
                 {it.name} <span className="text-white/40">({it.portion})</span>
               </span>
-              <span className="shrink-0 nums">{Math.round(it.calories * f)} kcal</span>
+              <span className="shrink-0 nums">{Math.round(it.calories * f)} {t(lang, "macro_kcal")}</span>
             </div>
-            <div className="flex gap-1 mt-1">
+            <div className="flex gap-1.5 mt-1.5">
               {PORTION_STEPS.map((step) => (
                 <button
                   key={step}
                   type="button"
                   disabled={disabled}
                   onClick={() => onChange(fractions.map((x, j) => (j === i ? step : x)))}
-                  className={`rounded-full border px-2.5 py-0.5 text-[11px] leading-5 disabled:opacity-40 ${
+                  aria-pressed={f === step}
+                  className={`h-8 min-w-[2.5rem] rounded-full border px-2.5 text-[12px] disabled:opacity-40 transition-colors ${
                     f === step
-                      ? "border-accent-brand bg-accent-brand/20 text-white"
+                      ? "border-accent-brand bg-accent-brand/20 text-white font-semibold"
                       : "border-border bg-bg-elev text-white/55"
                   }`}
                 >
