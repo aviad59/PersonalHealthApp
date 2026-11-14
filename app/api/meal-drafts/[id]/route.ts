@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 const PatchSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   note: z.string().max(2000).optional(),
+  // A ready draft's analysis after a single-item fix in the inbox.
+  analysis: z
+    .object({ description: z.string(), items: z.array(z.any()).max(40), total: z.any() })
+    .passthrough()
+    .optional(),
 });
 
 function parseId(raw: string): number | null {
@@ -29,7 +34,11 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
   if (!(await getMealDraft(userId, id))) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  await updateMealDraft(userId, id, parsed.data);
+  const { analysis, ...fields } = parsed.data;
+  await updateMealDraft(userId, id, {
+    ...fields,
+    ...(analysis && { analysis_json: JSON.stringify(analysis) }),
+  });
   const row = await getMealDraft(userId, id);
   return NextResponse.json({ draft: row ? draftDto(row) : null });
 }
