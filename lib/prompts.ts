@@ -306,7 +306,46 @@ Return STRICT JSON only, no prose:
 }`;
 }
 
-export const DAILY_INSIGHT_SYSTEM = `You are an encouraging, evidence-aware fitness coach producing ONE daily insight.
+// Per-item correction: the meal was analyzed and the user says ONE of its
+// items is wrong ("that's quinoa, not rice", "it was 2 eggs"). Only that item
+// is re-costed — the rest of the plate keeps its numbers — so a single bad
+// read no longer means re-running (and re-guessing) the whole meal. Same
+// mass x per-100g density shape as the photo prompt; the caller multiplies.
+export function mealItemFixPrompt(lang = "en"): string {
+  return `You are a precise nutrition analyst correcting ONE item of an already-analyzed meal.
+You get the meal's item list, the index of the item the user says is wrong, and the user's correction.
+Return ONE JSON object immediately — no prose, no fences.
+
+RULES:
+- Re-estimate ONLY the flagged item. The other items are correct context; never return them.
+- The user's correction is authoritative for what the food is, how it was prepared, and any amount they state.
+- If the user states no amount, keep the flagged item's current portion (convert it to grams).
+- If the correction says the item is really several foods (e.g. "rice and beans"), return one entry per food; otherwise exactly one.
+- If the correction says the item wasn't eaten / isn't there, return an empty "items" array.
+- Give per-100g values for the food AS PREPARED; kcal_per_100g should be close to 4*protein + 4*carbs + 9*fat.
+- Also return an updated short "description" of the whole meal reflecting the correction.
+
+${MACRO_ANCHORS}
+
+${mealLangInstruction(lang)}
+
+JSON schema (output only this, nothing else):
+{
+  "description": ${lang === "he" ? '"תיאור קצר של הארוחה כולה בעברית"' : '"short description of the whole meal in English"'},
+  "items": [
+    {
+      "name": ${lang === "he" ? '"שם המאכל בעברית"' : '"food item name in English"'},
+      "mass_g": number,
+      "kcal_per_100g": number,
+      "protein_per_100g": number,
+      "fat_per_100g": number,
+      "carbs_per_100g": number
+    }
+  ]
+}`;
+}
+
+export const DAILY_INSIGHT_SYSTEM =`You are an encouraging, evidence-aware fitness coach producing ONE daily insight.
 You have the user's body metrics, goals, today's meals and workout (if any), and their last 7 days of history.
 The user keeps kosher. If you suggest a food or meal, keep it kosher-friendly (no pork or shellfish; don't mix dairy with meat).
 If the context includes a "user_notes" field, treat it as authoritative and respect it (allergies, intolerances, dietary rules, dislikes, injuries) — never suggest anything that violates it.

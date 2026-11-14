@@ -10,6 +10,7 @@ import { safeFetchJson } from "@/lib/fetch-json";
 import { t, Lang } from "@/lib/i18n";
 import { applyPortions, itemsWithPortions, fullPortions, type Macros, type PortionItem } from "@/lib/portions";
 import ItemPortions from "@/components/ItemPortions";
+import { requestItemFix, applyItemFix } from "@/lib/item-fix";
 
 /** Fired after a snap lands server-side, so an open inbox reloads. */
 export const DRAFTS_CHANGED_EVENT = "meal-drafts-changed";
@@ -147,6 +148,22 @@ export default function MealInbox({
 
   function patchLocal(id: number, patch: Partial<Local>) {
     setLocal((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], ...patch } } : prev));
+  }
+
+  /** Correct one misread item. Saved on the draft so the inbox's reloads
+   *  don't bring the old reading back. */
+  async function fixItem(d: Draft, index: number, prompt: string) {
+    const l = local[d.id];
+    if (!d.analysis || !l) return;
+    const fix = await requestItemFix(d.analysis, index, prompt);
+    const r = applyItemFix(d.analysis, l.fractions, index, fix);
+    const j = await safeFetchJson<{ draft: Draft | null }>(`/api/meal-drafts/${d.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ analysis: r.meal }),
+    });
+    upsert(j.draft ?? { ...d, analysis: r.meal });
+    patchLocal(d.id, { fractions: r.fractions, editing: r.editing });
   }
 
   async function confirmOne(d: Draft): Promise<string | null> {
@@ -314,6 +331,7 @@ export default function MealInbox({
                   onChange={(next) =>
                     patchLocal(d.id, { fractions: next, editing: applyPortions(a.total, a.items ?? [], next) })
                   }
+                  onFix={(i, prompt) => fixItem(d, i, prompt)}
                   lang={lang}
                   disabled={working}
                   compact
