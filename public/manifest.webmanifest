@@ -37,7 +37,22 @@
       "purpose": "maskable"
     }
   ],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "photos", "accept": ["image/*"] }]
+    }
+  },
   "shortcuts": [
+    {
+      "name": "Quick snap",
+      "short_name": "Snap",
+      "description": "Photo + note now, confirm the meal later",
+      "url": "/meals/snap",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
     {
       "name": "Log meal",
       "short_name": "Log",

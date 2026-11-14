@@ -3,12 +3,18 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import clsx from "clsx";
+import Link from "next/link";
 import { safeFetchJson } from "@/lib/fetch-json";
 import { compressImageFile, compressImageThumb } from "@/lib/compress-image";
 import { useLang } from "@/components/LangProvider";
 import { useBackgroundTasks } from "@/components/BackgroundTasks";
 import { MealIcon, MEAL_ICON_IDS } from "@/components/MealIcon";
 import { t, type Lang, type TKey } from "@/lib/i18n";
+import ItemPortions from "@/components/ItemPortions";
+import MealInbox from "@/components/MealInbox";
+import { applyPortions, itemsWithPortions, fullPortions } from "@/lib/portions";
+import { photoTakenAt, localDateKey } from "@/lib/photo-date";
+import { saveToDevice } from "@/lib/save-to-device";
 
 const ANALYZE_TASK = "meal-analyze";
 
@@ -87,24 +93,38 @@ function lsSet(key: string, val: unknown) {
 const ALLIN_WHEY = { cal: 127, protein: 23, fat: 1.2, carbs: 3.6 };
 const PROTEIN_BASES = ["מים", "חלב", "חלב שקדים", "חלב שיבולת שועל", "מיץ תפוזים", "קפה"];
 
-/** One entry in batch-logging mode, where each selected photo becomes its
- *  own meal. Carries the compressed image, the user's optional note, and
- *  the full per-item analysis lifecycle (including a clarifying-question
- *  round, same as the single-meal flow). */
-type BatchItem = {
-  id: number;
+/** A picked photo in batch mode, compressed, with its capture time. */
+type BatchPhoto = {
   preview: string; // compressed data URI for display
   base64: string;
   thumbBase64: string;
   file: File;
+  /** Capture time (EXIF, else file mtime), epoch ms. */
+  ts: number | null;
+};
+
+/** One entry in batch-logging mode — one meal, from one photo or two taken
+ *  moments apart. Carries the compressed images, the day the photos were
+ *  taken, the user's optional note, and the full per-item analysis
+ *  lifecycle (including a clarifying-question round, same as the
+ *  single-meal flow). */
+type BatchItem = {
+  id: number;
+  photos: BatchPhoto[]; // 1–2
+  date: string; // YYYY-MM-DD, from the photo; editable
   hint: string;
   status: "ready" | "analyzing" | "done" | "error" | "saved";
   analysis: Analysis | null;
   editing: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
+  fractions: number[];
   clarifyAnswer: string;
   clarifying: boolean;
   error: string | null;
 };
+
+// Two shots of the same meal (another angle, the label on the back) are
+// taken seconds-to-minutes apart; separate meals are much further apart.
+const BATCH_GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 // Monotonic id source for batch items. The previous `Date.now() + index`
 // scheme could collide (Date.now() was read after per-photo compression,
@@ -114,6 +134,81 @@ let _batchItemSeq = 0;
 function nextBatchItemId(): number {
   _batchItemSeq += 1;
   return _batchItemSeq;
+}
+
+function newBatchItem(photos: BatchPhoto[], date: string, hint = ""): BatchItem {
+  return {
+    id: nextBatchItemId(),
+    photos,
+    date,
+    hint,
+    status: "ready",
+    analysis: null,
+    editing: null,
+    fractions: [],
+    clarifyAnswer: "",
+    clarifying: false,
+    error: null,
+  };
+}
+
+/** Chronological, then one meal per photo — except that a photo taken within
+ *  the window of the previous one joins it (max two photos per meal, the
+ *  analyzer's limit). Photos with no known time each become their own meal
+ *  on the fallback date. */
+function groupBatchPhotos(photos: BatchPhoto[], fallbackDate: string): BatchItem[] {
+  const sorted = [...photos].sort((a, b) => (a.ts ?? Infinity) - (b.ts ?? Infinity));
+  const out: BatchItem[] = [];
+  for (const p of sorted) {
+    const last = out[out.length - 1];
+    const prevTs = last?.photos[last.photos.length - 1].ts;
+    if (
+      last &&
+      last.photos.length < 2 &&
+      p.ts != null &&
+      prevTs != null &&
+      p.ts - prevTs <= BATCH_GROUP_WINDOW_MS
+    ) {
+      last.photos.push(p);
+      continue;
+    }
+    out.push(newBatchItem([p], p.ts != null ? localDateKey(p.ts) : fallbackDate));
+  }
+  return out;
+}
+
+/** By day, then by capture time within the day. */
+function sortBatch(items: BatchItem[]): BatchItem[] {
+  return [...items].sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      (a.photos[0].ts ?? Infinity) - (b.photos[0].ts ?? Infinity),
+  );
+}
+
+// Must match the cache name public/sw.js writes shared photos into.
+const SHARED_PHOTOS_CACHE = "shared-photos";
+
+/** Drain the photos the service worker stashed from a Share → Health. */
+async function takeSharedPhotos(): Promise<File[]> {
+  if (!("caches" in window)) return [];
+  const cache = await caches.open(SHARED_PHOTOS_CACHE);
+  const keys = await cache.keys();
+  const files: File[] = [];
+  for (const req of keys) {
+    const res = await cache.match(req);
+    if (res) {
+      const blob = await res.blob();
+      files.push(
+        new File([blob], decodeURIComponent(res.headers.get("x-name") || "shared.jpg"), {
+          type: blob.type || "image/jpeg",
+          lastModified: Number(res.headers.get("x-last-modified")) || Date.now(),
+        }),
+      );
+    }
+    await cache.delete(req);
+  }
+  return files;
 }
 
 function todayStr() {
@@ -150,6 +245,7 @@ type MealDraft = {
   photoSource: "camera" | "gallery" | null;
   analysis: Analysis | null;
   editing: { calories: number; protein_g: number; fat_g: number; carbs_g: number } | null;
+  fractions: number[];
 };
 let mealDraft: MealDraft | null = null;
 
@@ -225,7 +321,11 @@ export default function LogMealPage() {
     fat_g: number;
     carbs_g: number;
   } | null>(null);
+  // Per-item eaten fraction (1 = all of it), parallel to analysis.items.
+  const [fractions, setFractions] = useState<number[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  // Success line, e.g. "Saved 7 meals across 3 days" after a batch.
+  const [notice, setNotice] = useState<string | null>(null);
   // Shown after a successful save: deterministic "day so far" summary
   // computed from the reloaded meal list + profile targets. Replaces the
   // old LLM-written tip, which kept getting the arithmetic wrong (it
@@ -274,7 +374,7 @@ export default function LogMealPage() {
   const [reviewData, setReviewData] = useState<ReviewResult | null>(null);
 
   // Tap-to-zoom for the photo preview
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | string[] | null>(null);
 
   const loadExisting = useCallback(async (forDate: string) => {
     const ac = new AbortController();
@@ -379,7 +479,11 @@ export default function LogMealPage() {
       setPhotoExt2(d.photoExt2);
       setCompressedFile2(d.compressedFile2);
       setPhotoSource(d.photoSource);
-      if (d.analysis) applyAnalysis(d.analysis);
+      if (d.analysis) {
+        applyAnalysis(d.analysis);
+        if (d.editing) setEditing(d.editing);
+        if (d.fractions.length) setFractions(d.fractions);
+      }
     }
     const done = bg.consume(ANALYZE_TASK);
     if (done?.status === "done" && done.result?.analysis) {
@@ -409,12 +513,13 @@ export default function LogMealPage() {
           photoSource,
           analysis,
           editing,
+          fractions,
         }
       : null;
   }, [
     text, photoPreview, photoBase64, photoThumbBase64, photoExt, compressedFile,
     photoPreview2, photoBase64_2, photoThumbBase64_2, photoExt2, compressedFile2,
-    photoSource, analysis, editing,
+    photoSource, analysis, editing, fractions,
   ]);
 
   // Apply the analysis when the background task finishes while we're on the
@@ -459,25 +564,6 @@ export default function LogMealPage() {
     setPhotoBase64_2(compressed.base64);
     setPhotoThumbBase64_2(thumb.base64);
     setPhotoExt2("jpg");
-  }
-
-  /** Save a freshly-captured photo to the device (Downloads) so the user
-   *  keeps a full-quality copy — a camera capture via <input> isn't added
-   *  to the gallery by the browser, so we offer the file for download. */
-  function saveToDevice(f: File) {
-    try {
-      const url = URL.createObjectURL(f);
-      const a = document.createElement("a");
-      a.href = url;
-      const ext = (f.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-      a.download = `meal-${Date.now()}.${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch {
-      // best-effort — never block logging on the save
-    }
   }
 
   // Camera capture: same as picking one photo into slot 1, but we also save
@@ -593,37 +679,36 @@ export default function LogMealPage() {
   }
 
   // ---- Batch mode: N photos -> N meals ----
+  // Each photo's own capture time decides its day, so a multi-day backlog
+  // can be picked in one go. Shots taken minutes apart (another angle, the
+  // label on the back) are grouped into one meal.
 
-  async function onPickBatch(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  async function addBatchFiles(files: File[]) {
     if (files.length === 0) return;
     setErr(null);
+    setNotice(null);
     setProgress(t(lang, "meal_compress"));
     try {
-      const items = await Promise.all(
-        files.map(async (f, i): Promise<BatchItem> => {
-          const [compressed, thumb] = await Promise.all([
+      const photos = await Promise.all(
+        files.map(async (f, i): Promise<BatchPhoto> => {
+          // EXIF must be read from the original — compression drops it.
+          const [ts, compressed, thumb] = await Promise.all([
+            photoTakenAt(f),
             compressImageFile(f),
             compressImageThumb(f),
           ]);
           const blob = await (await fetch(compressed.dataUri)).blob();
           const compFile = new File([blob], `meal-batch-${i}.jpg`, { type: "image/jpeg" });
           return {
-            id: nextBatchItemId(),
             preview: compressed.dataUri,
             base64: compressed.base64,
             thumbBase64: thumb.base64,
             file: compFile,
-            hint: "",
-            status: "ready",
-            analysis: null,
-            editing: null,
-            clarifyAnswer: "",
-            clarifying: false,
-            error: null,
+            ts,
           };
         }),
       );
+      const items = groupBatchPhotos(photos, date);
       setBatch((prev) => [...(prev ?? []), ...items]);
     } catch (err: any) {
       setErr(err?.message || t(lang, "meal_err_read_photos"));
@@ -633,17 +718,53 @@ export default function LogMealPage() {
     }
   }
 
+  function onPickBatch(e: React.ChangeEvent<HTMLInputElement>) {
+    addBatchFiles(Array.from(e.target.files ?? []));
+  }
+
+  // Photos shared from the Android gallery (Share → Health) are stashed by
+  // the service worker; pick them up into batch mode.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("shared")) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    (async () => {
+      try {
+        const files = await takeSharedPhotos();
+        if (files.length) addBatchFiles(files);
+      } catch {
+        setErr(t(lang, "meal_err_shared_photos"));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function patchBatchItem(id: number, patch: Partial<BatchItem>) {
     setBatch((prev) =>
       prev ? prev.map((it) => (it.id === id ? { ...it, ...patch } : it)) : prev,
     );
   }
 
+  /** Undo an automatic grouping: the second photo becomes its own meal. */
+  function splitBatchItem(id: number) {
+    setBatch((prev) => {
+      if (!prev) return prev;
+      return prev.flatMap((it) => {
+        if (it.id !== id || it.photos.length < 2) return [it];
+        const [a, b] = it.photos;
+        return [
+          newBatchItem([a], it.date, it.hint),
+          newBatchItem([b], b.ts != null ? localDateKey(b.ts) : it.date),
+        ];
+      });
+    });
+  }
+
   async function analyzeBatchItem(item: BatchItem, extraHint?: string) {
     patchBatchItem(item.id, { status: "analyzing", error: null, clarifying: !!extraHint });
     try {
       const fd = new FormData();
-      fd.append("photo", item.file);
+      fd.append("photo", item.photos[0].file);
+      if (item.photos[1]) fd.append("photo2", item.photos[1].file);
       const hint = [item.hint.trim(), extraHint].filter(Boolean).join(". ");
       if (hint) fd.append("hint", hint);
       const j = await safeFetchJson<{ analysis: Analysis }>(
@@ -655,6 +776,7 @@ export default function LogMealPage() {
         clarifying: false,
         clarifyAnswer: "",
         analysis: j.analysis,
+        fractions: fullPortions(j.analysis.items?.length ?? 0),
         editing: {
           calories: j.analysis.total.calories,
           protein_g: j.analysis.total.protein_g,
@@ -691,16 +813,19 @@ export default function LogMealPage() {
     if (!batch) return;
     setBatchBusy(true);
     setErr(null);
+    const savedDays = new Set<string>();
+    let savedCount = 0;
     try {
       // Sequential saves: keeps insert order stable and avoids a burst of
       // concurrent writes for what is at most ~a dozen rows.
-      for (const it of batch) {
+      for (const it of sortBatch(batch)) {
         if (it.status !== "done" || !it.analysis || !it.editing) continue;
+        const [p1, p2] = it.photos;
         await safeFetchJson<{ ok: true; id: number }>("/api/meals", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            date,
+            date: it.date,
             description: it.analysis.description,
             // The user's per-photo note (hint), kept verbatim for the coach.
             note: it.hint.trim() || undefined,
@@ -708,19 +833,29 @@ export default function LogMealPage() {
             protein_g: it.editing.protein_g,
             fat_g: it.editing.fat_g,
             carbs_g: it.editing.carbs_g,
-            items: it.analysis.items,
+            items: itemsWithPortions(it.analysis.items, it.fractions),
             confidence: it.analysis.confidence,
-            photo_base64: it.base64,
-            photo_thumb_base64: it.thumbBase64,
+            photo_base64: p1.base64,
+            photo_thumb_base64: p1.thumbBase64,
             photo_ext: "jpg",
+            photo_base64_2: p2?.base64,
+            photo_thumb_base64_2: p2?.thumbBase64,
+            photo_ext_2: p2 ? "jpg" : undefined,
           }),
         });
         patchBatchItem(it.id, { status: "saved" });
+        savedDays.add(it.date);
+        savedCount += 1;
       }
       await loadExisting(date);
       refreshFrequentMeals();
       setBatch(null);
-      setShowDaySummary(true);
+      if (savedDays.has(date)) setShowDaySummary(true);
+      setNotice(
+        t(lang, "meal_batch_saved")
+          .replace("{n}", String(savedCount))
+          .replace("{d}", String(savedDays.size)),
+      );
     } catch (e: any) {
       // Saved items are already flagged "saved", so a retry only re-sends
       // the ones that didn't make it.
@@ -733,6 +868,7 @@ export default function LogMealPage() {
   function resetNewMealForm() {
     setAnalysis(null);
     setEditing(null);
+    setFractions([]);
     setText("");
     setClarifyAnswer("");
     clearPhoto();
@@ -742,6 +878,7 @@ export default function LogMealPage() {
    *  show what the call actually cost. */
   function applyAnalysis(a: Analysis, meta?: { latencyMs?: number; model?: string }) {
     setAnalysis({ ...a, _latencyMs: meta?.latencyMs, _model: meta?.model });
+    setFractions(fullPortions(a.items?.length ?? 0));
     setEditing({
       calories: a.total.calories,
       protein_g: a.total.protein_g,
@@ -806,13 +943,7 @@ export default function LogMealPage() {
         "/api/meals/analyze",
         { method: "POST", body: fd },
       );
-      setAnalysis(j.analysis as Analysis);
-      setEditing({
-        calories: j.analysis.total.calories,
-        protein_g: j.analysis.total.protein_g,
-        fat_g: j.analysis.total.fat_g,
-        carbs_g: j.analysis.total.carbs_g,
-      });
+      applyAnalysis(j.analysis as Analysis);
       setClarifyAnswer("");
     } catch (e: any) {
       setErr(e.message);
@@ -849,7 +980,7 @@ export default function LogMealPage() {
             protein_g: editing.protein_g,
             fat_g: editing.fat_g,
             carbs_g: editing.carbs_g,
-            items: analysis.items,
+            items: itemsWithPortions(analysis.items, fractions),
             confidence: analysis.confidence,
             photo_base64: photoBase64 ?? undefined,
             photo_thumb_base64: photoThumbBase64 ?? undefined,
@@ -1225,6 +1356,21 @@ export default function LogMealPage() {
         </div>
       </header>
 
+      {/* --- QUICK-SNAP INBOX: snapped with a note, analyzed, awaiting confirm --- */}
+      {!batch && (
+        <MealInbox
+          lang={lang}
+          onZoom={(srcs) => setLightboxSrc(srcs)}
+          onConfirmed={(days) => {
+            refreshFrequentMeals();
+            if (days.includes(date)) {
+              loadExisting(date);
+              setShowDaySummary(true);
+            }
+          }}
+        />
+      )}
+
       {/* --- NEW MEAL: capture (idle) --- */}
       {idle && (
         <section className="card p-4 space-y-4" aria-label={t(lang, "meal_new_meal")}>
@@ -1250,6 +1396,13 @@ export default function LogMealPage() {
               <span className="truncate">{t(lang, "meal_batch_title")}</span>
             </TonalButton>
           </div>
+          <Link
+            href="/meals/snap"
+            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-white/80 flex items-center justify-center gap-2 state-layer"
+          >
+            <BoltIcon className="h-5 w-5 text-accent-primary" aria-hidden="true" />
+            <span className="truncate">{t(lang, "meal_snap_button")}</span>
+          </Link>
 
           <div className="flex items-center gap-3 text-[12px] text-white/45">
             <span className="h-px flex-1 bg-border" />
@@ -1497,37 +1650,53 @@ export default function LogMealPage() {
               {t(lang, "meal_cancel")}
             </TextButton>
           </div>
-          {batch.map((it) => (
-            <BatchMealCard
-              key={it.id}
-              item={it}
-              lang={lang}
-              disabled={batchBusy}
-              onHint={(v) => patchBatchItem(it.id, { hint: v })}
-              onMacro={(k, v) =>
-                patchBatchItem(it.id, {
-                  editing: it.editing ? { ...it.editing, [k]: v } : it.editing,
-                })
-              }
-              onClarifyAnswer={(v) => patchBatchItem(it.id, { clarifyAnswer: v })}
-              onClarifySubmit={() => {
-                if (!it.analysis?.clarifying_question || !it.clarifyAnswer.trim()) return;
-                analyzeBatchItem(it, `${it.analysis.clarifying_question} Answer: ${it.clarifyAnswer.trim()}`);
-              }}
-              onClarifySkip={() =>
-                patchBatchItem(it.id, {
-                  analysis: it.analysis ? { ...it.analysis, clarifying_question: undefined } : it.analysis,
-                })
-              }
-              onRetry={() => analyzeBatchItem(it)}
-              onRemove={() => {
-                setBatch((prev) => {
-                  const next = prev?.filter((x) => x.id !== it.id) ?? null;
-                  return next && next.length > 0 ? next : null;
-                });
-              }}
-              onZoom={() => setLightboxSrc(it.preview)}
-            />
+          {groupByDay(sortBatch(batch)).map(([day, items]) => (
+            <div key={day} className="space-y-2">
+              <div className="text-[11px] font-medium text-white/45 pt-1">
+                {prettyDate(day, lang)} · {items.length}
+              </div>
+              {items.map((it) => (
+                <BatchMealCard
+                  key={it.id}
+                  item={it}
+                  lang={lang}
+                  disabled={batchBusy}
+                  onHint={(v) => patchBatchItem(it.id, { hint: v })}
+                  onDate={(v) => patchBatchItem(it.id, { date: v || it.date })}
+                  onMacro={(k, v) =>
+                    patchBatchItem(it.id, {
+                      editing: it.editing ? { ...it.editing, [k]: v } : it.editing,
+                    })
+                  }
+                  onFractions={(next) =>
+                    it.analysis &&
+                    patchBatchItem(it.id, {
+                      fractions: next,
+                      editing: applyPortions(it.analysis.total, it.analysis.items, next),
+                    })
+                  }
+                  onClarifyAnswer={(v) => patchBatchItem(it.id, { clarifyAnswer: v })}
+                  onClarifySubmit={() => {
+                    if (!it.analysis?.clarifying_question || !it.clarifyAnswer.trim()) return;
+                    analyzeBatchItem(it, `${it.analysis.clarifying_question} Answer: ${it.clarifyAnswer.trim()}`);
+                  }}
+                  onClarifySkip={() =>
+                    patchBatchItem(it.id, {
+                      analysis: it.analysis ? { ...it.analysis, clarifying_question: undefined } : it.analysis,
+                    })
+                  }
+                  onRetry={() => analyzeBatchItem(it)}
+                  onSplit={() => splitBatchItem(it.id)}
+                  onRemove={() => {
+                    setBatch((prev) => {
+                      const next = prev?.filter((x) => x.id !== it.id) ?? null;
+                      return next && next.length > 0 ? next : null;
+                    });
+                  }}
+                  onZoom={() => setLightboxSrc(it.photos.map((p) => p.preview))}
+                />
+              ))}
+            </div>
           ))}
           {batch.some((it) => it.status === "done" && it.analysis?.clarifying_question) && (
             <p className="text-[12px] text-amber-300/85">
@@ -1628,19 +1797,15 @@ export default function LogMealPage() {
                 <div className="text-[11px] font-medium uppercase tracking-wider text-white/45 mb-1.5">
                   {t(lang, "meal_items_found")}
                 </div>
-                <ul className="divide-y divide-border rounded-xl bg-bg-elev border border-border">
-                  {analysis.items.map((it, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 px-3 py-2.5 text-[13px]">
-                      <span className="min-w-0" dir={/[֐-׿]/.test(it.name) ? "rtl" : "ltr"}>
-                        <span className="text-white/85">{it.name}</span>{" "}
-                        <span className="text-white/45">({it.portion})</span>
-                      </span>
-                      <span className="nums text-white/70 shrink-0">
-                        {Math.round(it.calories)} {t(lang, "macro_kcal")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <ItemPortions
+                  items={analysis.items}
+                  fractions={fractions}
+                  lang={lang}
+                  onChange={(next) => {
+                    setFractions(next);
+                    setEditing(applyPortions(analysis.total, analysis.items, next));
+                  }}
+                />
               </div>
             )}
             {analysis.notes && (
@@ -1692,6 +1857,15 @@ export default function LogMealPage() {
         />
       )}
 
+      {notice && (
+        <div role="status" className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 ps-4 pe-1.5 py-1.5 text-[13px] text-emerald-100">
+          <CheckCircleIcon className="h-5 w-5 text-emerald-300 shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">{notice}</span>
+          <IconButton label={t(lang, "meal_close")} onClick={() => setNotice(null)}>
+            <CloseIcon className="h-4 w-4" />
+          </IconButton>
+        </div>
+      )}
       {err && (
         <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">
           <AlertIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -2095,6 +2269,17 @@ function prettyDate(s: string, lang: Lang): string {
   });
 }
 
+/** [day, items] pairs in the order the (already sorted) items arrive. */
+function groupByDay<T extends { date: string }>(items: T[]): [string, T[]][] {
+  const out: [string, T[]][] = [];
+  for (const it of items) {
+    const last = out[out.length - 1];
+    if (last && last[0] === it.date) last[1].push(it);
+    else out.push([it.date, [it]]);
+  }
+  return out;
+}
+
 /** Small scoop/tub icon for the creatine one-tap chip. */
 function CreatineIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -2225,19 +2410,22 @@ function DaySummaryCard({
   );
 }
 
-/** One meal in batch mode: photo thumbnail + per-photo note, then the
- *  analysis result with editable macros and the same clarifying-question
- *  round the single-meal flow gets. */
+/** One meal in batch mode: photo thumbnail(s) + the day it was taken +
+ *  per-meal note, then the analysis result with per-item portions, editable
+ *  macros and the same clarifying-question round the single-meal flow gets. */
 function BatchMealCard({
   item,
   lang,
   disabled,
   onHint,
+  onDate,
   onMacro,
+  onFractions,
   onClarifyAnswer,
   onClarifySubmit,
   onClarifySkip,
   onRetry,
+  onSplit,
   onRemove,
   onZoom,
 }: {
@@ -2245,11 +2433,14 @@ function BatchMealCard({
   lang: Lang;
   disabled: boolean;
   onHint: (v: string) => void;
+  onDate: (v: string) => void;
   onMacro: (k: MacroKey, v: number) => void;
+  onFractions: (next: number[]) => void;
   onClarifyAnswer: (v: string) => void;
   onClarifySubmit: () => void;
   onClarifySkip: () => void;
   onRetry: () => void;
+  onSplit: () => void;
   onRemove: () => void;
   onZoom: () => void;
 }) {
@@ -2262,14 +2453,45 @@ function BatchMealCard({
   return (
     <div className={`card p-3 space-y-3 transition-opacity ${item.status === "saved" ? "opacity-50" : ""}`}>
       <div className="flex gap-3">
-        <PhotoPreview
-          src={item.preview}
-          lang={lang}
-          analyzing={item.status === "analyzing"}
-          onZoom={onZoom}
-          className="w-20 h-20 shrink-0"
-        />
+        <div className="relative shrink-0 w-20 h-20">
+          <PhotoPreview
+            src={item.photos[0].preview}
+            lang={lang}
+            analyzing={item.status === "analyzing"}
+            onZoom={onZoom}
+            className="w-full h-full"
+          />
+          {item.photos[1] && (
+            <button
+              onClick={onZoom}
+              aria-label={t(lang, "meal_second_photo")}
+              className="absolute -bottom-1.5 -end-1.5 w-9 h-9 rounded-lg overflow-hidden border-2 border-bg-card"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.photos[1].preview} alt="" className="w-full h-full object-cover" />
+            </button>
+          )}
+        </div>
         <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2 text-[11px] text-white/45">
+            <input
+              type="date"
+              value={item.date}
+              onChange={(e) => onDate(e.target.value)}
+              disabled={disabled || item.status === "saved"}
+              aria-label={t(lang, "meal_date")}
+              className="bg-transparent border-0 p-0 text-[11px] text-white/60 focus:outline-none"
+            />
+            {item.photos.length > 1 && item.status !== "saved" && item.status !== "analyzing" && (
+              <button
+                onClick={onSplit}
+                disabled={disabled}
+                className="h-8 rounded-full px-2.5 font-medium text-accent-primary disabled:opacity-40 state-layer"
+              >
+                {t(lang, "meal_batch_split")}
+              </button>
+            )}
+          </div>
           {item.status === "ready" && (
             <input
               type="text"
@@ -2302,6 +2524,16 @@ function BatchMealCard({
               >
                 {a.description}
               </div>
+              {item.status === "done" && (
+                <ItemPortions
+                  items={a.items}
+                  fractions={item.fractions}
+                  onChange={onFractions}
+                  lang={lang}
+                  disabled={disabled}
+                  compact
+                />
+              )}
               {item.hint && (
                 <div className="text-[11px] text-white/40 truncate">“{item.hint}”</div>
               )}
@@ -3214,6 +3446,9 @@ function CheckCircleIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 function AlertIcon(props: React.SVGProps<SVGSVGElement>) {
   return <Svg {...props}><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></Svg>;
+}
+function BoltIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <Svg {...props}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></Svg>;
 }
 function SparkIcon(props: React.SVGProps<SVGSVGElement>) {
   return <Svg {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></Svg>;
