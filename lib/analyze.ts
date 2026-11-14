@@ -16,7 +16,9 @@ import {
   mealTextPrompt,
   mealPerceivePrompt,
   mealQuantifyPrompt,
+  mealItemFixPrompt,
 } from "@/lib/prompts";
+import type { PortionItem } from "@/lib/portions";
 
 export type BaseMeal = {
   description?: string;
@@ -451,6 +453,66 @@ function densitiesToAnalysis(d: any): any {
     confidence: d.confidence ?? "medium",
     notes: d.notes ?? "",
     clarifying_question: d.clarifying_question ?? "",
+  };
+}
+
+export type FixItemInput = {
+  /** The meal's items at full portion (what the analyzer returned). */
+  items: PortionItem[];
+  /** Which item the user says is wrong. */
+  index: number;
+  /** The user's correction, e.g. "that's quinoa, not rice". */
+  prompt: string;
+  description?: string;
+  lang?: string;
+};
+
+export type FixItemResult = {
+  /** Replacement(s) for items[index] — usually one, empty if it wasn't eaten. */
+  items: PortionItem[];
+  description: string;
+};
+
+/**
+ * Re-cost a single item of an analyzed meal from the user's correction,
+ * leaving every other item's numbers alone. Text-only on purpose: the user is
+ * telling us what the food is, so there is nothing left to see, and skipping
+ * the image keeps it to a fast, cheap call.
+ */
+export async function fixMealItem(input: FixItemInput): Promise<FixItemResult> {
+  const lang = input.lang || "en";
+  const list = input.items
+    .map(
+      (it, i) =>
+        `${i === input.index ? ">> " : "   "}${i}. ${it.name} (${it.portion}) — ${Math.round(it.calories)} kcal, P${it.protein_g} F${it.fat_g} C${it.carbs_g}`,
+    )
+    .join("\n");
+  const content = `Meal: "${input.description || "(no description)"}"
+Items (the one marked >> is wrong):
+${list}
+
+User's correction for item ${input.index} ("${input.items[input.index].name}"):
+"${input.prompt.trim()}"
+
+Return the JSON for the corrected item only.`;
+
+  const resp = await anthropic().messages.create({
+    model: DEFAULT_ANALYZE_MODEL,
+    max_tokens: 1000,
+    system: mealItemFixPrompt(lang),
+    messages: [{ role: "user", content }],
+  });
+  const raw = resp.content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("\n");
+  const d = extractJson<any>(raw);
+  if (!d || !Array.isArray(d.items)) throw new Error("model returned no items");
+  // Same mass x density arithmetic as the photo path, done in code.
+  const converted = densitiesToAnalysis(d);
+  return {
+    items: converted.items,
+    description: String(d.description || input.description || ""),
   };
 }
 

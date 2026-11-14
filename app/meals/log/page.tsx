@@ -12,7 +12,16 @@ import { MealIcon, MEAL_ICON_IDS } from "@/components/MealIcon";
 import { t, type Lang, type TKey } from "@/lib/i18n";
 import ItemPortions from "@/components/ItemPortions";
 import MealInbox from "@/components/MealInbox";
-import { applyPortions, itemsWithPortions, fullPortions } from "@/lib/portions";
+import {
+  applyPortions,
+  itemsWithPortions,
+  fullPortions,
+  storedItemsToPortions,
+  eatenTotal,
+  replaceItem,
+  type PortionItem,
+} from "@/lib/portions";
+import { requestItemFix, applyItemFix } from "@/lib/item-fix";
 import { photoTakenAt, localDateKey } from "@/lib/photo-date";
 import { saveToDevice } from "@/lib/save-to-device";
 
@@ -334,6 +343,8 @@ export default function LogMealPage() {
   const [goals, setGoals] = useState<{ calories: number; protein_g: number } | null>(null);
   const [clarifyAnswer, setClarifyAnswer] = useState("");
   const [clarifying, setClarifying] = useState(false);
+  // A single-item fix is in flight — saving now would drop it.
+  const [itemFixing, setItemFixing] = useState(false);
 
   // Existing meals state
   const [existing, setExisting] = useState<ExistingMeal[]>([]);
@@ -958,6 +969,37 @@ export default function LogMealPage() {
     setClarifyAnswer("");
   }
 
+  /** One item was misread — re-cost just that item from the user's note and
+   *  splice it in; the rest of the plate keeps its numbers. */
+  async function fixAnalysisItem(index: number, prompt: string) {
+    if (!analysis) return;
+    setItemFixing(true);
+    try {
+      const fix = await requestItemFix(analysis, index, prompt);
+      const r = applyItemFix(analysis, fractions, index, fix);
+      setAnalysis(r.meal);
+      setFractions(r.fractions);
+      setEditing(r.editing);
+    } finally {
+      setItemFixing(false);
+    }
+  }
+
+  async function fixBatchMealItem(id: number, index: number, prompt: string) {
+    const item = batch?.find((x) => x.id === id);
+    if (!item?.analysis) return;
+    const fix = await requestItemFix(item.analysis, index, prompt);
+    setBatch((prev) =>
+      prev
+        ? prev.map((x) => {
+            if (x.id !== id || x.status !== "done" || !x.analysis) return x;
+            const r = applyItemFix(x.analysis, x.fractions, index, fix);
+            return { ...x, analysis: r.meal, fractions: r.fractions, editing: r.editing };
+          })
+        : prev,
+    );
+  }
+
   async function save() {
     if (!analysis || !editing) return;
     setSaving(true);
@@ -1203,7 +1245,12 @@ export default function LogMealPage() {
 
   async function patchMeal(
     id: number,
-    fields: Partial<Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g" | "icon"> & { date: string }>,
+    fields: Partial<
+      Pick<ExistingMeal, "description" | "calories" | "protein_g" | "fat_g" | "carbs_g" | "icon"> & {
+        date: string;
+        items: unknown[];
+      }
+    >,
   ) {
     const r = await fetch(`/api/meals/${id}`, {
       method: "PATCH",
@@ -1675,6 +1722,7 @@ export default function LogMealPage() {
                       editing: applyPortions(it.analysis.total, it.analysis.items, next),
                     })
                   }
+                  onFixItem={(i, prompt) => fixBatchMealItem(it.id, i, prompt)}
                   onClarifyAnswer={(v) => patchBatchItem(it.id, { clarifyAnswer: v })}
                   onClarifySubmit={() => {
                     if (!it.analysis?.clarifying_question || !it.clarifyAnswer.trim()) return;
@@ -1801,10 +1849,12 @@ export default function LogMealPage() {
                   items={analysis.items}
                   fractions={fractions}
                   lang={lang}
+                  disabled={saving || clarifying}
                   onChange={(next) => {
                     setFractions(next);
                     setEditing(applyPortions(analysis.total, analysis.items, next));
                   }}
+                  onFix={fixAnalysisItem}
                 />
               </div>
             )}
@@ -1841,7 +1891,7 @@ export default function LogMealPage() {
             >
               {t(lang, "meal_discard")}
             </button>
-            <PrimaryButton onClick={save} disabled={saving || clarifying} className="flex-1">
+            <PrimaryButton onClick={save} disabled={saving || clarifying || itemFixing} className="flex-1">
               {saving ? progress || t(lang, "meal_saving_short") : saveLabel}
             </PrimaryButton>
           </StickyActions>
@@ -2035,7 +2085,7 @@ function ExistingMealRow({
   isEditing: boolean;
   onEditToggle: () => void;
   onDelete: () => void;
-  onSave: (fields: Partial<ExistingMeal & { date: string }>) => Promise<void>;
+  onSave: (fields: Partial<ExistingMeal & { date: string; items: unknown[] }>) => Promise<void>;
 }) {
   const lang = useLang();
   const [desc, setDesc] = useState(meal.description ?? "");
@@ -2044,15 +2094,61 @@ function ExistingMealRow({
   const [icon, setIcon] = useState<string | null>(meal.icon ?? null);
   const [busy, setBusy] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // The saved per-item breakdown at full portion, so each food can still be
+  // re-portioned or corrected on its own after the meal is logged.
+  const storedItems = useMemo(() => {
+    try {
+      return storedItemsToPortions(meal.items_json ? JSON.parse(meal.items_json) : null);
+    } catch {
+      return null;
+    }
+  }, [meal.items_json]);
+  const [rowItems, setRowItems] = useState(storedItems);
+  const [fixing, setFixing] = useState(false);
+  const [itemsTouched, setItemsTouched] = useState(false);
 
-  // Keep local state in sync if the meal changes underneath (e.g. after a save).
+  // Keep local state in sync if the meal changes underneath (e.g. after a
+  // save), and start every edit from what's saved.
   useEffect(() => {
     setDesc(meal.description ?? "");
     setMacros(roundedMacros(meal));
     setMoveDate(meal.date);
     setIcon(meal.icon ?? null);
+    setRowItems(storedItems);
+    setItemsTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date, meal.icon]);
+  }, [meal.id, meal.description, meal.calories, meal.protein_g, meal.fat_g, meal.carbs_g, meal.date, meal.icon, storedItems, isEditing]);
+
+  /** Move the totals by exactly what the item change is worth, so any manual
+   *  tweak the user made to the meal's totals survives. */
+  function updateItems(items: PortionItem[], fractions: number[]) {
+    if (!rowItems) return;
+    const before = eatenTotal(rowItems.items, rowItems.fractions);
+    const after = eatenTotal(items, fractions);
+    const shift = (v: number, k: keyof Macros) => Math.max(0, Math.round(v + after[k] - before[k]));
+    setMacros((m) => ({
+      calories: shift(m.calories, "calories"),
+      protein_g: shift(m.protein_g, "protein_g"),
+      fat_g: shift(m.fat_g, "fat_g"),
+      carbs_g: shift(m.carbs_g, "carbs_g"),
+    }));
+    setRowItems({ items, fractions });
+    setItemsTouched(true);
+  }
+
+  async function fixRowItem(index: number, prompt: string) {
+    if (!rowItems) return;
+    setFixing(true);
+    try {
+      const fix = await requestItemFix({ description: desc, items: rowItems.items }, index, prompt);
+      const zero = { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 };
+      const r = replaceItem(rowItems.items, zero, rowItems.fractions, index, fix.items);
+      updateItems(r.items, r.fractions);
+      if (fix.description) setDesc(fix.description);
+    } finally {
+      setFixing(false);
+    }
+  }
 
   const isMoving = moveDate !== meal.date;
 
@@ -2072,6 +2168,7 @@ function ExistingMealRow({
         description: desc.trim() || null,
         ...macros,
         ...(isMoving && { date: moveDate }),
+        ...(itemsTouched && rowItems && { items: itemsWithPortions(rowItems.items, rowItems.fractions) }),
         ...(noPhoto && { icon: icon || null }),
       });
     } finally {
@@ -2162,6 +2259,20 @@ function ExistingMealRow({
             onChange={(k, v) => setMacros((m) => ({ ...m, [k]: v }))}
             compact
           />
+          {rowItems && rowItems.items.length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-ink/60">{t(lang, "meal_items_label")}</div>
+              <ItemPortions
+                items={rowItems.items}
+                fractions={rowItems.fractions}
+                onChange={(next) => updateItems(rowItems.items, next)}
+                onFix={fixRowItem}
+                lang={lang}
+                disabled={busy}
+                compact
+              />
+            </div>
+          )}
           {noPhoto && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-ink/60">{t(lang, "meal_pick_icon")}</div>
@@ -2208,8 +2319,8 @@ function ExistingMealRow({
             </button>
             <PrimaryButton
               onClick={handleSave}
-              disabled={busy}
-              className={`flex-1 h-11 ${isMoving ? "!bg-ink/10 border border-ink/20" : ""}`}
+              disabled={busy || fixing}
+              className={`flex-1 h-11 ${isMoving ? "!bg-ink/10 !text-ink border border-ink/20" : ""}`}
             >
               {busy
                 ? t(lang, "meal_saving_short")
@@ -2421,6 +2532,7 @@ function BatchMealCard({
   onDate,
   onMacro,
   onFractions,
+  onFixItem,
   onClarifyAnswer,
   onClarifySubmit,
   onClarifySkip,
@@ -2436,6 +2548,7 @@ function BatchMealCard({
   onDate: (v: string) => void;
   onMacro: (k: MacroKey, v: number) => void;
   onFractions: (next: number[]) => void;
+  onFixItem: (index: number, prompt: string) => Promise<void>;
   onClarifyAnswer: (v: string) => void;
   onClarifySubmit: () => void;
   onClarifySkip: () => void;
@@ -2529,6 +2642,7 @@ function BatchMealCard({
                   items={a.items}
                   fractions={item.fractions}
                   onChange={onFractions}
+                  onFix={onFixItem}
                   lang={lang}
                   disabled={disabled}
                   compact
@@ -2690,7 +2804,7 @@ function ImageLightbox({ src, onClose }: { src: string | string[]; onClose: () =
       <button
         onClick={onClose}
         aria-label={t(lang, "meal_close")}
-        className="absolute top-[calc(env(safe-area-inset-top)+1rem)] end-4 w-11 h-11 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+        className="absolute top-[calc(env(safe-area-inset-top)+1rem)] end-4 w-11 h-11 flex items-center justify-center rounded-full bg-ink/10 text-ink hover:bg-ink/20 transition-colors"
       >
         <CloseIcon className="h-5 w-5" />
       </button>
