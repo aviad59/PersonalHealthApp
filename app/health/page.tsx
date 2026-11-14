@@ -14,20 +14,20 @@ export default function HealthPage() {
           </div>
           <div>
             <div className="font-semibold">Zepp integration</div>
-            <div className="text-xs text-white/50">Scaffold · coming soon</div>
+            <div className="text-xs text-ink/50">Scaffold · coming soon</div>
           </div>
         </div>
-        <div className="text-sm text-white/70 leading-relaxed">
+        <div className="text-sm text-ink/70 leading-relaxed">
           This page is a placeholder for your Zepp wearable data (sleep, HRV, resting heart rate, steps).
           Once you provide the <code className="text-accent-brand">ZEPP_API_KEY</code> and an integration spec, the Insights Engine will factor in:
         </div>
-        <ul className="space-y-1 list-disc list-inside text-white/60 text-sm">
+        <ul className="space-y-1 list-disc list-inside text-ink/60 text-sm">
           <li>Sleep quality &amp; duration vs. training load</li>
           <li>Resting HR trends vs. nutrition / recovery</li>
           <li>Step count as NEAT signal for calorie targets</li>
         </ul>
         <div className="rounded-xl bg-bg-elev border border-border p-4 text-xs">
-          <div className="text-white/60">API key detected:</div>
+          <div className="text-ink/60">API key detected:</div>
           <div className="font-mono mt-1">
             {zeppKey ? "\u2713 ZEPP_API_KEY set" : "\u2717 ZEPP_API_KEY not set"}
           </div>

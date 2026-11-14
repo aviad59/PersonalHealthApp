@@ -133,7 +133,7 @@ export default function SnapPage() {
     <div className="px-5 pt-6 pb-10 space-y-5 md:max-w-3xl md:mx-auto">
       <div>
         <h1 className="text-2xl font-bold">{t(lang, "meal_snap_title")}</h1>
-        <p className="text-sm text-white/60 mt-1">{t(lang, "meal_snap_hint")}</p>
+        <p className="text-sm text-ink/60 mt-1">{t(lang, "meal_snap_hint")}</p>
       </div>
 
       {!photo ? (
@@ -143,12 +143,12 @@ export default function SnapPage() {
           className="w-full rounded-2xl border-2 border-dashed border-border bg-bg-elev py-14 flex flex-col items-center justify-center gap-3 disabled:opacity-50"
         >
           <div className="w-16 h-16 rounded-full bg-bg-card flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="h-8 w-8 text-white/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="h-8 w-8 text-ink/80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
           </div>
-          <div className="text-sm text-white/75">
+          <div className="text-sm text-ink/75">
             {busy ? t(lang, "meal_compress") : t(lang, "meal_snap_take")}
           </div>
         </button>
@@ -173,7 +173,7 @@ export default function SnapPage() {
                   key={i}
                   onClick={() => camera2Ref.current?.click()}
                   disabled={busy}
-                  className="w-28 h-28 rounded-2xl border-2 border-dashed border-border bg-bg-elev text-[12px] text-white/55 disabled:opacity-50"
+                  className="w-28 h-28 rounded-2xl border-2 border-dashed border-border bg-bg-elev text-[12px] text-ink/55 disabled:opacity-50"
                 >
                   {t(lang, "meal_snap_second")}
                 </button>
@@ -182,7 +182,7 @@ export default function SnapPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-white/60 mb-1.5">
+            <label className="block text-xs font-medium text-ink/60 mb-1.5">
               {t(lang, "meal_snap_note_label")}
             </label>
             <textarea
@@ -200,14 +200,14 @@ export default function SnapPage() {
             <button
               onClick={() => cameraRef.current?.click()}
               disabled={busy}
-              className="rounded-full border border-border bg-bg-elev px-4 py-3 text-sm text-white/70 disabled:opacity-40"
+              className="rounded-full border border-border bg-bg-elev px-4 py-3 text-sm text-ink/70 disabled:opacity-40"
             >
               {t(lang, "meal_snap_retake")}
             </button>
             <button
               onClick={save}
               disabled={busy}
-              className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40 text-on-brand"
             >
               {t(lang, "meal_snap_save")}
             </button>
@@ -215,15 +215,15 @@ export default function SnapPage() {
         </div>
       )}
 
-      {flash && <div className="text-sm text-emerald-400">{flash}</div>}
-      {err && <div className="text-sm text-red-400">{err}</div>}
+      {flash && <div className="text-sm text-ok">{flash}</div>}
+      {err && <div className="text-sm text-bad">{err}</div>}
 
       {waiting !== null && waiting > 0 && (
         <Link
           href="/meals/log"
           className="flex items-center justify-between rounded-2xl border border-border bg-bg-elev px-4 py-3 text-sm"
         >
-          <span className="text-white/75">
+          <span className="text-ink/75">
             {t(lang, "meal_snap_waiting").replace("{n}", String(waiting))}
           </span>
           <span className="text-accent-brand">{t(lang, "meal_snap_open_inbox")}</span>

@@ -178,7 +178,7 @@ export default function WeightLogSection({
   if (loading) {
     return (
       <section className="card p-5">
-        <div className="text-sm text-white/60">{t(lang, "weight_title")}…</div>
+        <div className="text-sm text-ink/60">{t(lang, "weight_title")}…</div>
       </section>
     );
   }
@@ -189,11 +189,11 @@ export default function WeightLogSection({
   return (
     <section className="card p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
           {t(lang, "weight_title")}
         </h2>
         {trend && trend.count > 0 && (
-          <span className="text-[11px] text-white/40">
+          <span className="text-[11px] text-ink/40">
             {trend.count} entr{trend.count === 1 ? "y" : "ies"}
           </span>
         )}
@@ -211,13 +211,13 @@ export default function WeightLogSection({
         <button
           onClick={logToday}
           disabled={busy || !input}
-          className="rounded-full bg-accent-brand px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          className="rounded-full bg-accent-brand px-4 py-3 text-sm font-semibold text-on-brand disabled:opacity-40"
         >
           {t(lang, "weight_log_btn")}
         </button>
       </div>
 
-      {err && <div className="text-sm text-red-400">{err}</div>}
+      {err && <div className="text-sm text-bad">{err}</div>}
 
       {/* Trend stats */}
       {trend && trend.count > 0 && (
@@ -243,7 +243,7 @@ export default function WeightLogSection({
         <div className="divide-y divide-border">
           {[...log].reverse().slice(0, 10).map((e) => (
             <div key={e.date} className="flex items-center justify-between py-2.5 gap-3">
-              <div className="text-sm font-medium text-white/70 w-28 shrink-0">
+              <div className="text-sm font-medium text-ink/70 w-28 shrink-0">
                 {e.date === data?.today ? t(lang, "weight_today") : e.date}
               </div>
               {editDate === e.date ? (
@@ -255,17 +255,17 @@ export default function WeightLogSection({
                     onChange={(ev) => setEditVal(ev.target.value.replace(/[^\d.]/g, ""))}
                     className="w-20 rounded-lg bg-bg-elev border border-accent-brand px-2.5 py-1.5 text-sm nums focus:outline-none"
                   />
-                  <span className="text-xs text-white/40">kg</span>
+                  <span className="text-xs text-ink/40">kg</span>
                   <button
                     onClick={saveEdit}
                     disabled={rowBusy}
-                    className="rounded-full bg-accent-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                    className="rounded-full bg-accent-brand px-3 py-1.5 text-xs font-semibold text-on-brand disabled:opacity-40"
                   >
                     {t(lang, "weight_save")}
                   </button>
                   <button
                     onClick={() => setEditDate(null)}
-                    className="text-xs text-white/40 px-1"
+                    className="text-xs text-ink/40 px-1"
                   >
                     {t(lang, "weight_cancel")}
                   </button>
@@ -275,14 +275,14 @@ export default function WeightLogSection({
                   <span className="text-sm font-semibold nums">{e.weight_kg} kg</span>
                   <button
                     onClick={() => startEdit(e)}
-                    className="text-white/35 hover:text-accent-brand p-1"
+                    className="text-ink/35 hover:text-accent-brand p-1"
                     aria-label={t(lang, "weight_edit")}
                   >
                     <PencilIcon className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => removeEntry(e.date)}
-                    className="text-white/30 hover:text-red-400 text-base leading-none px-1"
+                    className="text-ink/30 hover:text-bad text-base leading-none px-1"
                     aria-label="Delete"
                   >
                     ×
@@ -296,15 +296,15 @@ export default function WeightLogSection({
 
       {/* Trend suggestion */}
       {trend?.suggestion && !applied && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
-          <div className="text-[11px] uppercase tracking-wider text-amber-400">
+        <div className="rounded-xl border border-warn/40 bg-warn/5 p-3 space-y-2">
+          <div className="text-[11px] uppercase tracking-wider text-warn">
             {t(lang, "weight_cal_adj")}
           </div>
-          <div className="text-sm text-white/80">{trend.suggestion.reason}</div>
+          <div className="text-sm text-ink/80">{trend.suggestion.reason}</div>
           <button
             onClick={applySuggestion}
             disabled={busy}
-            className="w-full rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 py-2 text-xs font-semibold disabled:opacity-40"
+            className="w-full rounded-lg bg-warn/20 border border-warn/40 text-warn py-2 text-xs font-semibold disabled:opacity-40"
           >
             {busy
               ? t(lang, "weight_applying")
@@ -314,19 +314,19 @@ export default function WeightLogSection({
       )}
 
       {applied && (
-        <div className="rounded-xl border border-green-500/40 bg-green-500/5 p-3 text-sm text-green-300">
+        <div className="rounded-xl border border-ok/40 bg-ok/5 p-3 text-sm text-ok">
           {t(lang, "weight_updated_prefix")} {applied.kcal} kcal/day, {applied.carbs} {t(lang, "weight_updated_carbs")}
         </div>
       )}
 
       {trend && trend.count > 0 && trend.count < 7 && (
-        <div className="text-[11px] text-white/40">
+        <div className="text-[11px] text-ink/40">
           Log a few more days for a smoothed average. Need ~3 weeks of data for a calorie-adjustment suggestion.
         </div>
       )}
 
       {log.length === 0 && (
-        <div className="text-[11px] text-white/40">
+        <div className="text-[11px] text-ink/40">
           No entries yet. Log your weight here regularly — once you have ~3 weeks the app will tell you if calories need to be adjusted to match your goal.
         </div>
       )}
@@ -346,7 +346,7 @@ function PencilIcon(props: React.SVGProps<SVGSVGElement>) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-bg-elev border border-border py-2">
-      <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-ink/40">{label}</div>
       <div className="text-sm font-semibold mt-0.5">{value}</div>
     </div>
   );
@@ -390,7 +390,7 @@ function WeightSpark({ entries }: { entries: Entry[] }) {
           />
         ))}
       </svg>
-      <div className="flex justify-between text-[9px] text-white/40 mt-0.5 px-1">
+      <div className="flex justify-between text-[9px] text-ink/40 mt-0.5 px-1">
         <span>{entries[0].date}</span>
         <span>
           {min.toFixed(1)} – {max.toFixed(1)} kg

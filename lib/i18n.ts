@@ -373,6 +373,10 @@ const en = {
   goal_maintain: "Maintain",
   // Text size
   profile_text_size: "Text size",
+  profile_theme: "Appearance",
+  profile_theme_system: "Auto",
+  profile_theme_light: "Light",
+  profile_theme_dark: "Dark",
   profile_text_sm: "Small",
   profile_text_md: "Default",
   profile_text_lg: "Large",
@@ -748,6 +752,10 @@ const he: typeof en = {
   goal_maintain: "שמירת משקל",
   // Text size
   profile_text_size: "גודל טקסט",
+  profile_theme: "מראה",
+  profile_theme_system: "אוטומטי",
+  profile_theme_light: "בהיר",
+  profile_theme_dark: "כהה",
   profile_text_sm: "קטן",
   profile_text_md: "ברירת מחדל",
   profile_text_lg: "גדול",

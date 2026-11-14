@@ -92,7 +92,7 @@ export default function AppNav() {
               className={`state-layer flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? "text-accent-on-sec-container bg-accent-sec-container"
-                  : "text-white/55 hover:text-white/85"
+                  : "text-ink/55 hover:text-ink/85"
               }`}
             >
               <it.icon className={`h-5 w-5 shrink-0 ${active ? "text-accent-on-sec-container" : ""}`} />
@@ -104,9 +104,9 @@ export default function AppNav() {
 
       {/* Mobile Navigation Bar — matches the Home header: same sky-blue
           gradient, rounded top corners, and glow. */}
-      <nav className="mobile-nav md:hidden fixed bottom-0 left-0 right-0 z-40 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] shadow-[0_-10px_30px_-12px_rgba(14,165,233,0.55)] safe-bottom">
+      <nav className="mobile-nav md:hidden fixed bottom-0 left-0 right-0 z-40 rounded-t-[28px] overflow-hidden bg-brand-gradient shadow-brand safe-bottom">
         {/* soft decorative glow, mirrors the header banner */}
-        <div className="absolute -top-10 -left-8 w-36 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+        <div className="absolute -top-10 -left-8 w-36 h-24 rounded-full bg-on-brand/10 blur-2xl pointer-events-none" />
         <div className="relative mx-auto w-full max-w-md sm:max-w-lg flex justify-between items-center px-1.5 h-[var(--nav-h)]">
           {visible.map((it) => {
             const onRoute = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
@@ -124,24 +124,24 @@ export default function AppNav() {
                     width with a cap so tabs never overflow a narrow phone. */}
                 <span
                   className={`relative flex items-center justify-center h-8 w-full max-w-[3.25rem] rounded-full transition-colors ${
-                    active ? "bg-white/25" : "bg-transparent"
+                    active ? "bg-on-brand/25" : "bg-transparent"
                   }`}
                 >
                   {active && (
                     <span
-                      className="absolute inset-0 rounded-full bg-white/25"
+                      className="absolute inset-0 rounded-full bg-on-brand/25"
                       style={{ animation: "m3-indicator-in 220ms ease" }}
                     />
                   )}
                   <it.icon
                     className={`relative h-[21px] w-[21px] shrink-0 transition-colors ${
-                      active ? "text-white" : "text-white/65"
+                      active ? "text-on-brand" : "text-on-brand/65"
                     }`}
                   />
                 </span>
                 <span
                   className={`max-w-full truncate px-0.5 text-[10px] leading-tight transition-colors ${
-                    active ? "text-white font-semibold" : "text-white/70 font-medium"
+                    active ? "text-on-brand font-semibold" : "text-on-brand/70 font-medium"
                   }`}
                 >
                   {t(lang, it.labelKey)}

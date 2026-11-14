@@ -28,19 +28,19 @@ export default function InsightCard({
           {type === "weekly" ? "Weekly" : "Daily"}
         </span>
         {date && (
-          <span className="text-[11px] text-white/40">{date}</span>
+          <span className="text-[11px] text-ink/40">{date}</span>
         )}
       </div>
-      <h3 className={`font-semibold text-white ${compact ? "text-[15px]" : "text-base"}`}>
+      <h3 className={`font-semibold text-ink ${compact ? "text-[15px]" : "text-base"}`}>
         {headline}
       </h3>
-      <p className="text-sm text-white/70 mt-1 leading-relaxed">{body}</p>
+      <p className="text-sm text-ink/70 mt-1 leading-relaxed">{body}</p>
       {tags && tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-3">
           {tags.map((t) => (
             <span
               key={t}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-bg-elev border border-border text-white/60"
+              className="text-[10px] px-2 py-0.5 rounded-full bg-bg-elev border border-border text-ink/60"
             >
               #{t}
             </span>

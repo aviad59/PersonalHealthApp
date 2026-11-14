@@ -74,14 +74,14 @@ export default function MacroRing({
               <feOffset dx="0" dy="1.2" />
               <feGaussianBlur stdDeviation="1.6" result="offset-blur" />
               <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse" />
-              <feFlood floodColor="#000000" floodOpacity="0.6" result="color" />
+              <feFlood floodColor="#000000" floodOpacity="0.25" result="color" />
               <feComposite operator="in" in="color" in2="inverse" result="shadow" />
               <feComposite operator="over" in="shadow" in2="SourceGraphic" />
             </filter>
             {hasOver && (
               <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#f59e0b" />
-                <stop offset="100%" stopColor="#ef4444" />
+                <stop offset="0%" style={{ stopColor: "rgb(var(--c-warn))" }} />
+                <stop offset="100%" style={{ stopColor: "rgb(var(--c-bad))" }} />
               </linearGradient>
             )}
           </defs>
@@ -91,7 +91,7 @@ export default function MacroRing({
             cx={center}
             cy={center}
             r={baseR}
-            stroke="#1b2029"
+            style={{ stroke: "rgb(var(--c-elev))" }}
             strokeWidth={stroke}
             fill="none"
             filter={`url(#${innerId})`}
@@ -102,14 +102,14 @@ export default function MacroRing({
             cx={center}
             cy={center}
             r={baseR}
-            stroke={color}
             strokeWidth={stroke}
             fill="none"
             strokeDasharray={`${baseDash} ${baseC}`}
             strokeLinecap="round"
             style={{
+              stroke: color,
               transition: "stroke-dasharray 300ms ease",
-              filter: basePct > 0 ? `drop-shadow(0 0 3px ${color}66)` : undefined,
+              filter: basePct > 0 ? `drop-shadow(0 0 3px color-mix(in srgb, ${color} 40%, transparent))` : undefined,
             }}
           />
 
@@ -121,7 +121,7 @@ export default function MacroRing({
                 cx={center}
                 cy={center}
                 r={overR}
-                stroke="#26262b"
+                style={{ stroke: "rgb(var(--c-highest))" }}
                 strokeOpacity={0.7}
                 strokeWidth={overStroke}
                 fill="none"
@@ -144,10 +144,10 @@ export default function MacroRing({
           )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className={`text-sm font-semibold ${hasOver ? "text-amber-300" : "text-white"}`}>
+          <div className={`text-sm font-semibold ${hasOver ? "text-warn" : "text-ink"}`}>
             {Math.round(value)}
           </div>
-          <div className="text-[10px] text-white/50">
+          <div className="text-[10px] text-ink/50">
             / {target}
             {unit}
           </div>
@@ -156,7 +156,7 @@ export default function MacroRing({
       {/* Negative margin pulls the label up over the SVG's transparent
           padding (reserved for the rarely-shown overage ring) so it sits
           right under the ring instead of floating far below. */}
-      <div className="-mt-2 text-[11px] uppercase tracking-wide text-white/60">{label}</div>
+      <div className="-mt-2 text-[11px] uppercase tracking-wide text-ink/60">{label}</div>
     </div>
   );
 }

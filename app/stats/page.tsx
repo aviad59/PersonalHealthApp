@@ -35,10 +35,10 @@ const RANGES = [7, 14, 30] as const;
  *  identity stays consistent: kcal=green, protein=red, carbs=orange,
  *  fat=blue. `base` is used for today's filled bar; `dim` for past days. */
 const METRIC_COLORS = {
-  calories: { base: "#10b981", dim: "rgba(16, 185, 129, 0.55)", ring: "rgba(16, 185, 129, 0.45)" },
-  protein_g: { base: "#ef4444", dim: "rgba(239, 68, 68, 0.55)", ring: "rgba(239, 68, 68, 0.45)" },
-  fat_g: { base: "#3b82f6", dim: "rgba(59, 130, 246, 0.55)", ring: "rgba(59, 130, 246, 0.45)" },
-  carbs_g: { base: "#f59e0b", dim: "rgba(245, 158, 11, 0.55)", ring: "rgba(245, 158, 11, 0.45)" },
+  calories: { base: "rgb(var(--c-cal))", dim: "rgb(var(--c-cal) / 0.55)", ring: "rgb(var(--c-cal) / 0.45)" },
+  protein_g: { base: "rgb(var(--c-protein))", dim: "rgb(var(--c-protein) / 0.55)", ring: "rgb(var(--c-protein) / 0.45)" },
+  fat_g: { base: "rgb(var(--c-fat))", dim: "rgb(var(--c-fat) / 0.55)", ring: "rgb(var(--c-fat) / 0.45)" },
+  carbs_g: { base: "rgb(var(--c-carbs))", dim: "rgb(var(--c-carbs) / 0.55)", ring: "rgb(var(--c-carbs) / 0.45)" },
 } as const;
 type MetricKey = keyof typeof METRIC_COLORS;
 const METRICS: MetricKey[] = ["calories", "protein_g", "fat_g", "carbs_g"];
@@ -147,7 +147,7 @@ export default function StatsPage() {
       <header className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold">{t(lang, "stats_title")}</h1>
-          <p className="text-sm text-white/60 mt-1 nums">
+          <p className="text-sm text-ink/60 mt-1 nums">
             {data
               ? t(lang, "stats_subtitle")
                   .replace("{n}", String(data.daysLogged))
@@ -164,7 +164,7 @@ export default function StatsPage() {
       </header>
 
       {err && (
-        <div className="card p-4 text-sm text-red-400" role="alert">{err}</div>
+        <div className="card p-4 text-sm text-bad" role="alert">{err}</div>
       )}
 
       {loading && !data && <StatsSkeleton />}
@@ -173,7 +173,7 @@ export default function StatsPage() {
         <div className={`space-y-6 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
           {/* Daily averages vs target — tapping a tile charts that metric */}
           <section className="space-y-2.5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
               {t(lang, "stats_avg_title")}
             </h2>
             <div className="grid grid-cols-2 gap-3">
@@ -190,13 +190,13 @@ export default function StatsPage() {
               ))}
             </div>
             {!data.targets && (
-              <p className="text-[12px] text-white/45">{t(lang, "stats_no_target")}</p>
+              <p className="text-[12px] text-ink/45">{t(lang, "stats_no_target")}</p>
             )}
           </section>
 
           {/* Per-day chart */}
           <section ref={chartRef} className="card p-4 space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
               {metricLabel(lang, metric)} {t(lang, "stats_per_day")}
             </h2>
             <Segmented
@@ -225,7 +225,7 @@ export default function StatsPage() {
           {/* Highlights + Daily breakdown */}
           <div className="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
             <section className="space-y-2.5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
                 {t(lang, "stats_highlights")}
               </h2>
               <div className="grid grid-cols-2 gap-3">
@@ -265,7 +265,7 @@ export default function StatsPage() {
             </section>
 
             <section className="space-y-2.5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
                 {t(lang, "stats_breakdown")}
               </h2>
               <div className="card px-4 divide-y divide-border">
@@ -320,7 +320,7 @@ function Segmented<V extends string | number>({
             className={`rounded-full ${size === "sm" ? "h-9 text-[12px]" : "h-10 text-[13px]"} font-medium truncate px-2 transition-colors duration-150 ${
               active
                 ? "bg-accent-sec-container text-accent-on-sec-container"
-                : "text-white/65 hover:text-white"
+                : "text-ink/65 hover:text-ink"
             }`}
           >
             {o.color && (
@@ -344,21 +344,21 @@ function StatsSkeleton() {
       <div className="grid grid-cols-2 gap-3">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="card p-3.5 space-y-2.5">
-            <div className="h-3 w-16 rounded bg-white/10" />
-            <div className="h-6 w-20 rounded bg-white/15" />
-            <div className="h-1.5 w-full rounded-full bg-white/10" />
-            <div className="h-2.5 w-24 rounded bg-white/10" />
+            <div className="h-3 w-16 rounded bg-ink/10" />
+            <div className="h-6 w-20 rounded bg-ink/15" />
+            <div className="h-1.5 w-full rounded-full bg-ink/10" />
+            <div className="h-2.5 w-24 rounded bg-ink/10" />
           </div>
         ))}
       </div>
       <section className="card p-4">
-        <div className="h-3 w-32 rounded bg-white/10 mb-4" />
-        <div className="h-9 w-full rounded-full bg-white/10 mb-4" />
+        <div className="h-3 w-32 rounded bg-ink/10 mb-4" />
+        <div className="h-9 w-full rounded-full bg-ink/10 mb-4" />
         <div className="flex items-end gap-[3px] h-[160px]">
           {Array.from({ length: 14 }).map((_, i) => (
             <div
               key={i}
-              className="flex-1 rounded-t bg-white/10"
+              className="flex-1 rounded-t bg-ink/10"
               style={{ height: `${30 + ((i * 7) % 70)}%` }}
             />
           ))}
@@ -367,8 +367,8 @@ function StatsSkeleton() {
       <section className="card p-4 space-y-3">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="flex items-center justify-between">
-            <div className="h-3 w-2/5 rounded bg-white/10" />
-            <div className="h-3 w-16 rounded bg-white/10" />
+            <div className="h-3 w-2/5 rounded bg-ink/10" />
+            <div className="h-3 w-16 rounded bg-ink/10" />
           </div>
         ))}
       </section>
@@ -395,11 +395,11 @@ function targetStatus(pct: number, metric: MetricKey): Status {
   return { tone: off <= tol.ok ? "ok" : "bad", label: pct < 100 ? "under" : "over" };
 }
 
-const TONE_TEXT = { good: "text-green-400", ok: "text-amber-400", bad: "text-red-400" } as const;
+const TONE_TEXT = { good: "text-ok", ok: "text-warn", bad: "text-bad" } as const;
 const TONE_CHIP = {
-  good: "text-green-300 bg-green-400/10 border-green-400/30",
-  ok: "text-amber-300 bg-amber-400/10 border-amber-400/30",
-  bad: "text-red-300 bg-red-400/10 border-red-400/30",
+  good: "text-ok bg-ok/10 border-ok/30",
+  ok: "text-warn bg-warn/10 border-warn/30",
+  bad: "text-bad bg-bad/10 border-bad/30",
 } as const;
 
 /** One daily-average KPI as a bullet chart: the bar spans 0–150% of target,
@@ -430,11 +430,11 @@ function AverageTile({
       type="button"
       onClick={onSelect}
       aria-pressed={active}
-      className={`card p-3.5 text-start space-y-2 transition-colors duration-150 ${active ? "" : "hover:border-white/20"}`}
+      className={`card p-3.5 text-start space-y-2 transition-colors duration-150 ${active ? "" : "hover:border-ink/20"}`}
       style={active ? { borderColor: c.ring, boxShadow: `inset 0 0 0 1px ${c.ring}` } : undefined}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[12px] font-medium text-white/70 min-w-0">
+        <span className="flex items-center gap-1.5 text-[12px] font-medium text-ink/70 min-w-0">
           <span aria-hidden className="w-2 h-2 rounded-full shrink-0" style={{ background: c.base }} />
           <span className="truncate">{metricLabel(lang, metric)}</span>
         </span>
@@ -446,28 +446,28 @@ function AverageTile({
       </div>
       <div className="nums">
         <span className="text-2xl font-bold">{value.toLocaleString()}</span>
-        <span className="text-xs text-white/50 ms-1">{unit}</span>
+        <span className="text-xs text-ink/50 ms-1">{unit}</span>
       </div>
       {pct !== null && target !== null ? (
         <>
-          <div className="relative h-1.5 rounded-full bg-white/10" dir="ltr" aria-hidden>
+          <div className="relative h-1.5 rounded-full bg-ink/10" dir="ltr" aria-hidden>
             <div
               className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 motion-reduce:transition-none"
               style={{ width: `${fill * 100}%`, background: c.base }}
             />
             <div
-              className="absolute -top-1 -bottom-1 w-[2px] rounded-full bg-white/80"
+              className="absolute -top-1 -bottom-1 w-[2px] rounded-full bg-ink/80"
               style={{ left: `${(100 / SCALE) * 100}%` }}
             />
           </div>
-          <div className="text-[11px] text-white/50 nums">
+          <div className="text-[11px] text-ink/50 nums">
             <span className={TONE_TEXT[status!.tone]}>{pct}%</span> {t(lang, "stats_of_target")}{" "}
             {target.toLocaleString()}
             {metric === "calories" ? "" : "g"}
           </div>
         </>
       ) : (
-        <div className="text-[11px] text-white/40">{t(lang, "stats_per_day")}</div>
+        <div className="text-[11px] text-ink/40">{t(lang, "stats_per_day")}</div>
       )}
     </button>
   );
@@ -493,21 +493,21 @@ function HighlightTile({
 }) {
   const body = (
     <>
-      <div className="text-[12px] text-white/60 leading-snug">{label}</div>
+      <div className="text-[12px] text-ink/60 leading-snug">{label}</div>
       <div className="nums mt-1.5">
         <span className="text-xl font-bold" style={accent ? { color: accent } : undefined}>{value}</span>
-        {unit && <span className="text-xs text-white/50 ms-1">{unit}</span>}
+        {unit && <span className="text-xs text-ink/50 ms-1">{unit}</span>}
       </div>
       {meter && (
-        <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden" dir="ltr" aria-hidden>
+        <div className="mt-2 h-1.5 rounded-full bg-ink/10 overflow-hidden" dir="ltr" aria-hidden>
           <div className="h-full rounded-full" style={{ width: `${Math.min(100, meter.pct)}%`, background: meter.color }} />
         </div>
       )}
       {sub && (
-        <div className="text-[11px] text-white/50 mt-1 flex items-center gap-1">
+        <div className="text-[11px] text-ink/50 mt-1 flex items-center gap-1">
           <span className="truncate">{sub}</span>
           {onClick && (
-            <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-white/40 rtl:-scale-x-100" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-ink/40 rtl:-scale-x-100" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m9 18 6-6-6-6" />
             </svg>
           )}
@@ -516,7 +516,7 @@ function HighlightTile({
     </>
   );
   return onClick ? (
-    <button type="button" onClick={onClick} className="card p-3.5 text-start hover:border-white/20 transition-colors duration-150">
+    <button type="button" onClick={onClick} className="card p-3.5 text-start hover:border-ink/20 transition-colors duration-150">
       {body}
     </button>
   ) : (
@@ -576,13 +576,13 @@ function BarChart({
         {selectedDay ? (
           <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[12px] text-white/60 truncate">{formatDay(selectedDay.date, lang)}</div>
+              <div className="text-[12px] text-ink/60 truncate">{formatDay(selectedDay.date, lang)}</div>
               <div className="nums">
                 <span className="text-lg font-bold" style={{ color: c.base }}>{selectedDay[metric].toLocaleString()}</span>
-                <span className="text-xs text-white/50 ms-1">{unit}</span>
+                <span className="text-xs text-ink/50 ms-1">{unit}</span>
               </div>
             </div>
-            <div className="text-end text-[11px] text-white/55 nums leading-relaxed">
+            <div className="text-end text-[11px] text-ink/55 nums leading-relaxed">
               {selectedDay.meals === 0 ? (
                 <div>{t(lang, "stats_no_meals")}</div>
               ) : (
@@ -597,13 +597,13 @@ function BarChart({
               type="button"
               onClick={() => onSelect(null)}
               aria-label={t(lang, "stats_clear_selection")}
-              className="shrink-0 -me-1 w-9 h-9 rounded-full text-white/50 hover:text-white flex items-center justify-center"
+              className="shrink-0 -me-1 w-9 h-9 rounded-full text-ink/50 hover:text-ink flex items-center justify-center"
             >
               ×
             </button>
           </div>
         ) : (
-          <div className="text-[12px] text-white/45">{t(lang, "stats_tap_hint")}</div>
+          <div className="text-[12px] text-ink/45">{t(lang, "stats_tap_hint")}</div>
         )}
       </div>
 
@@ -616,11 +616,11 @@ function BarChart({
             <div
               key={f}
               aria-hidden
-              className="absolute inset-x-0 border-t border-white/[0.06]"
+              className="absolute inset-x-0 border-t border-ink/[0.06]"
               style={{ top: HEIGHT - f * HEIGHT }}
             />
           ))}
-          <span aria-hidden className="absolute left-0 -top-0.5 text-[10px] text-white/35 nums">
+          <span aria-hidden className="absolute left-0 -top-0.5 text-[10px] text-ink/35 nums">
             {Math.round(max).toLocaleString()}
           </span>
 
@@ -641,7 +641,7 @@ function BarChart({
                 : isToday
                 ? {
                     height: h,
-                    background: `repeating-linear-gradient(135deg, ${c.base} 0 4px, ${c.base}99 4px 8px)`,
+                    background: `repeating-linear-gradient(135deg, ${c.base} 0 4px, ${c.dim} 4px 8px)`,
                     boxShadow: `inset 0 0 0 1px ${c.ring}`,
                   }
                 : { height: h, background: c.dim };
@@ -706,7 +706,7 @@ function BarChart({
         </div>
 
         {/* X axis: first, middle, last day */}
-        <div className="relative h-5 mt-1.5 text-[10px] text-white/45" aria-hidden>
+        <div className="relative h-5 mt-1.5 text-[10px] text-ink/45" aria-hidden>
           <span className="absolute left-0">{formatShort(series[0]?.date, lang)}</span>
           {mid && (
             <span className="absolute -translate-x-1/2" style={{ left: `${((Math.floor((n - 1) / 2) + 0.5) / n) * 100}%` }}>
@@ -718,7 +718,7 @@ function BarChart({
       </div>
 
       {/* Legend — line styles differ, so it doesn't rely on color alone */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-white/55">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-ink/55">
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: c.dim }} />
           {t(lang, "stats_legend_daily")}
@@ -763,7 +763,7 @@ function DayRow({
               </span>
             )}
           </div>
-          <div className="text-[12px] text-white/55 mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 nums">
+          <div className="text-[12px] text-ink/55 mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 nums">
             {empty ? (
               t(lang, "stats_no_meals")
             ) : (
@@ -782,7 +782,7 @@ function DayRow({
         <div className="text-end shrink-0 nums">
           <div className="text-sm font-semibold">
             {day.calories.toLocaleString()}
-            <span className="text-[11px] font-normal text-white/45 ms-1">{t(lang, "macro_kcal")}</span>
+            <span className="text-[11px] font-normal text-ink/45 ms-1">{t(lang, "macro_kcal")}</span>
           </div>
           {pct !== null && !empty && (
             <div className={`text-[11px] ${TONE_TEXT[targetStatus(pct, "calories").tone]}`}>{pct}%</div>
@@ -790,7 +790,7 @@ function DayRow({
         </div>
       </div>
       {pct !== null && !empty && (
-        <div className="mt-2 h-1 rounded-full bg-white/[0.07] overflow-hidden" dir="ltr" aria-hidden>
+        <div className="mt-2 h-1 rounded-full bg-ink/[0.07] overflow-hidden" dir="ltr" aria-hidden>
           <div
             className="h-full rounded-full"
             style={{ width: `${Math.min(100, pct)}%`, background: METRIC_COLORS.calories.dim }}

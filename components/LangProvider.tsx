@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { type Lang, type TextSize, readLangCookie, readTextSizeCookie, applyTextSize } from "@/lib/i18n";
+import { applyTheme, readThemeCookie } from "@/lib/theme";
 
 const LangContext = createContext<Lang>("en");
 
@@ -19,6 +20,9 @@ export default function LangProvider({ children }: { children: React.ReactNode }
     document.documentElement.dir = l === "he" ? "rtl" : "ltr";
 
     applyTextSize(readTextSizeCookie());
+    // data-theme is already set by the inline head script; this also
+    // repoints the browser-chrome color for a pinned theme.
+    applyTheme(readThemeCookie());
   }, []);
 
   useEffect(() => {

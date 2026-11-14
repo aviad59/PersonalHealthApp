@@ -263,7 +263,7 @@ export default function HomeClient() {
     })();
   }, [hasWorkouts]);
 
-  if (err) return <div className="p-6 text-red-400">{err}</div>;
+  if (err) return <div className="p-6 text-bad">{err}</div>;
 
   // First-ever visit (or cleared storage): show a quick skeleton while
   // /api/today resolves, instead of flashing the onboarding CTA.
@@ -273,8 +273,8 @@ export default function HomeClient() {
     return (
       <div className="px-5 pt-10 space-y-4">
         <h1 className="text-3xl font-bold">{t(lang, "home_welcome")}</h1>
-        <p className="text-white/60">{t(lang, "home_onboarding_desc")}</p>
-        <Link href="/onboarding" className="inline-block rounded-full bg-accent-brand px-5 py-3 text-sm font-semibold">
+        <p className="text-ink/60">{t(lang, "home_onboarding_desc")}</p>
+        <Link href="/onboarding" className="inline-block rounded-full bg-accent-brand px-5 py-3 text-sm font-semibold text-on-brand">
           {t(lang, "home_start_onboarding")}
         </Link>
       </div>
@@ -292,20 +292,20 @@ export default function HomeClient() {
     <div className={`px-5 pt-6 pb-6 space-y-5 ${loading ? "animate-pulse [animation-duration:2.5s]" : ""}`}>
       {/* Branded top header — gradient rounded-bottom rectangle with the app
           logo, a profile avatar, and a greeting (inspired by the reference). */}
-      <div className="-mx-5 -mt-6 px-5 pt-6 pb-6 rounded-b-[28px] bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] relative overflow-hidden shadow-[0_10px_30px_-12px_rgba(14,165,233,0.5)]">
+      <div className="-mx-5 -mt-6 px-5 pt-6 pb-6 rounded-b-[28px] bg-brand-gradient relative overflow-hidden shadow-brand">
         {/* soft decorative glow, top-right */}
-        <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+        <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-on-brand/10 blur-2xl pointer-events-none" />
         <div className="relative flex items-center justify-between gap-3">
           {/* Logo + greeting/date on one line */}
           <div className="flex items-center gap-3 min-w-0">
-            <span className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-              <PulseLogo className="h-6 w-6 text-white" />
+            <span className="w-11 h-11 rounded-2xl bg-on-brand/15 flex items-center justify-center shrink-0">
+              <PulseLogo className="h-6 w-6 text-on-brand" />
             </span>
             <div className="min-w-0">
-              <div className="text-[11px] uppercase tracking-wider text-white/70">
+              <div className="text-[11px] uppercase tracking-wider text-on-brand/70">
                 {today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
               </div>
-              <div className="text-xl font-bold text-white leading-tight truncate">
+              <div className="text-xl font-bold text-on-brand leading-tight truncate">
                 {t(lang, "home_greeting")} {userDisplayName}
               </div>
             </div>
@@ -314,7 +314,7 @@ export default function HomeClient() {
           <Link
             href="/profile"
             aria-label={userDisplayName}
-            className="w-10 h-10 shrink-0 rounded-full bg-white/25 ring-2 ring-white/70 hover:bg-white/35 transition-colors flex items-center justify-center text-white text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.25)]"
+            className="w-10 h-10 shrink-0 rounded-full bg-on-brand/25 ring-2 ring-on-brand/70 hover:bg-on-brand/35 transition-colors flex items-center justify-center text-on-brand text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.25)]"
           >
             {userDisplayName.slice(0, 1).toUpperCase()}
           </Link>
@@ -325,40 +325,40 @@ export default function HomeClient() {
         <div className="space-y-5">
           <section className="card p-5">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_macros")}</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "home_macros")}</h2>
               <Link href="/meals/log" className="text-xs text-accent-brand font-medium">
                 {t(lang, "home_log_meal")}
               </Link>
             </div>
             <div className="grid grid-cols-2 gap-y-1 place-items-center">
-              <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="#10b981" warnOnOver />
-              <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="#ef4444" warnOnOver={false} />
-              <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="#f59e0b" warnOnOver={false} />
-              <MacroRing label={t(lang, "macro_fat")} value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="#3b82f6" warnOnOver />
+              <MacroRing label={t(lang, "macro_calories")} value={totals.calories} target={effectiveCal || profile.goal_calories || 0} unit="" color="rgb(var(--c-cal))" warnOnOver />
+              <MacroRing label={t(lang, "macro_protein")} value={totals.protein_g} target={targets.protein_g || profile.goal_protein_g || 0} unit="g" color="rgb(var(--c-protein))" warnOnOver={false} />
+              <MacroRing label={t(lang, "macro_carbs")} value={totals.carbs_g} target={targets.carbs_g || profile.goal_carbs_g || 0} unit="g" color="rgb(var(--c-carbs))" warnOnOver={false} />
+              <MacroRing label={t(lang, "macro_fat")} value={totals.fat_g} target={targets.fat_g || profile.goal_fat_g || 0} unit="g" color="rgb(var(--c-fat))" warnOnOver />
             </div>
             {burn > 0 && (
-              <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-white/60 leading-relaxed">
-                <span className="text-white/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
-                <span className="text-white/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
+              <div className="mt-4 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[11px] text-ink/60 leading-relaxed">
+                <span className="text-ink/80 font-medium">+{burn} {t(lang, "macro_kcal")}</span> {t(lang, "home_from_training")}{" "}
+                <span className="text-ink/40">({baseCal} {t(lang, "home_base")} → {effectiveCal} {t(lang, "home_effective")})</span>
               </div>
             )}
           </section>
 
           {!hasWorkouts ? null : !training ? (
             <section className="card p-5 animate-pulse">
-              <div className="h-3 w-24 rounded bg-white/10 mb-4" />
+              <div className="h-3 w-24 rounded bg-ink/10 mb-4" />
               <div className="flex items-end gap-4">
-                <div className="h-10 w-12 rounded bg-white/10" />
+                <div className="h-10 w-12 rounded bg-ink/10" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-1.5 w-full rounded-full bg-white/10" />
-                  <div className="h-3 w-5/6 rounded bg-white/10" />
+                  <div className="h-1.5 w-full rounded-full bg-ink/10" />
+                  <div className="h-3 w-5/6 rounded bg-ink/10" />
                 </div>
               </div>
             </section>
           ) : workoutScore ? (
             <section className="card p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_workout_score")}</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "home_workout_score")}</h2>
                 <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${bandClasses(workoutScore.band)}`}>
                   {workoutScore.band}
                 </span>
@@ -366,7 +366,7 @@ export default function HomeClient() {
               <div className="flex items-end gap-4">
                 <div>
                   <div className="text-3xl font-bold leading-none">{workoutScore.score}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">/ 100</div>
+                  <div className="text-[10px] uppercase tracking-wide text-ink/40 mt-1">/ 100</div>
                 </div>
                 <div className="flex-1">
                   <ScoreBar score={workoutScore.score} band={workoutScore.band} />
@@ -374,7 +374,7 @@ export default function HomeClient() {
                 </div>
               </div>
               <div className="mt-4">
-                <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
+                <div className="text-[10px] uppercase tracking-wide text-ink/40 mb-1.5">{t(lang, "home_per_muscle")}</div>
                 <div className="grid grid-cols-5 gap-1.5">
                   {workoutScore.byMuscle.map((m) => (
                     <MusclePill key={m.muscle} status={m} todayLabel={t(lang, "home_today_label")} />
@@ -382,7 +382,7 @@ export default function HomeClient() {
                 </div>
               </div>
               {workoutScore.daysSinceLastSession === null && (
-                <p className="text-[10px] text-white/30 mt-3">
+                <p className="text-[10px] text-ink/30 mt-3">
                   {t(lang, "home_refresh_workouts")}
                 </p>
               )}
@@ -392,18 +392,18 @@ export default function HomeClient() {
           {hasWorkouts && (
             <section className="card p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_this_week")}</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "home_this_week")}</h2>
                 <Link href="/workouts" className="text-xs text-accent-brand">{t(lang, "home_all_workouts")}</Link>
               </div>
               {!training ? (
                 <div className="animate-pulse space-y-2">
-                  <div className="h-4 w-1/3 rounded bg-white/10" />
-                  <div className="h-1.5 w-full rounded-full bg-white/10" />
+                  <div className="h-4 w-1/3 rounded bg-ink/10" />
+                  <div className="h-1.5 w-full rounded-full bg-ink/10" />
                 </div>
               ) : training.week ? (
                 <WeekWorkoutsBar week={training.week} lang={lang} todaysWorkout={training.todaysWorkout} />
               ) : (
-                <div className="text-sm text-white/50">{t(lang, "home_no_workout")}</div>
+                <div className="text-sm text-ink/50">{t(lang, "home_no_workout")}</div>
               )}
             </section>
           )}
@@ -412,7 +412,7 @@ export default function HomeClient() {
         <div className="space-y-5">
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{t(lang, "home_latest_insight")}</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">{t(lang, "home_latest_insight")}</h2>
               <div className="flex items-center gap-3">
                 <button
                   onClick={generateInsight}
@@ -421,11 +421,11 @@ export default function HomeClient() {
                 >
                   {generating ? t(lang, "insights_generating") : t(lang, "home_gen_insight")}
                 </button>
-                <Link href="/insights" className="text-xs text-white/45">{t(lang, "home_all_insights")}</Link>
+                <Link href="/insights" className="text-xs text-ink/45">{t(lang, "home_all_insights")}</Link>
               </div>
             </div>
             {generating && !latestInsight ? (
-              <div className="card p-5 text-sm text-white/50 animate-pulse">{t(lang, "insights_generating")}</div>
+              <div className="card p-5 text-sm text-ink/50 animate-pulse">{t(lang, "insights_generating")}</div>
             ) : latestInsight ? (
               <div className={generating ? "animate-pulse [animation-duration:2.5s]" : ""}>
                 <InsightCard
@@ -439,7 +439,7 @@ export default function HomeClient() {
             ) : (
               <button
                 onClick={generateInsight}
-                className="card p-5 text-sm text-white/60 w-full text-start hover:border-accent-brand/40"
+                className="card p-5 text-sm text-ink/60 w-full text-start hover:border-accent-brand/40"
               >
                 {t(lang, "home_no_insights")}{" "}
                 <span className="text-accent-brand underline underline-offset-2">
@@ -451,7 +451,7 @@ export default function HomeClient() {
 
           {meals.length > 0 && (
             <section>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50 mb-2">{t(lang, "home_todays_meals")}</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50 mb-2">{t(lang, "home_todays_meals")}</h2>
               <div className="space-y-2">
                 {meals.map((m) => (
                   <div key={m.id} className="card p-3 flex gap-3 items-center">
@@ -469,11 +469,11 @@ export default function HomeClient() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{m.description || "Meal"}</div>
-                      <div className="text-[11px] text-white/50 mt-0.5">
+                      <div className="text-[11px] text-ink/50 mt-0.5">
                         {Math.round(m.calories)} kcal · P{Math.round(m.protein_g)} C{Math.round(m.carbs_g)} F{Math.round(m.fat_g)}
                       </div>
                     </div>
-                    <div className="text-[11px] text-white/40">
+                    <div className="text-[11px] text-ink/40">
                       {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </div>
                   </div>
@@ -490,15 +490,15 @@ export default function HomeClient() {
 function HomeSkeleton() {
   return (
     <div className="px-5 pt-6 pb-6 space-y-5 animate-pulse [animation-duration:1.6s]">
-      <div className="h-3 w-32 rounded bg-white/10" />
-      <div className="h-6 w-24 rounded bg-white/10" />
+      <div className="h-3 w-32 rounded bg-ink/10" />
+      <div className="h-6 w-24 rounded bg-ink/10" />
       <div className="card p-5 space-y-4">
-        <div className="h-3 w-20 rounded bg-white/10" />
+        <div className="h-3 w-20 rounded bg-ink/10" />
         <div className="grid grid-cols-2 gap-y-4 place-items-center">
-          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
-          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
-          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
-          <div className="h-[92px] w-[92px] rounded-full bg-white/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-ink/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-ink/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-ink/10" />
+          <div className="h-[92px] w-[92px] rounded-full bg-ink/10" />
         </div>
       </div>
     </div>
@@ -518,9 +518,9 @@ function WeekWorkoutsBar({
   const ratio = target > 0 ? Math.min(1, completed / target) : 0;
   const accent =
     pace === "behind"
-      ? { text: "text-amber-400", bar: "bg-amber-400" }
+      ? { text: "text-warn", bar: "bg-warn" }
       : pace === "ahead"
-      ? { text: "text-emerald-400", bar: "bg-emerald-500" }
+      ? { text: "text-ok", bar: "bg-ok" }
       : { text: "text-accent-brand", bar: "bg-accent-brand" };
   const remaining = Math.max(0, target - completed);
   return (
@@ -528,7 +528,7 @@ function WeekWorkoutsBar({
       <div className="flex items-baseline justify-between mb-2">
         <div className="flex items-baseline gap-1.5">
           <span className="text-3xl font-bold leading-none">{completed}</span>
-          <span className="text-sm text-white/40">
+          <span className="text-sm text-ink/40">
             / {target || "—"} {t(lang, "home_workouts_short")}
           </span>
         </div>
@@ -540,21 +540,21 @@ function WeekWorkoutsBar({
             : t(lang, "home_pace_on_track")}
         </span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-ink/10 overflow-hidden">
         <div className={`h-full rounded-full ${accent.bar} transition-all`} style={{ width: `${ratio * 100}%` }} />
       </div>
       {target > 0 && remaining > 0 && (
-        <p className="text-[11px] text-white/50 mt-2">
+        <p className="text-[11px] text-ink/50 mt-2">
           {remaining} {t(lang, "home_workouts_left_this_week")}
         </p>
       )}
       {todaysWorkout && (
         <div className="mt-3 pt-3 border-t border-border text-[12px]">
-          <div className="text-white/85">
+          <div className="text-ink/85">
             <span className="text-accent-brand mr-1.5">●</span>
             {todaysWorkout.title}
           </div>
-          <div className="text-[11px] text-white/40 mt-0.5">
+          <div className="text-[11px] text-ink/40 mt-0.5">
             {new Date(todaysWorkout.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             {" · "}
             {todaysWorkout.duration_min} min · {Math.round(todaysWorkout.volume_kg).toLocaleString()} kg
@@ -580,7 +580,7 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
         aria-expanded={open}
         className="group flex items-start gap-1.5 text-left leading-snug hover:opacity-90 transition-opacity"
       >
-        <span className="text-[12px] text-white/60">{score.rationale}</span>
+        <span className="text-[12px] text-ink/60">{score.rationale}</span>
         <svg
           viewBox="0 0 24 24"
           className={`mt-[3px] h-3 w-3 shrink-0 text-accent-brand transition-transform ${open ? "rotate-180" : ""}`}
@@ -595,7 +595,7 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
       </button>
       {open && (
         <div className="mt-2 rounded-lg border border-border bg-bg-elev p-3 space-y-1.5 text-[11px]">
-          <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1">
+          <div className="text-[10px] uppercase tracking-wide text-ink/40 mb-1">
             {t(lang, "home_score_breakdown")}
           </div>
           <RationaleRow
@@ -628,7 +628,7 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
             label={t(lang, "home_score_sets")}
             value={`${score.hardSetsLast7}`}
           />
-          <p className="text-[10px] text-white/40 leading-snug pt-1.5 mt-1.5 border-t border-border">
+          <p className="text-[10px] text-ink/40 leading-snug pt-1.5 mt-1.5 border-t border-border">
             {t(lang, "home_score_explainer")}
           </p>
         </div>
@@ -640,8 +640,8 @@ function WorkoutScoreRationale({ score, lang }: { score: WorkoutScore; lang: Lan
 function RationaleRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-white/60">{label}</span>
-      <span className={highlight ? "text-amber-400 font-medium" : "text-white/85"}>{value}</span>
+      <span className="text-ink/60">{label}</span>
+      <span className={highlight ? "text-warn font-medium" : "text-ink/85"}>{value}</span>
     </div>
   );
 }
@@ -657,20 +657,20 @@ function PulseLogo(props: React.SVGProps<SVGSVGElement>) {
 }
 
 function bandClasses(band: WorkoutScore["band"]) {
-  if (band === "high") return "border-emerald-500/40 text-emerald-400 bg-emerald-500/10";
-  if (band === "good") return "border-green-500/40 text-green-400 bg-green-500/10";
-  if (band === "moderate") return "border-yellow-500/40 text-yellow-400 bg-yellow-500/10";
-  return "border-red-500/40 text-red-400 bg-red-500/10";
+  if (band === "high") return "border-ok/40 text-ok bg-ok/10";
+  if (band === "good") return "border-ok/40 text-ok bg-ok/10";
+  if (band === "moderate") return "border-warn/40 text-warn bg-warn/10";
+  return "border-bad/40 text-bad bg-bad/10";
 }
 
 function ScoreBar({ score, band }: { score: number; band: WorkoutScore["band"] }) {
   const pct = Math.min(100, Math.max(0, score));
   const color =
-    band === "high" ? "bg-emerald-500" :
-    band === "good" ? "bg-green-500" :
-    band === "moderate" ? "bg-yellow-500" : "bg-red-500";
+    band === "high" ? "bg-ok" :
+    band === "good" ? "bg-ok" :
+    band === "moderate" ? "bg-warn" : "bg-bad";
   return (
-    <div className="h-1.5 w-full rounded-full bg-white/10">
+    <div className="h-1.5 w-full rounded-full bg-ink/10">
       <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -690,9 +690,9 @@ function shortenMuscle(name: string): string {
 
 function MusclePill({ status, todayLabel }: { status: MuscleStatus; todayLabel: string }) {
   const colors = {
-    rest: "border-red-500/40 text-red-400 bg-red-500/10",
-    cautious: "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
-    ready: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+    rest: "border-bad/40 text-bad bg-bad/10",
+    cautious: "border-warn/40 text-warn bg-warn/10",
+    ready: "border-ok/40 text-ok bg-ok/10",
   };
   return (
     <div className={`rounded-lg border px-1 py-1 text-center ${colors[status.readiness]}`}>

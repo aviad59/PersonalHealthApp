@@ -111,10 +111,10 @@ export default function BackgroundTasksProvider({ children }: { children: ReactN
       {children}
       {pendingLabels.length > 0 && (
         <div className="fixed left-1/2 -translate-x-1/2 z-50 bottom-[calc(var(--nav-h)+env(safe-area-inset-bottom)+0.75rem)] md:bottom-4 pointer-events-none">
-          <div className="flex items-center gap-2 rounded-full bg-bg-elev border border-border px-4 py-2 shadow-elev text-[12px] text-white/85">
-            <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white/25 border-t-accent-brand animate-spin" />
+          <div className="flex items-center gap-2 rounded-full bg-bg-elev border border-border px-4 py-2 shadow-elev text-[12px] text-ink/85">
+            <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-ink/25 border-t-accent-brand animate-spin" />
             {pendingLabels[0]}
-            {pendingLabels.length > 1 && <span className="text-white/40">+{pendingLabels.length - 1}</span>}
+            {pendingLabels.length > 1 && <span className="text-ink/40">+{pendingLabels.length - 1}</span>}
           </div>
         </div>
       )}

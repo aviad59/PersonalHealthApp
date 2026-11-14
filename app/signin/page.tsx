@@ -20,11 +20,11 @@ function SignIn() {
     <div className="px-5 pt-20 pb-10 space-y-8">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">Health</h1>
-        <p className="text-sm text-white/60">Sign in with your Google account to continue.</p>
+        <p className="text-sm text-ink/60">Sign in with your Google account to continue.</p>
       </div>
 
       {denied && (
-        <div className="card p-4 text-sm text-amber-400/90 text-center">
+        <div className="card p-4 text-sm text-warn/90 text-center">
           This account isn&apos;t approved yet. Your request has been recorded —
           ask the app admin to approve it, then sign in again.
         </div>

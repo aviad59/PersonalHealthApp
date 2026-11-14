@@ -1,10 +1,18 @@
 import type { Metadata, Viewport } from "next";
+import { Heebo, Rubik } from "next/font/google";
 import "./globals.css";
 import AppNav from "@/components/AppNav";
 import LangProvider from "@/components/LangProvider";
 import PWARegister from "@/components/PWARegister";
 import AuthProvider from "@/components/AuthProvider";
 import BackgroundTasksProvider from "@/components/BackgroundTasks";
+import { THEME_COLORS, THEME_INIT_SCRIPT } from "@/lib/theme";
+
+// One font per theme (globals.css picks via --font-app): Heebo for the light
+// Fresh theme, Rubik for the dark Sunset one. Both cover Hebrew, and
+// next/font self-hosts them, so there's no request to Google at runtime.
+const heebo = Heebo({ subsets: ["latin", "hebrew"], variable: "--font-heebo", display: "swap" });
+const rubik = Rubik({ subsets: ["latin", "hebrew"], variable: "--font-rubik", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Health",
@@ -37,7 +45,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#080c10",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+  ],
   // viewportFit: cover lets the app draw under the status bar / nav bar when
   // installed as a PWA — needed for the immersive feel on Android.
   viewportFit: "cover",
@@ -53,8 +64,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-bg text-white">
+    // suppressHydrationWarning: THEME_INIT_SCRIPT may set data-theme before
+    // React hydrates.
+    <html lang="en" className={`${heebo.variable} ${rubik.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="bg-bg text-ink">
         <AuthProvider>
           <LangProvider>
             <BackgroundTasksProvider>

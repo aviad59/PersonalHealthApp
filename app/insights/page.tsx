@@ -73,7 +73,7 @@ export default function InsightsPage() {
         <button
           onClick={() => generate("daily")}
           disabled={!!generating}
-          className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold text-white disabled:opacity-40"
+          className="flex-1 rounded-full bg-accent-brand py-3 text-sm font-semibold text-on-brand disabled:opacity-40"
         >
           {generating === "daily" ? t(lang, "insights_generating") : t(lang, "insights_gen_daily")}
         </button>
@@ -93,8 +93,8 @@ export default function InsightsPage() {
             onClick={() => setFilter(k)}
             className={`px-3 py-1.5 rounded-full border transition-colors ${
               filter === k
-                ? "bg-accent-brand border-accent-brand"
-                : "bg-bg-elev border-border text-white/60"
+                ? "bg-accent-brand border-accent-brand text-on-brand"
+                : "bg-bg-elev border-border text-ink/60"
             }`}
           >
             {t(lang, `insights_${k}` as TKey)}
@@ -102,12 +102,12 @@ export default function InsightsPage() {
         ))}
       </div>
 
-      {err && <div className="text-sm text-red-400">{err}</div>}
+      {err && <div className="text-sm text-bad">{err}</div>}
 
       {loading ? (
-        <div className="text-white/50 text-sm">{t(lang, "insights_loading")}</div>
+        <div className="text-ink/50 text-sm">{t(lang, "insights_loading")}</div>
       ) : items.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-white/60">
+        <div className="card p-6 text-center text-sm text-ink/60">
           {t(lang, "insights_empty")}
         </div>
       ) : (

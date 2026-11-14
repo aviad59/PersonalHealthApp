@@ -1287,7 +1287,7 @@ export default function LogMealPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{t(lang, "meal_title")}</h1>
-            <p className="text-sm text-white/60 mt-1">
+            <p className="text-sm text-ink/60 mt-1">
               {isToday
                 ? t(lang, "meal_subtitle_today")
                 : `${t(lang, "meal_subtitle_past")} ${prettyDate(date, lang)}.`}
@@ -1308,7 +1308,7 @@ export default function LogMealPage() {
                 mid-month max disabled the next-month arrow and trapped users;
                 the Today chip is the way back. */}
             <label className="relative flex-1 min-w-0 h-11 rounded-xl bg-bg-elev border border-border flex items-center justify-center gap-2 cursor-pointer state-layer">
-              <CalendarIcon className="h-4 w-4 text-white/50" aria-hidden="true" />
+              <CalendarIcon className="h-4 w-4 text-ink/50" aria-hidden="true" />
               <span className="text-sm font-semibold truncate">{prettyDate(date, lang)}</span>
               <input
                 type="date"
@@ -1376,14 +1376,14 @@ export default function LogMealPage() {
         <section className="card p-4 space-y-4" aria-label={t(lang, "meal_new_meal")}>
           <button
             onClick={() => cameraRef.current?.click()}
-            className="w-full rounded-2xl bg-gradient-to-br from-[#12b0f0] via-[#0b82b6] to-[#0a4e6d] shadow-brand px-5 py-5 flex items-center gap-4 text-start state-layer"
+            className="w-full rounded-2xl bg-brand-gradient shadow-brand px-5 py-5 flex items-center gap-4 text-start state-layer"
           >
-            <span className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-              <CameraIcon className="h-7 w-7 text-white" aria-hidden="true" />
+            <span className="w-14 h-14 rounded-2xl bg-on-brand/15 flex items-center justify-center shrink-0">
+              <CameraIcon className="h-7 w-7 text-on-brand" aria-hidden="true" />
             </span>
             <span className="min-w-0">
-              <span className="block text-lg font-bold text-white">{t(lang, "meal_take_photo")}</span>
-              <span className="block text-[13px] text-white/75 mt-0.5">{t(lang, "meal_analyze_photo")}</span>
+              <span className="block text-lg font-bold text-on-brand">{t(lang, "meal_take_photo")}</span>
+              <span className="block text-[13px] text-on-brand/75 mt-0.5">{t(lang, "meal_analyze_photo")}</span>
             </span>
           </button>
           <div className="grid grid-cols-2 gap-2">
@@ -1398,13 +1398,13 @@ export default function LogMealPage() {
           </div>
           <Link
             href="/meals/snap"
-            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-white/80 flex items-center justify-center gap-2 state-layer"
+            className="h-12 rounded-xl border border-border bg-bg-elev px-3 text-[13px] font-medium text-ink/80 flex items-center justify-center gap-2 state-layer"
           >
             <BoltIcon className="h-5 w-5 text-accent-primary" aria-hidden="true" />
             <span className="truncate">{t(lang, "meal_snap_button")}</span>
           </Link>
 
-          <div className="flex items-center gap-3 text-[12px] text-white/45">
+          <div className="flex items-center gap-3 text-[12px] text-ink/45">
             <span className="h-px flex-1 bg-border" />
             {t(lang, "meal_or_describe_inline")}
             <span className="h-px flex-1 bg-border" />
@@ -1457,7 +1457,7 @@ export default function LogMealPage() {
               </span>
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold truncate">{t(lang, "meal_protein_product")}</h2>
-                <div className="text-[12px] text-white/50">{t(lang, "meal_protein_scoop")}</div>
+                <div className="text-[12px] text-ink/50">{t(lang, "meal_protein_scoop")}</div>
               </div>
             </div>
             <TextButton onClick={() => { setProteinMode(false); setErr(null); }}>
@@ -1476,12 +1476,12 @@ export default function LogMealPage() {
           />
 
           <label className="block">
-            <span className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "meal_protein_with")}</span>
+            <span className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "meal_protein_with")}</span>
             <select
               value={proteinBase}
               onChange={(e) => setProteinBase(e.target.value)}
               dir="rtl"
-              className="w-full h-12 rounded-xl bg-bg-elev border border-border px-4 text-[15px] text-white"
+              className="w-full h-12 rounded-xl bg-bg-elev border border-border px-4 text-[15px] text-ink"
             >
               {PROTEIN_BASES.map((b) => (
                 <option key={b} value={b}>{b}</option>
@@ -1525,7 +1525,7 @@ export default function LogMealPage() {
                 // Same picker the first photo came from is the default; both
                 // sources stay one tap away for the "other side of the box" shot.
                 <div className="w-28 shrink-0 rounded-2xl border-2 border-dashed border-border bg-bg-elev flex flex-col items-center justify-center gap-2 p-2">
-                  <span className="text-[11px] text-white/55 text-center leading-tight">
+                  <span className="text-[11px] text-ink/55 text-center leading-tight">
                     {t(lang, "meal_add_second_photo")}
                   </span>
                   <div className="flex gap-1.5">
@@ -1562,7 +1562,7 @@ export default function LogMealPage() {
                 </ChipButton>
               </div>
               {!photoPreview2 && (
-                <p className="text-[12px] text-white/45">{t(lang, "meal_second_photo_hint")}</p>
+                <p className="text-[12px] text-ink/45">{t(lang, "meal_second_photo_hint")}</p>
               )}
               <DescribeField
                 lang={lang}
@@ -1644,7 +1644,7 @@ export default function LogMealPage() {
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold">
               {t(lang, "meal_batch_title")}{" "}
-              <span className="text-white/45 nums">({batch.length})</span>
+              <span className="text-ink/45 nums">({batch.length})</span>
             </h2>
             <TextButton onClick={() => setBatch(null)} disabled={batchBusy}>
               {t(lang, "meal_cancel")}
@@ -1652,7 +1652,7 @@ export default function LogMealPage() {
           </div>
           {groupByDay(sortBatch(batch)).map(([day, items]) => (
             <div key={day} className="space-y-2">
-              <div className="text-[11px] font-medium text-white/45 pt-1">
+              <div className="text-[11px] font-medium text-ink/45 pt-1">
                 {prettyDate(day, lang)} · {items.length}
               </div>
               {items.map((it) => (
@@ -1699,7 +1699,7 @@ export default function LogMealPage() {
             </div>
           ))}
           {batch.some((it) => it.status === "done" && it.analysis?.clarifying_question) && (
-            <p className="text-[12px] text-amber-300/85">
+            <p className="text-[12px] text-warn/85">
               {t(lang, "meal_batch_clarify_hint")}
             </p>
           )}
@@ -1746,7 +1746,7 @@ export default function LogMealPage() {
             </TextButton>
           </div>
           <label className="block">
-            <span className="block text-xs font-medium text-white/60 mb-1.5">
+            <span className="block text-xs font-medium text-ink/60 mb-1.5">
               {t(lang, "meal_manual_desc_label")}
             </span>
             <input
@@ -1785,7 +1785,7 @@ export default function LogMealPage() {
               </h2>
               <div className="flex items-center gap-1.5 shrink-0">
                 {analysis._latencyMs ? (
-                  <span className="text-[11px] nums text-white/40" title={analysis._model ?? ""}>
+                  <span className="text-[11px] nums text-ink/40" title={analysis._model ?? ""}>
                     {(analysis._latencyMs / 1000).toFixed(1)}s
                   </span>
                 ) : null}
@@ -1794,7 +1794,7 @@ export default function LogMealPage() {
             </div>
             {analysis.items?.length > 0 && (
               <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-white/45 mb-1.5">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-ink/45 mb-1.5">
                   {t(lang, "meal_items_found")}
                 </div>
                 <ItemPortions
@@ -1809,7 +1809,7 @@ export default function LogMealPage() {
               </div>
             )}
             {analysis.notes && (
-              <p className="text-[12px] text-white/50 leading-relaxed">{analysis.notes}</p>
+              <p className="text-[12px] text-ink/50 leading-relaxed">{analysis.notes}</p>
             )}
           </div>
 
@@ -1858,8 +1858,8 @@ export default function LogMealPage() {
       )}
 
       {notice && (
-        <div role="status" className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 ps-4 pe-1.5 py-1.5 text-[13px] text-emerald-100">
-          <CheckCircleIcon className="h-5 w-5 text-emerald-300 shrink-0" aria-hidden="true" />
+        <div role="status" className="flex items-center gap-3 rounded-2xl border border-ok/25 bg-ok/10 ps-4 pe-1.5 py-1.5 text-[13px] text-ok">
+          <CheckCircleIcon className="h-5 w-5 text-ok shrink-0" aria-hidden="true" />
           <span className="flex-1 min-w-0">{notice}</span>
           <IconButton label={t(lang, "meal_close")} onClick={() => setNotice(null)}>
             <CloseIcon className="h-4 w-4" />
@@ -1867,7 +1867,7 @@ export default function LogMealPage() {
         </div>
       )}
       {err && (
-        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
           <AlertIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
           <span className="min-w-0">{err}</span>
         </div>
@@ -1879,7 +1879,7 @@ export default function LogMealPage() {
           <div className="flex items-center justify-between gap-3">
             <SectionTitle>
               {isToday ? t(lang, "meal_todays_meals") : t(lang, "meal_logged_for_day")}
-              {!existingLoading && <span className="text-white/35 nums"> · {existing.length}</span>}
+              {!existingLoading && <span className="text-ink/35 nums"> · {existing.length}</span>}
             </SectionTitle>
             {!existingLoading && existing.length > 0 && (
               <ChipButton onClick={startReview} disabled={reviewing} size="sm">
@@ -1935,7 +1935,7 @@ export default function LogMealPage() {
         <section className="space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <SectionTitle>{t(lang, "meal_log_again")}</SectionTitle>
-            <span className="text-[12px] text-white/40">{t(lang, "meal_recurring")}</span>
+            <span className="text-[12px] text-ink/40">{t(lang, "meal_recurring")}</span>
           </div>
           {frequentLoading ? (
             <div className="space-y-2">
@@ -1966,11 +1966,11 @@ export default function LogMealPage() {
                         </div>
                         <MacroLine lang={lang} macros={m} className="mt-0.5" />
                       </div>
-                      <span className="text-[11px] nums text-white/60 bg-bg-elev border border-border rounded-full px-2 py-0.5 shrink-0">
+                      <span className="text-[11px] nums text-ink/60 bg-bg-elev border border-border rounded-full px-2 py-0.5 shrink-0">
                         ×{m.count}
                       </span>
                       <ChevronIcon
-                        className={`h-4 w-4 text-white/40 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : "-rotate-90"}`}
+                        className={`h-4 w-4 text-ink/40 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : "-rotate-90"}`}
                         aria-hidden="true"
                       />
                     </button>
@@ -1999,12 +1999,12 @@ export default function LogMealPage() {
                           <button
                             onClick={() => quickLog(m, modifier)}
                             disabled={quickBusy || !modifier.trim()}
-                            className="flex-1 h-11 rounded-full bg-accent-brand text-white text-[13px] font-semibold disabled:opacity-40 state-layer"
+                            className="flex-1 h-11 rounded-full bg-accent-brand text-on-brand text-[13px] font-semibold disabled:opacity-40 state-layer"
                           >
                             {quickBusy ? progress || t(lang, "meal_saving_short") : t(lang, "meal_log_with_change")}
                           </button>
                         </div>
-                        <p className="text-[11px] text-white/45">
+                        <p className="text-[11px] text-ink/45">
                           {t(lang, "meal_log_with_change_hint")}
                         </p>
                       </div>
@@ -2086,7 +2086,7 @@ function ExistingMealRow({
       <div className="flex items-center gap-3 p-3">
         {isProteinPowder ? (
           <div className={thumbBox}>
-            <ShakerIcon className="h-6 w-6 text-white/55" aria-hidden="true" />
+            <ShakerIcon className="h-6 w-6 text-ink/55" aria-hidden="true" />
           </div>
         ) : meal.photo_thumb ? (
           <button
@@ -2104,7 +2104,7 @@ function ExistingMealRow({
               className="w-14 h-14 rounded-xl object-cover bg-bg-elev"
             />
             {meal.photo_thumb_2 && (
-              <span className="absolute -top-1 -end-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-brand text-[10px] font-bold flex items-center justify-center text-white ring-2 ring-bg-card">
+              <span className="absolute -top-1 -end-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-brand text-[10px] font-bold flex items-center justify-center text-on-brand ring-2 ring-bg-card">
                 2
               </span>
             )}
@@ -2134,7 +2134,7 @@ function ExistingMealRow({
           </div>
           <MacroLine lang={lang} macros={meal} className="mt-0.5" />
         </div>
-        {time && <span className="text-[11px] nums text-white/40 shrink-0">{time}</span>}
+        {time && <span className="text-[11px] nums text-ink/40 shrink-0">{time}</span>}
         <IconButton
           label={isEditing ? t(lang, "meal_cancel") : t(lang, "meal_edit")}
           onClick={onEditToggle}
@@ -2148,7 +2148,7 @@ function ExistingMealRow({
       {isEditing && (
         <div className="border-t border-border p-3 space-y-3">
           <label className="block">
-            <span className="block text-xs font-medium text-white/60 mb-1.5">{t(lang, "meal_description_label")}</span>
+            <span className="block text-xs font-medium text-ink/60 mb-1.5">{t(lang, "meal_description_label")}</span>
             <input
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -2164,7 +2164,7 @@ function ExistingMealRow({
           />
           {noPhoto && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-white/60">{t(lang, "meal_pick_icon")}</div>
+              <div className="text-xs font-medium text-ink/60">{t(lang, "meal_pick_icon")}</div>
               <div className="grid grid-cols-6 gap-1.5">
                 {MEAL_ICON_IDS.map((id) => {
                   const selected = icon === id;
@@ -2178,7 +2178,7 @@ function ExistingMealRow({
                       className={`aspect-square rounded-xl flex items-center justify-center border transition-colors ${
                         selected
                           ? "bg-accent-brand/20 border-accent-brand text-accent-primary"
-                          : "bg-bg-elev border-border text-white/60 hover:text-white"
+                          : "bg-bg-elev border-border text-ink/60 hover:text-ink"
                       }`}
                     >
                       <MealIcon id={id} className="h-5 w-5" />
@@ -2189,19 +2189,19 @@ function ExistingMealRow({
             </div>
           )}
           <label className="flex items-center gap-2 rounded-xl bg-bg-elev border border-border px-3 h-11">
-            <CalendarIcon className="h-4 w-4 text-white/45" aria-hidden="true" />
-            <span className="text-[13px] text-white/60 flex-1">{t(lang, "meal_move_to_date")}</span>
+            <CalendarIcon className="h-4 w-4 text-ink/45" aria-hidden="true" />
+            <span className="text-[13px] text-ink/60 flex-1">{t(lang, "meal_move_to_date")}</span>
             <input
               type="date"
               value={moveDate}
               onChange={(e) => setMoveDate(e.target.value || meal.date)}
-              className="bg-transparent text-[13px] text-white border-none outline-none"
+              className="bg-transparent text-[13px] text-ink border-none outline-none"
             />
           </label>
           <div className="flex items-center gap-2">
             <button
               onClick={onDelete}
-              className="h-11 rounded-full px-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-red-300 state-layer"
+              className="h-11 rounded-full px-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-bad state-layer"
             >
               <TrashIcon className="h-4 w-4" aria-hidden="true" />
               {t(lang, "meal_delete")}
@@ -2209,7 +2209,7 @@ function ExistingMealRow({
             <PrimaryButton
               onClick={handleSave}
               disabled={busy}
-              className={`flex-1 h-11 ${isMoving ? "!bg-white/10 border border-white/20" : ""}`}
+              className={`flex-1 h-11 ${isMoving ? "!bg-ink/10 border border-ink/20" : ""}`}
             >
               {busy
                 ? t(lang, "meal_saving_short")
@@ -2396,9 +2396,9 @@ function DaySummaryCard({
   return (
     <div
       role="status"
-      className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 ps-4 pe-1.5 py-1.5 text-[13px] text-emerald-100"
+      className="flex items-center gap-3 rounded-2xl border border-ok/25 bg-ok/10 ps-4 pe-1.5 py-1.5 text-[13px] text-ok"
     >
-      <CheckCircleIcon className="h-5 w-5 text-emerald-300 shrink-0" aria-hidden="true" />
+      <CheckCircleIcon className="h-5 w-5 text-ok shrink-0" aria-hidden="true" />
       <span className="nums flex-1 min-w-0">
         {[proteinPart, calPart].filter(Boolean).join(" · ")}
         {anythingLeft ? ` ${t(lang, "meal_left_today")}` : ""}
@@ -2473,14 +2473,14 @@ function BatchMealCard({
           )}
         </div>
         <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2 text-[11px] text-white/45">
+          <div className="flex items-center gap-2 text-[11px] text-ink/45">
             <input
               type="date"
               value={item.date}
               onChange={(e) => onDate(e.target.value)}
               disabled={disabled || item.status === "saved"}
               aria-label={t(lang, "meal_date")}
-              className="bg-transparent border-0 p-0 text-[11px] text-white/60 focus:outline-none"
+              className="bg-transparent border-0 p-0 text-[11px] text-ink/60 focus:outline-none"
             />
             {item.photos.length > 1 && item.status !== "saved" && item.status !== "analyzing" && (
               <button
@@ -2504,13 +2504,13 @@ function BatchMealCard({
             />
           )}
           {item.status === "analyzing" && (
-            <div className="text-[13px] text-white/60 pt-2">
+            <div className="text-[13px] text-ink/60 pt-2">
               <AiThinkingPill label={stageLabel} />
             </div>
           )}
           {item.status === "error" && (
             <div className="space-y-1 pt-1">
-              <div className="text-[12px] text-red-300">{item.error}</div>
+              <div className="text-[12px] text-bad">{item.error}</div>
               <TextButton onClick={onRetry} disabled={disabled}>
                 {t(lang, "meal_batch_retry")}
               </TextButton>
@@ -2535,13 +2535,13 @@ function BatchMealCard({
                 />
               )}
               {item.hint && (
-                <div className="text-[11px] text-white/40 truncate">“{item.hint}”</div>
+                <div className="text-[11px] text-ink/40 truncate">“{item.hint}”</div>
               )}
             </>
           )}
         </div>
         {item.status === "saved" ? (
-          <CheckCircleIcon className="h-6 w-6 text-emerald-400 shrink-0 m-2.5" aria-hidden="true" />
+          <CheckCircleIcon className="h-6 w-6 text-ok shrink-0 m-2.5" aria-hidden="true" />
         ) : (
           <IconButton label={t(lang, "meal_remove_photo")} onClick={onRemove} disabled={disabled}>
             <CloseIcon className="h-4 w-4" />
@@ -2778,7 +2778,7 @@ function CoachReviewModal({
       {/* Header */}
       <div className="px-5 pt-6 pb-4 flex items-center justify-between border-b border-border shrink-0">
         <div>
-          <div className="text-[11px] text-white/45 uppercase tracking-wider">{t(lang, "review_ai_coach")}</div>
+          <div className="text-[11px] text-ink/45 uppercase tracking-wider">{t(lang, "review_ai_coach")}</div>
           <h2 className="text-xl font-bold mt-0.5">{t(lang, "review_title")}</h2>
         </div>
         <IconButton label={t(lang, "meal_close")} onClick={onClose} tone="tonal">
@@ -2791,7 +2791,7 @@ function CoachReviewModal({
         {reviewing ? (
           /* Loading skeletons */
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-white/40 text-center animate-pulse">
+            <p className="text-sm text-ink/40 text-center animate-pulse">
               {t(lang, "review_loading")}
             </p>
             {[0, 1, 2].map((i) => (
@@ -2819,7 +2819,7 @@ function CoachReviewModal({
               <div className="text-[10px] font-semibold uppercase tracking-wider text-accent-brand mb-1.5">
                 {t(lang, "review_summary")}
               </div>
-              <p className="text-sm text-white/80 leading-snug">{reviewData.summary}</p>
+              <p className="text-sm text-ink/80 leading-snug">{reviewData.summary}</p>
             </div>
 
             {/* Per-meal cards */}
@@ -2849,10 +2849,10 @@ function CoachReviewModal({
                       <div
                         className={`text-[11px] mt-0.5 ${
                           r.confidence === "high"
-                            ? "text-green-400/70"
+                            ? "text-ok/70"
                             : r.confidence === "medium"
-                              ? "text-yellow-400/70"
-                              : "text-white/40"
+                              ? "text-warn/70"
+                              : "text-ink/40"
                         }`}
                       >
                         {t(lang, r.confidence === "high" ? "meal_conf_high" : r.confidence === "medium" ? "meal_conf_medium" : "meal_conf_low")}
@@ -2861,7 +2861,7 @@ function CoachReviewModal({
                       </div>
                     </div>
                     {isAccepted && (
-                      <span className="text-green-400 text-base shrink-0 mt-1">✓</span>
+                      <span className="text-ok text-base shrink-0 mt-1">✓</span>
                     )}
                   </div>
 
@@ -2882,22 +2882,22 @@ function CoachReviewModal({
                           key={label}
                           className="rounded-lg bg-bg-elev border border-border px-1.5 py-2 text-center"
                         >
-                          <div className="text-[10px] text-white/45 mb-1 truncate">{label}</div>
+                          <div className="text-[10px] text-ink/45 mb-1 truncate">{label}</div>
                           {significant ? (
                             <>
-                              <div className="text-[10px] text-white/25 line-through leading-tight">
+                              <div className="text-[10px] text-ink/25 line-through leading-tight">
                                 {Math.round(cur)}
                               </div>
                               <div
                                 className={`text-[13px] font-semibold leading-tight ${
-                                  diff > 0 ? "text-yellow-400" : "text-sky-400"
+                                  diff > 0 ? "text-warn" : "text-accent-fat"
                                 }`}
                               >
                                 {Math.round(sug)}
                               </div>
                               <div
                                 className={`text-[9px] leading-tight ${
-                                  diff > 0 ? "text-yellow-400/60" : "text-sky-400/60"
+                                  diff > 0 ? "text-warn/60" : "text-accent-fat/60"
                                 }`}
                               >
                                 {diff > 0 ? "+" : ""}
@@ -2905,7 +2905,7 @@ function CoachReviewModal({
                               </div>
                             </>
                           ) : (
-                            <div className="text-[13px] font-semibold text-white/70">
+                            <div className="text-[13px] font-semibold text-ink/70">
                               {Math.round(cur)}
                             </div>
                           )}
@@ -2915,7 +2915,7 @@ function CoachReviewModal({
                   </div>
 
                   {/* Explanation */}
-                  <p className="text-[13px] text-white/65 leading-snug">{r.explanation}</p>
+                  <p className="text-[13px] text-ink/65 leading-snug">{r.explanation}</p>
 
                   {/* Actions */}
                   {!isAccepted && (
@@ -2925,7 +2925,7 @@ function CoachReviewModal({
                           setAskingId(askingId === r.meal_id ? null : r.meal_id);
                           setAskText("");
                         }}
-                        className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-white/60"
+                        className="flex-1 rounded-lg border border-border bg-bg-elev py-2 text-[12px] text-ink/60"
                       >
                         {t(lang, "review_ask")}
                       </button>
@@ -2933,7 +2933,7 @@ function CoachReviewModal({
                         <button
                           onClick={() => handleAcceptOne(r)}
                           disabled={acceptBusy === r.meal_id}
-                          className="flex-1 rounded-lg bg-accent-brand py-2 text-[12px] font-semibold disabled:opacity-40"
+                          className="flex-1 rounded-lg bg-accent-brand py-2 text-[12px] font-semibold disabled:opacity-40 text-on-brand"
                         >
                           {acceptBusy === r.meal_id ? t(lang, "meal_saving_short") : t(lang, "review_accept")}
                         </button>
@@ -2951,13 +2951,13 @@ function CoachReviewModal({
                           if (e.key === "Enter" && !e.shiftKey) handleAsk(r.meal_id);
                         }}
                         placeholder={t(lang, "review_ask_placeholder")}
-                        className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-white/30"
+                        className="flex-1 rounded-lg bg-bg-elev border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-ink/30"
                         autoFocus
                       />
                       <button
                         onClick={() => handleAsk(r.meal_id)}
                         disabled={askBusy || !askText.trim()}
-                        className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
+                        className="rounded-lg bg-accent-brand px-3 py-2 text-[12px] font-semibold disabled:opacity-40 text-on-brand"
                       >
                         {askBusy ? "…" : t(lang, "review_send")}
                       </button>
@@ -2977,14 +2977,14 @@ function CoachReviewModal({
             <button
               onClick={handleAcceptAll}
               disabled={acceptAllBusy}
-              className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40"
+              className="w-full rounded-full bg-accent-brand py-3 text-sm font-semibold disabled:opacity-40 text-on-brand"
             >
               {acceptAllBusy
                 ? t(lang, "review_applying")
                 : `${t(lang, "review_accept_all")} (${changedCount})`}
             </button>
           ) : (
-            <div className="text-center text-sm text-green-400/80 py-1">
+            <div className="text-center text-sm text-ok/80 py-1">
               {t(lang, "review_all_accurate")} ✓
             </div>
           )}
@@ -3037,7 +3037,7 @@ function MacroTiles({
               compact ? "px-1.5 pt-1.5 pb-1" : "px-2 pt-2.5 pb-2"
             }`}
           >
-            <span className="flex items-center gap-1 text-[11px] text-white/55 max-w-full">
+            <span className="flex items-center gap-1 text-[11px] text-ink/55 max-w-full">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
               <span className="truncate">{t(lang, f.label)}</span>
             </span>
@@ -3046,11 +3046,11 @@ function MacroTiles({
               value={value[f.key] || ""}
               placeholder="0"
               onChange={(e) => onChange(f.key, Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
-              className={`w-full bg-transparent text-center font-semibold nums focus:outline-none placeholder:text-white/25 ${
+              className={`w-full bg-transparent text-center font-semibold nums focus:outline-none placeholder:text-ink/25 ${
                 compact ? "text-base py-0.5" : "text-xl py-1"
               }`}
             />
-            <span className="text-[10px] text-white/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+            <span className="text-[10px] text-ink/40">{f.unit ? t(lang, f.unit) : "g"}</span>
           </label>
         ))}
       </div>
@@ -3064,12 +3064,12 @@ function MacroSummary({ lang, macros }: { lang: Lang; macros: Macros }) {
     <div className="grid grid-cols-4 gap-2">
       {MACRO_FIELDS.map((f) => (
         <div key={f.key} className="min-w-0 rounded-xl bg-bg-elev border border-border px-2 py-2.5 flex flex-col items-center">
-          <span className="flex items-center gap-1 text-[11px] text-white/55 max-w-full">
+          <span className="flex items-center gap-1 text-[11px] text-ink/55 max-w-full">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} aria-hidden="true" />
             <span className="truncate">{t(lang, f.label)}</span>
           </span>
           <span className="text-lg font-semibold nums mt-0.5">{macros[f.key]}</span>
-          <span className="text-[10px] text-white/40">{f.unit ? t(lang, f.unit) : "g"}</span>
+          <span className="text-[10px] text-ink/40">{f.unit ? t(lang, f.unit) : "g"}</span>
         </div>
       ))}
     </div>
@@ -3092,8 +3092,8 @@ function MacroLine({
     { key: "macro_c_short", v: macros.carbs_g, color: "text-accent-carbs" },
   ];
   return (
-    <div className={`text-[12px] text-white/55 nums flex flex-wrap items-center gap-x-2 ${className}`}>
-      <span className="text-white/80 font-medium">
+    <div className={`text-[12px] text-ink/55 nums flex flex-wrap items-center gap-x-2 ${className}`}>
+      <span className="text-ink/80 font-medium">
         {Math.round(macros.calories ?? 0)} {t(lang, "macro_kcal")}
       </span>
       {parts.map((p) => (
@@ -3124,10 +3124,10 @@ function DayMeter({
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2 text-[12px]">
-        <span className="text-white/55 truncate">{label}</span>
-        <span className={`nums ${over ? "text-amber-300" : "text-white/80"}`}>
+        <span className="text-ink/55 truncate">{label}</span>
+        <span className={`nums ${over ? "text-warn" : "text-ink/80"}`}>
           <span className="font-semibold">{Math.round(value).toLocaleString()}</span>
-          <span className="text-white/40"> / {Math.round(target).toLocaleString()} {unit}</span>
+          <span className="text-ink/40"> / {Math.round(target).toLocaleString()} {unit}</span>
         </span>
       </div>
       <div
@@ -3138,7 +3138,7 @@ function DayMeter({
         aria-valuemax={Math.round(target)}
         aria-valuenow={Math.round(value)}
       >
-        <div className={`h-full rounded-full transition-[width] duration-500 ${over ? "bg-amber-400" : barClass}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full transition-[width] duration-500 ${over ? "bg-warn" : barClass}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -3147,10 +3147,10 @@ function DayMeter({
 function ConfidenceChip({ lang, confidence }: { lang: Lang; confidence: "low" | "medium" | "high" }) {
   const tone =
     confidence === "high"
-      ? "text-emerald-300 bg-emerald-400/10 border-emerald-400/25"
+      ? "text-ok bg-ok/10 border-ok/25"
       : confidence === "medium"
-        ? "text-amber-300 bg-amber-400/10 border-amber-400/25"
-        : "text-white/60 bg-bg-elev border-border";
+        ? "text-warn bg-warn/10 border-warn/25"
+        : "text-ink/60 bg-bg-elev border-border";
   const key: TKey =
     confidence === "high" ? "meal_conf_high" : confidence === "medium" ? "meal_conf_medium" : "meal_conf_low";
   return (
@@ -3181,9 +3181,9 @@ function ClarifyCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-3.5 space-y-2.5">
+    <div className="rounded-2xl border border-warn/30 bg-warn/5 p-3.5 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-300">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-warn">
           <SparkIcon className="h-4 w-4" aria-hidden="true" />
           {t(lang, "meal_clarify_label")}
         </div>
@@ -3191,7 +3191,7 @@ function ClarifyCard({
           {t(lang, "meal_clarify_skip")}
         </TextButton>
       </div>
-      <p className="text-[14px] text-white/85 leading-snug" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
+      <p className="text-[14px] text-ink/85 leading-snug" dir={/[֐-׿]/.test(question) ? "rtl" : "ltr"}>
         {question}
       </p>
       <div className="flex gap-2">
@@ -3209,7 +3209,7 @@ function ClarifyCard({
         <button
           onClick={onSubmit}
           disabled={disabled || busy || !answer.trim()}
-          className="h-11 rounded-xl bg-accent-brand px-4 text-[13px] font-semibold text-white disabled:opacity-40 state-layer"
+          className="h-11 rounded-xl bg-accent-brand px-4 text-[13px] font-semibold text-on-brand disabled:opacity-40 state-layer"
         >
           {busy ? <Spinner /> : t(lang, "meal_clarify_update")}
         </button>
@@ -3237,7 +3237,7 @@ function DescribeField({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-white/60 mb-1.5">{label}</span>
+      <span className="block text-xs font-medium text-ink/60 mb-1.5">{label}</span>
       <textarea
         value={value}
         dir={value ? (/[֐-׿]/.test(value) ? "rtl" : "ltr") : lang === "he" ? "rtl" : "ltr"}
@@ -3266,7 +3266,7 @@ function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        "h-12 rounded-full bg-accent-brand px-5 text-sm font-semibold text-white inline-flex items-center justify-center gap-2 disabled:opacity-40 state-layer",
+        "h-12 rounded-full bg-accent-brand px-5 text-sm font-semibold text-on-brand inline-flex items-center justify-center gap-2 disabled:opacity-40 state-layer",
         className ?? "w-full",
       )}
     >
@@ -3302,7 +3302,7 @@ function ChipButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`shrink-0 rounded-full border border-border bg-bg-elev text-white/85 inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-50 state-layer ${
+      className={`shrink-0 rounded-full border border-border bg-bg-elev text-ink/85 inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-50 state-layer ${
         size === "sm" ? "h-9 px-3 text-[12px]" : "h-11 px-4 text-[13px]"
       }`}
     >
@@ -3361,7 +3361,7 @@ function IconButton({
         size === "lg" ? "w-12 h-12" : "w-11 h-11",
         tone === "tonal"
           ? "bg-accent-sec-container text-accent-on-sec-container"
-          : "text-white/70 hover:text-white",
+          : "text-ink/70 hover:text-ink",
       )}
     >
       {children}
@@ -3381,14 +3381,14 @@ function StickyActions({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[13px] font-semibold uppercase tracking-wide text-white/55">{children}</h2>
+    <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink/55">{children}</h2>
   );
 }
 
 function Spinner() {
   return (
     <span
-      className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white/85 animate-spin"
+      className="inline-block h-3.5 w-3.5 rounded-full border-2 border-ink/30 border-t-white/85 animate-spin"
       aria-hidden="true"
     />
   );
